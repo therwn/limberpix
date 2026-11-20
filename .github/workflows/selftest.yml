@@ -1,0 +1,88 @@
+name: selftest
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }} / numpy ${{ matrix.numpy }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.9", "3.12"]
+        numpy: ["requirements"]
+        include:
+          - os: ubuntu-22.04              # the oldest Python the README promises
+            python: "3.8"
+            numpy: "requirements"
+          - os: ubuntu-latest             # NumPy 2, its deprecation warnings made errors
+            python: "3.12"
+            numpy: "2"
+    defaults:
+      run:
+        shell: bash
+    env:
+      OUT: out                      # ignored by .gitignore
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYW: ${{ matrix.numpy == '2' && '-W error::DeprecationWarning' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install requirements
+        run: |
+          python -m pip install -r requirements.txt
+          if [ "${{ matrix.numpy }}" = "2" ]; then python -m pip install "numpy>=2"; fi
+          python -c "import numpy, PIL; print('numpy', numpy.__version__, 'Pillow', PIL.__version__)"
+
+      - name: pixel-anim-check selftest
+        run: python -I $PYW skills/pixel-anim-check/pixel_anim_selftest.py
+
+      - name: body_parts selftest
+        run: python -I $PYW skills/pixel-animate/body_parts_selftest.py
+
+      - name: creature_map selftest
+        run: python -I $PYW skills/pixel-animate/creature_map_selftest.py
+
+      - name: Examples match the selftests' creatures
+        run: python -I examples/make_examples.py --verify
+
+      - name: Clean examples pass (exit 0)
+        run: |
+          python -I skills/pixel-anim-check/pixel_anim_check.py \
+            --loop idle=examples/walker_idle.png --loop move=examples/walker_move.png \
+            --frame 34 --eye "#ffcc33" --out "$OUT" --name walker
+          python -I skills/pixel-anim-check/pixel_anim_check.py \
+            --loop idle=examples/flier_idle.png --loop move=examples/flier_move.png \
+            --frame 30 --eye "#ffcc33" --flier --shadow "#2b2430" --out "$OUT" --name flier
+
+      - name: Broken example fails (exit 1)
+        run: |
+          set +e
+          python -I skills/pixel-anim-check/pixel_anim_check.py \
+            --loop idle=examples/walker_idle.png --loop move=examples/broken_move.png \
+            --frame 34 --eye "#ffcc33" --out "$OUT" --name broken | tee "$OUT/broken.txt"
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exit code: $code"
+          test "$code" -eq 1
+          grep -q "jump:" "$OUT/broken.txt"
+
+      - name: body_parts runs on the example figure
+        run: |
+          python -I skills/pixel-animate/body_parts.py examples/figure.png examples/marks.json \
+            --out "$OUT" --name figure
+          test -f "$OUT/figure_parts.png"
+
+      - name: Nothing tracked was changed
+        run: git diff --exit-code

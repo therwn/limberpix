@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Outputs of the tools: check sheets and GIFs, body_parts and creature_map overlays, grids.
+# (Image and JSON extensions only: a bare *_parts.* would also hide body_parts.py, and *_map.* creature_map.py.)
+*_check.png
+*_check.gif
+*_parts.png
+*_parts.json
+*_patches.png
+*_labels.png
+*_map.png
+*_map.json
+*_grid.png
+out/
+
+# The README's pictures are tool outputs too, kept on purpose
+!docs/img/*

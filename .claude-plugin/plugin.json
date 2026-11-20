@@ -1,0 +1,21 @@
+{
+  "name": "limberpix",
+  "version": "0.1.0",
+  "description": "Animate pixel-art creatures from one drawing so they move like living things, and check every sprite animation for broken motion (specks, lost eyes, pops, shimmer, choppy cadence, 1-px ticks, frozen heads) before anyone sees it.",
+  "author": {
+    "name": "therwn"
+  },
+  "homepage": "https://github.com/therwn/limberpix",
+  "repository": "https://github.com/therwn/limberpix",
+  "license": "MIT",
+  "keywords": [
+    "pixel-art",
+    "sprite",
+    "animation",
+    "gamedev",
+    "sprite-sheet",
+    "qa",
+    "skills"
+  ],
+  "icon": ".claude-plugin/icon.png"
+}
