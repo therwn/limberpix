@@ -16,9 +16,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python: ["3.9", "3.12"]
+        python: ["3.12"]
         numpy: ["requirements"]
         include:
+          - os: windows-latest
+            python: "3.9"
+            numpy: "requirements"
+          - os: ubuntu-22.04              # older Pythons are not built for the newest Ubuntu image
+            python: "3.9"
+            numpy: "requirements"
           - os: ubuntu-22.04              # the oldest Python the README promises
             python: "3.8"
             numpy: "requirements"
