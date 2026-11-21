@@ -103,6 +103,15 @@ def run():
     flagged = any(w.startswith(("leg_b", "cape")) and "colour" in w for w in res2["warnings"])
     print(f"cape marked on one side only: flagged {'ok' if flagged else 'WRONG'}  ({res2['warnings']})")
     ok &= flagged
+    detail = Image.new("RGBA", (1260, 100))
+    d = ImageDraw.Draw(detail)
+    d.rectangle((30, 30, 70, 70), fill="green")
+    d.line((71, 50, 370, 50), fill="green")
+    d.point((400, 50), fill="gold")
+    _, detail_aux = bp.analyse(detail, {"parts": {"body": {"bone": [[50, 50]]}}})
+    all_pixels = np.array_equal(bp.full_labels(detail_aux, detail.size) == 0, np.asarray(detail.getchannel("A")) != 0)
+    print("full-size mask keeps a thin tail and a detached spark:", "ok" if all_pixels else "WRONG")
+    ok &= all_pixels
     ok &= cli()
     print("selftest:", "all hold" if ok else "FAILED")
     return ok
@@ -147,6 +156,19 @@ def cli():
             json.dump({"parts": dict(MARKS["parts"], ghost={"kind": "prop", "bone": [[2, 2], [4, 4]]})}, fh)
         code, text = run_main([full, good, "--out", os.path.join(tmp, "cut")])
         case("a clean cut exits 0", code == 0 and "CHECK" not in text, text[-300:])
+        with open(os.path.join(tmp, "cut", "full_parts.json"), encoding="utf-8") as fh:
+            parts = json.load(fh)["parts"]
+            labels = {p["name"]: p["label"] for p in parts}
+        with Image.open(os.path.join(tmp, "cut", "full_labels.png")) as mask:
+            pixels = np.asarray(mask)
+            for part in parts:
+                ys, xs = np.nonzero(pixels == part["label"])
+                bounds = [xs.min(), ys.min(), xs.max() + 1, ys.max() + 1]
+                case(f"{part['name']} bbox encloses its full-size label", part["bbox"] == bounds, part["bbox"])
+            for part, visible, covered in (("cape", [(205, 645), (300, 645), (400, 645)], (265, 645)),
+                                           ("staff", [(461, 110), (461, 600)], (462, 342))):
+                case(f"{part} cut keeps every visible section and its gap",
+                     all(mask.getpixel(p) == labels[part] for p in visible) and mask.getpixel(covered) != labels[part])
         code, text = run_main([full, stray, "--out", os.path.join(tmp, "cut")])
         case("a cut with CHECK lines exits 1", code == 1 and "CHECK" in text, text[-300:])
     if "size" in inspect.signature(ImageFont.load_default).parameters:

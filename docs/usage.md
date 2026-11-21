@@ -134,8 +134,8 @@ Every frame of every loop must be the same size, with the figure kept in place r
 - **A strip** is one horizontal PNG. Give `--frame W` or `--frames N`; with neither, square frames are assumed.
 - **A frame folder** is read in file-name order, so zero-pad the numbers (`f00.png`, `f01.png`, ...): otherwise
   `f10.png` comes before `f2.png`. `--frame` and `--frames` do not apply to it.
-- **A GIF** is read at its own timing. Pillow, Aseprite and most exporters store a held pose as one image with a
-  longer duration, so each image is held for its duration at `--fps` (130 ms at 30 fps is 4 frames). To judge one
+- **A GIF** is read at its own timing. The checker rounds elapsed playback time to game frames at `--fps`.
+  Ten 50 ms poses cover 15 frames at 30 fps. To judge one
   image per game frame regardless of its duration, give a strip or a frame folder instead.
 
 ### Faults
@@ -220,17 +220,17 @@ The first prints `beast: 0 fault(s)` and exits 0. Each option has a reason:
 The second cuts the wolf into eleven parts from the bones in `examples/showcase/beast/marks.json` and exits 0:
 
 ```
-torso          torso      share 0.135 pieces 1 bbox [239, 168, 393, 312]
-tail           tail       share 0.146 pieces 1 bbox [31, 159, 175, 376]
-neck           neck       share 0.183 pieces 1 bbox [360, 85, 559, 279]
-head           head       share 0.066 pieces 1 bbox [455, 73, 623, 146]
-jaw            jaw        share 0.015 pieces 1 bbox [521, 142, 592, 175]
-ear_far        ear        share 0.015 pieces 1 bbox [455, 40, 512, 91]
-ear_near       ear        share 0.016 pieces 1 bbox [502, 31, 554, 87]
-hind_near      leg        share 0.212 pieces 1 bbox [135, 159, 288, 424]
-hind_far       leg        share 0.061 pieces 1 bbox [202, 288, 296, 424]
+torso          torso      share 0.135 pieces 1 bbox [240, 168, 393, 312]
+tail           tail       share 0.146 pieces 1 bbox [32, 160, 176, 376]
+neck           neck       share 0.183 pieces 1 bbox [360, 86, 560, 280]
+head           head       share 0.066 pieces 1 bbox [455, 73, 624, 146]
+jaw            jaw        share 0.015 pieces 1 bbox [521, 143, 592, 176]
+ear_far        ear        share 0.015 pieces 1 bbox [456, 40, 512, 92]
+ear_near       ear        share 0.016 pieces 1 bbox [504, 32, 554, 88]
+hind_near      leg        share 0.212 pieces 1 bbox [136, 160, 288, 424]
+hind_far       leg        share 0.061 pieces 1 bbox [203, 289, 296, 424]
 front_near     leg        share 0.109 pieces 1 bbox [389, 192, 480, 424]
-front_far      leg        share 0.041 pieces 1 bbox [360, 292, 416, 424]
+front_far      leg        share 0.041 pieces 1 bbox [360, 293, 417, 424]
 ```
 
 `examples/showcase/make_showcase.py` draws the README's pictures from these files (see [Development](#development)).
@@ -268,7 +268,9 @@ broken: 2 fault(s)
   every pose a fault names). Each tile is labelled with the frames it holds: `5-7` is one pose held over frames 5 to
   7. Under it, the pixels changed from the pose just before are drawn in red. The tiles of the frames a fault names
   are outlined in red: here frames 8 and 9, whose whole bodies light up red, once going out and once coming back.
-- **The GIF** (`<name>_check.gif`) plays the loops side by side at `--fps`. Look at it zoomed and at 1x.
+- **The GIF** (`<name>_check.gif`) plays the loops side by side at `--fps`. It repeats where all loops and any
+  scrolling road line up. If that takes more than four cycles of the longest loop, it plays through twice the
+  longest loop's duration and stops. Look at it zoomed and at 1x.
 
 ### From code
 
@@ -321,8 +323,11 @@ python skills/pixel-animate/body_parts.py --selftest
   working landmarks file for `examples/figure.png` and uses both. The file's format and how to place bones are in
   [the skill, section 1b](../skills/pixel-animate/SKILL.md#1b-map-the-body-first-body_partspy-landmarks-by-eye-edges-by-measure).
 - The cut follows the drawing's own ink lines and colour edges. It writes `<name>_parts.png` (an overlay of the
-  parts), `<name>_patches.png`, `<name>_parts.json` (per part: kind, parent, pivot, area share, bounding box, outline
-  polygon) and `<name>_labels.png` (one grey level per part, for code that cuts by it). `--out` defaults to the
+  parts), `<name>_patches.png`, `<name>_parts.json` (per part: kind, parent, pivot, area share, bounding box and
+  label) and `<name>_labels.png`. Cut the original drawing wherever the label image equals the part's JSON `label`
+  (its one-based position for older files). Zero is background. This preserves disconnected pieces and holes.
+  The `bbox` is the tight crop of the full-size label, with exclusive right and bottom coordinates.
+  The JSON `poly` is a simplified outline of the largest piece for display. `--out` defaults to the
   drawing's folder and is made if missing; `--name` to the drawing's file name.
 - It prints one line per part. Its `pieces` count is every fragment of the part, however small, and is no fault by
   itself: the example prints `pieces 5` for the staff, which is broken by `null` on purpose and drawn behind the
@@ -379,7 +384,7 @@ person with a staff and a cape as `serpent or worm`: a wrong plan, which is the 
 |---|---|
 | Exit 2, a strip that does not cut into whole frames | Give the real `--frame W` or `--frames N`. Without either, frames are taken as square. |
 | A flier reports many `apart` faults (40 on the example) | Its ground shadow counts as stray pieces. Name the shadow colours with `--shadow`. |
-| A `size` fault | The frames were trimmed per frame. Crop every loop to one union box, the figure kept in place. |
+| A `size` fault | The checker stops before rendering previews. Give every frame the same canvas and keep the figure anchored when cropping all loops to one union box. |
 | A frame folder plays out of order | Files are read in name order. Zero-pad the numbers: `f00.png`, `f01.png`, ... |
 | A GIF's holds look longer than its images | Each image is held for its stored duration at `--fps`. Give a strip or a folder to judge one image per frame. |
 | An effect (a spark, a thrown coin) reported as `apart` | Name its colours with `--effects`, or allow small pieces with `--allow LOOP=N`. |

@@ -13,7 +13,7 @@ import random
 import sys
 import tempfile
 
-from PIL import Image
+from PIL import Image, ImageSequence
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pixel_anim_check as pac                           # noqa: E402
@@ -195,6 +195,13 @@ def run(verbose=False):
         f = L["idle"][7]
         f[-1] = [None] * 3 + f[-1][:-3]
     cases.append(("ground", "flier", slide))
+
+    def padded_slide(L):
+        slide(L)
+        for frames in L.values():
+            for f in frames:
+                f.append([None] * len(f[-1]))
+    cases.append(("ground", "flier", padded_slide))
 
     def pop(L):
         L["move"][8] = [[None] * 4 + r[:-4] for r in L["move"][8]]
@@ -717,6 +724,19 @@ def cli(walker):
         case("an unknown option is a usage error", code == 2, (code, text[-200:]))
         case("--help exits 0", run_main(["--help"])[0] == 0 and run_main(["-h"])[0] == 0, "")
         case("no loop is a usage error", run_main([])[0] == 2, "")
+        mixed = os.path.join(tmp, "mixed")
+        os.mkdir(mixed)
+        code, text = run_main(["--loop", "idle=" + mixed])
+        case("an empty frame folder is a usage error", code == 2 and "no frames" in text, text)
+        Image.new("RGB", (8, 8)).save(os.path.join(mixed, "00.png"))
+        Image.new("RGB", (9, 8)).save(os.path.join(mixed, "01.png"))
+        code, text = run_main(["--loop", "idle=" + mixed, "--out", os.path.join(tmp, "mixed-out")])
+        case("unequal frame sizes are reported by the CLI",
+             code == 1 and "size:" in text and "(8, 8)" in text and "(9, 8)" in text, text)
+        pair = os.path.join(tmp, "pair.png")
+        Image.new("RGB", (16, 8)).save(pair)
+        code, text = run_main(["--loop", "idle=" + pair, "--parts", "idle=" + mixed])
+        case("a size mismatch after the first part frame is refused", code == 2 and "--parts" in text, text)
         # a GIF whose held poses are merged into longer images: read at its own timing, every hold kept
         held = [f for f in walker["move"] for _ in range(2)]
         ims = []
@@ -728,12 +748,43 @@ def cli(walker):
                         im.putpixel((x, y), pac.hexrgb(v) + (255,))
             ims.append(im)
         gpath = os.path.join(tmp, "held.gif")
-        ims[0].save(gpath, save_all=True, append_images=ims[1:], duration=33, loop=0, disposal=2)
+        delays = [(30, 40, 30)[k % 3] for k in range(len(ims))]
+        ims[0].save(gpath, save_all=True, append_images=ims[1:], duration=delays, loop=0, disposal=2)
         with Image.open(gpath) as g:
             images = g.n_frames
         got = pac.load(gpath, fps=30)
         case("a GIF's merged holds are expanded by duration", images < len(held) and got == held,
              (images, len(got), len(held)))
+        timed = os.path.join(tmp, "timed.gif")
+        poses = [Image.new("RGB", (8, 5), (20 * k, 0, 0)) for k in range(10)]
+        poses[0].save(timed, save_all=True, append_images=poses[1:], duration=50)
+        raw = pac.load(timed)
+        ticks = pac.load(timed, fps=30)
+        expected = [f for k, f in enumerate(raw) for _ in range(2 if k % 2 == 0 else 1)]
+        case("500 ms of distinct GIF poses take 15 game frames", len(ticks) == 15 and ticks == expected, len(ticks))
+        poses[0].save(timed, save_all=True, append_images=poses[1:], duration=10)
+        case("sub-frame GIF poses fit the available ticks", len(pac.load(timed, fps=30)) == 3, "")
+        poses[0].save(timed, duration=500)
+        case("a one-image GIF keeps its canvas and duration", pac.load(timed, fps=30) == [raw[0]] * 15, "")
+        for fps, total_ms in ((30, 670), (60, 330), (120, 170)):
+            pac.gif({"idle": raw}, timed, fps=fps, Z=1)
+            with Image.open(timed) as preview:
+                delays = [f.info["duration"] for f in ImageSequence.Iterator(preview)]
+            case(f"preview at {fps} fps keeps its total duration",
+                 sum(delays) == total_ms and all(ms >= 10 for ms in delays), delays)
+        pac.gif({"idle": raw[:3], "move": raw[:5]}, timed, fps=10, Z=1)
+        with Image.open(timed) as preview:
+            repeat = preview.info.get("loop")
+            pairs = []
+            for pose in ImageSequence.Iterator(preview):
+                panel = pose.convert("RGB")
+                pairs.append((panel.getpixel((3, 2))[0], panel.getpixel((17, 2))[0]))
+        expected = [(20 * (k % 3), 20 * (k % 5)) for k in range(15)]
+        case("3- and 5-frame loops wrap together", repeat == 0 and pairs == expected, (repeat, pairs))
+        pac.gif({"idle": raw[:7], "move": raw[:9]}, timed, fps=10, Z=1)
+        with Image.open(timed) as preview:
+            case("long combined periods produce a bounded one-shot preview",
+                 "loop" not in preview.info and preview.n_frames == 18, preview.info)
         _strip(bite(GOOD_BITE), os.path.join(tmp, "bite.png"))
         _strip([walker_frame(k / 16, "move", labels=True) for k in range(16)], os.path.join(tmp, "parts.png"))
         _strip([walker_frame(0, "idle")], os.path.join(tmp, "ref.png"))

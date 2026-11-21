@@ -8,13 +8,13 @@ A loop is a horizontal sprite strip, a folder of frame PNGs, or a GIF. Every loo
 one size, the figure in place (not trimmed per frame). A strip is cut by --frame (one frame's width) or --frames (how
 many frames it holds); with neither, its frames are taken as square, and a strip whose width is not a whole number
 of its height is refused. A folder is read in file-name order: zero-pad the numbers (f00.png, f01.png, ...). A GIF
-is read at its own timing: each image is held for its duration at --fps (an image of 130 ms at 30 fps is 4 frames),
-since exporters store a held pose as one image with a longer duration. Colours are #rrggbb, any case, the #
+is sampled at --fps by rounding elapsed playback time to game frames. Exporters store a held pose as one image
+with a longer duration. Colours are #rrggbb, any case, the #
 optional. Options:
   --frame W           a strip's frame width in px          --frames N   how many frames each strip holds
   --eye #rrggbb       the eye's colour: checked on every frame, the head round it must move (frozen), its row track
                       must not tick (tick), and the face round it must keep its shape (reshape)
-  --flier             it flies: its shadow (--shadow colours, the bottom row) must not slide; no feet check; its body
+  --flier             it flies: its shadow (--shadow colours, anywhere in the frame) must not slide; its body
                       height track is read for ticks; its idle wing stroke is judged against its move (shallow)
   --facing right|left which way the head faces (default right): where the face window of reshape lies
   --ink #hex,...      the outline colours (default: every colour darker than lightness 40)
@@ -111,6 +111,7 @@ import os
 import re
 import statistics
 import sys
+from fractions import Fraction
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -376,12 +377,20 @@ def _stabilised(arrs, ink):
 
 
 # ---- the check -------------------------------------------------------------------------------------------------
+def _frame_size(f):
+    return len(f[0]), len(f)
+
+
+def _shadow_pixels(f, colours):
+    return {(x, y) for y, row in enumerate(f) for x, v in enumerate(row) if v in colours}
+
+
 def check(loops, spec, warns=None):
     """loops: {name: [frame, ...]}, a frame a list of rows of colour keys or None. Returns fault lines; warns, if a
     list, receives the warning lines (looked at, not counted as faults)."""
     faults = []
     allf = [(a, i, f) for a, v in loops.items() for i, f in enumerate(v)]
-    sizes = {(len(f[0]), len(f)) for _, _, f in allf}
+    sizes = {_frame_size(f) for _, _, f in allf}
     if len(sizes) > 1:
         return [f"size: frames differ {sorted(sizes)}"]
     fx = spec.effects
@@ -408,8 +417,10 @@ def check(loops, spec, warns=None):
         kind = spec.actions.get(a, (None, None))[0]
         figs = [[[None if v in fx else v for v in r] for r in f] for f in frames]   # the creature alone
         if spec.flier:
-            if len({tuple(i for i, v in enumerate(f[-1]) if v in spec.shadow) for f in frames}) > 1:
-                faults.append(f"ground: {a} the shadow moves")
+            if spec.shadow:
+                rest_shadow = _shadow_pixels(frames[0], spec.shadow)
+                if any(_shadow_pixels(f, spec.shadow) != rest_shadow for f in frames[1:]):
+                    faults.append(f"ground: {a} the shadow moves")
         elif a != spec.move and kind != "jump":           # a declared jump leaves the ground on purpose
             feet = {max(y for y, r in enumerate(f) for v in r if v is not None) for f in figs}
             if len(feet) > 1:
@@ -2226,14 +2237,37 @@ def sheet(loops, path, rgb=hexrgb, Z=6, faults=None):
     out.save(path)
 
 
+def _preview_span(loops, move, speed):
+    """Close every visible cycle when possible within twice the usual preview length."""
+    periods = [len(frames) for frames in loops.values()]
+    usual = 2 * max(periods)
+    if move in loops and speed:
+        periods.append((Fraction(str(speed)) / 6).denominator)    # the road repeats every six pixels
+    common = 1
+    for period in periods:
+        common = common // math.gcd(common, period) * period
+        if common > 2 * usual:                            # coprime loop lengths can otherwise require hours of frames
+            return usual, False
+    return max(1, usual // common) * common, True
+
+
 def gif(loops, path, rgb=hexrgb, fps=30, Z=5, speed=None, move=None, facing="right"):
     """The loops side by side at fps. With speed (the road's scroll, game px a frame), a dashed ground line scrolls
     under the move loop, so a planted foot that slides against the road shows (G2)."""
     names = list(loops)
     W, H = len(loops[names[0]][0][0]), len(loops[names[0]][0])
-    n = max(len(v) for v in loops.values()) * 2
-    frames = []
+    n, repeat = _preview_span(loops, move, speed)
+    frames, durations = [], []
+    elapsed_cs = 0
     for t in range(n):
+        # GIF stores centiseconds. Snap the boundaries so rounding cannot accumulate across the loop.
+        end_cs = math.floor((t + 1) * 100 / fps + 0.5)
+        if t == n - 1:
+            end_cs = max(1, end_cs)                       # even a sub-centisecond clip needs a visible frame
+        if end_cs == elapsed_cs:
+            continue
+        durations.append(10 * (end_cs - elapsed_cs))
+        elapsed_cs = end_cs
         im = Image.new("RGB", (len(names) * (W + 6), H + 4), (74, 66, 84))
         for i, a in enumerate(names):
             im.paste(_img(loops[a][t % len(loops[a])], rgb, 1), (i * (W + 6) + 3, 2))
@@ -2243,7 +2277,8 @@ def gif(loops, path, rgb=hexrgb, fps=30, Z=5, speed=None, move=None, facing="rig
                     if (x + off) // 3 % 2 == 0:
                         im.putpixel((i * (W + 6) + 3 + x, H + 2), (170, 160, 140))
         frames.append(im.resize((im.width * Z, im.height * Z), Image.NEAREST))
-    frames[0].save(path, save_all=True, append_images=frames[1:], duration=round(1000 / fps), loop=0)
+    playback = {"loop": 0} if repeat else {}
+    frames[0].save(path, save_all=True, append_images=frames[1:], duration=durations, **playback)
 
 
 def tracks(loops, spec):
@@ -2284,19 +2319,29 @@ def load(src, frame=None, frames=None, fps=None):
     """Frames from a strip PNG, a folder of PNGs, or a GIF. A strip is cut by frame (one frame's width) or frames (how
     many it holds); with neither its frames are square (as wide as the strip is tall). ValueError when the strip's
     width is not a whole number of frames: a wrong cut would be checked as a broken animation. A folder is read in
-    file-name order (zero-pad the numbers: f00.png, f01.png, ...). A GIF: with fps, each of its images is repeated
-    for its own duration, max(1, round(duration_ms * fps / 1000)) frames, since exporters store a held pose as one
-    image with a longer duration; without fps, one frame per image (its durations ignored)."""
+    file-name order (zero-pad the numbers: f00.png, f01.png, ...). For a GIF, round cumulative presentation times
+    to game-frame boundaries. Without fps or a stored duration, count one game frame per image."""
     if os.path.isdir(src):
         return [_grid(Image.open(os.path.join(src, n))) for n in sorted(os.listdir(src)) if n.lower().endswith(".png")]
     im = Image.open(src)
-    if getattr(im, "n_frames", 1) > 1:
+    if im.format == "GIF" or getattr(im, "n_frames", 1) > 1:
         out = []
-        for k in range(im.n_frames):
-            im.seek(k)
-            g = _grid(im.copy())
-            ms = im.info.get("duration") or 0
-            out += [g] * (max(1, round(ms * fps / 1000)) if fps and ms else 1)
+        elapsed_ms = previous_tick = 0
+        with im:
+            for k in range(im.n_frames):
+                im.seek(k)
+                ms = im.info.get("duration")
+                hold = 1
+                if fps and ms:
+                    elapsed_ms += ms
+                    end_tick = math.floor(elapsed_ms * fps / 1000 + 0.5)
+                    hold = end_tick - previous_tick
+                    previous_tick = end_tick
+                if hold:
+                    out.extend([_grid(im)] * hold)
+            if not out:
+                im.seek(0)
+                out.append(_grid(im))
         return out
     if frames:
         if im.width % frames:
@@ -2315,7 +2360,7 @@ def _wide_strip(src):
     if not os.path.isfile(src):
         return False
     with Image.open(src) as im:
-        return getattr(im, "n_frames", 1) == 1 and im.width > im.height
+        return im.format != "GIF" and getattr(im, "n_frames", 1) == 1 and im.width > im.height
 
 
 VALUED = {"--loop", "--frame", "--frames", "--eye", "--facing", "--ink", "--shadow", "--effects", "--allow",
@@ -2392,9 +2437,12 @@ def main(argv):
             fps = float(opt("--fps", 30))
         except ValueError:
             raise ValueError(f"--fps must be a number, not {opt('--fps')!r}") from None
-        if not fps > 0:
-            raise ValueError("--fps must be over 0")
+        if not math.isfinite(fps) or fps <= 0:
+            raise ValueError("--fps must be finite and over 0")
         loops = {name: load(src, frame, frames, fps) for name, (_, src) in loops.items()}
+        for name, poses in loops.items():
+            if not poses:
+                raise ValueError(f"no frames in loop {name!r}")
         actions = dict(parse_action(t, facing) for t in opt("--action", many=True))
         for a in list(actions) + opt("--sheet", many=True):
             if a not in loops:
@@ -2405,14 +2453,15 @@ def main(argv):
             if a not in loops or not os.path.exists(src):
                 raise ValueError(f"--parts takes LOOP=PATH for a given loop and an existing file, not {t!r}")
             part_strips[a] = load(src, frame, frames, fps)
-            if len(part_strips[a]) != len(loops[a]) or part_strips[a][0] and (
-                    len(part_strips[a][0]), len(part_strips[a][0][0])) != (len(loops[a][0]), len(loops[a][0][0])):
+            if list(map(_frame_size, part_strips[a])) != list(map(_frame_size, loops[a])):
                 raise ValueError(f"--parts {a}: the part strip must hold the loop's frames at the loop's size")
         speed = opt("--speed")
         try:
             speed = float(speed) if speed is not None else None
         except ValueError:
             raise ValueError(f"--speed must be a number, not {speed!r}") from None
+        if speed is not None and not math.isfinite(speed):
+            raise ValueError("--speed must be finite")
 
         def image(name):
             p = opt(name)
@@ -2438,14 +2487,16 @@ def main(argv):
         print("note: strips cut into square frames (no --frame or --frames given)")
     warns = []
     faults = check(loops, spec, warns)
-    out = opt("--out", ".")
-    os.makedirs(out, exist_ok=True)
     name = opt("--name", "anim")
-    sheet(loops, os.path.join(out, f"{name}_check.png"), faults=faults)
-    gif(loops, os.path.join(out, f"{name}_check.gif"), fps=fps, speed=spec.speed, move=spec.move, facing=spec.facing)
     print(f"{name}: {len(faults)} fault(s)")
     for f in faults + warns:
         print("  " + f)
+    if any(f.startswith("size:") for f in faults):
+        return 1                                          # the pictures and motion tracks compare pixels by position
+    out = opt("--out", ".")
+    os.makedirs(out, exist_ok=True)
+    sheet(loops, os.path.join(out, f"{name}_check.png"), faults=faults)
+    gif(loops, os.path.join(out, f"{name}_check.gif"), fps=fps, speed=spec.speed, move=spec.move, facing=spec.facing)
     for line in tracks(loops, spec):                     # read these before the GIF (the eye's rows, the steps)
         print("  " + line)
     print("sheets:", os.path.abspath(out))

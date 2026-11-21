@@ -44,9 +44,10 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
   - For a strip give `--frame W` (one frame's width) or `--frames N` (how many frames it holds). Without either,
     square frames are assumed, and a strip whose width is not a whole number of its height is refused.
   - A folder is read in file-name order: zero-pad the numbers (`f00.png`, `f01.png`, ...).
-  - A GIF is read at its own timing: each image is held for its duration at `--fps` (130 ms at 30 fps is 4 frames).
-    Exporters store a held pose as one image with a longer duration, so this keeps the holds the check judges.
-- Every frame of every loop must have one size, with the figure kept in place, not trimmed per frame.
+  - GIF timing follows the stored delays. Elapsed time is rounded to game frames at `--fps`, so ten 50 ms poses
+    cover 15 frames at 30 fps. A pose shorter than a game frame may fall between samples.
+- Keep the figure in a fixed-size frame across every loop. On a size mismatch the CLI reports `size` and exits
+  before comparing motion or rendering previews.
 - Colours are given as `#rrggbb` (any case, the `#` optional).
 - A flier's ground-shadow colours must be given with `--shadow`, or the shadow counts as a stray piece (`apart`).
 - The outline is every colour darker than lightness 40, unless `--ink` names it.
@@ -85,7 +86,8 @@ change from frame k to the next. It writes:
 - `<name>_check.png`: the contact sheet, each distinct pose zoomed (at most 12 a loop, plus any a fault names) and
   labelled with the frames it holds (`4-7`), and under each the pixels changed from the pose before, in red. The
   poses a fault names are outlined in red.
-- `<name>_check.gif`: the loops side by side, at `--fps`.
+- `<name>_check.gif` plays the loops side by side at `--fps`. It repeats at a shared cycle boundary, including
+  the scrolling road. When the cycles take too long to align, the preview plays once.
 - In code: `check(loops, spec, warns)` fills the list `warns`; `tracks(loops, spec)` returns the two read-outs.
 
 ## 2. What each fault means and the usual fix

@@ -33,8 +33,9 @@ that holds it, a cape on both sides of the legs). Each piece is 1-4 points, e.g.
     "cape": {"kind": "cloth", "bone": [[200, 690], [215, 520], null, [395, 520], [410, 690]]}
 
 Out: <name>_parts.png (each part tinted, its outline, bone and name), <name>_patches.png (the colour patches and ink
-the cut follows), <name>_parts.json (per part: kind, parent, pivot, bone, area share, bounding box, outline polygon,
-pieces) and <name>_labels.png (one grey level per part, index order of the json, for code that cuts by it).
+the cut follows), <name>_parts.json (per part: kind, parent, pivot, bone, area share, bounding box, label, pieces
+and a simplified outline of the largest piece) and <name>_labels.png. To cut a part, select every pixel equal
+to its JSON label in the label image. Labels start at 1 in JSON part order, with 0 for the background.
 Each part's line gives its kind, area share, pieces and bounding box. "pieces" counts every fragment, however
 small; that alone is no fault (a part drawn half behind another often has a few). A "CHECK:" line is printed for a
 bone point off the figure, a bone wholly off the figure, a part with no pixels, a part in pieces whose second piece
@@ -424,6 +425,9 @@ def analyse(im, marks):
     pal = [palette(lab, px, ink) for px in seeds]
     total = int(mask.sum())
     loose = adopt(label, mask)
+    aux = dict(k=k, mask=mask, ink=ink, patch=patch, label=label, names=names, full=full)
+    labels_full = full_labels(aux, im.size)
+    aux["labels_full"] = labels_full
     parts, warn = [], []
     for i, n in enumerate(names):
         spec = marks["parts"][n]
@@ -456,16 +460,14 @@ def analyse(im, marks):
                 warn.append(f"{n}: {alien:.0%} of it is a colour not under its bone: a piece of another part seen "
                             "apart (a cape either side of a leg) may lack a bone, or this bone misses a colour")
         poly = [(int(x * k), int(y * k)) for x, y in simplify(outline(sel), 1.2)] if area else []
-        ys, xs = np.nonzero(sel)
-        parts.append(dict(name=n, kind=spec.get("kind", n), parent=spec.get("parent"), pivot=bone[0], bone=spec["bone"],
-                          area_share=round(area / max(1, total), 4), pieces=len(ps),
-                          bbox=[int(xs.min() * k), int(ys.min() * k), int((xs.max() + 1) * k), int((ys.max() + 1) * k)]
-                          if area else None, poly=poly))
+        bbox = Image.fromarray(labels_full == i).getbbox()
+        parts.append(dict(name=n, label=i + 1, kind=spec.get("kind", n), parent=spec.get("parent"),
+                          pivot=bone[0], bone=spec["bone"], area_share=round(area / max(1, total), 4), pieces=len(ps),
+                          bbox=list(bbox) if bbox else None, poly=poly))
     if loose > 0.02 * total:
         warn.append(f"{loose} figure pixels reached by no part, given to the nearest: a piece apart from the body "
                     "with no bone in it (give it one if it is a part of its own)")
-    return dict(size=[im.width, im.height], k=round(k, 3), parts=parts, warnings=warn, points=marks.get("points", {})), \
-        dict(k=k, mask=mask, ink=ink, patch=patch, label=label, names=names, full=full)
+    return dict(size=[im.width, im.height], k=round(k, 3), parts=parts, warnings=warn, points=marks.get("points", {})), aux
 
 
 # ---- drawing the result -----------------------------------------------------------------------------------------
@@ -493,19 +495,19 @@ def full_labels(aux, size):
     lab = np.asarray(Image.fromarray(aux["label"].astype(np.int32) + 1).resize((W, H), Image.NEAREST)).astype(int) - 1
     fig = aux["full"]
     lab[~fig] = -1
-    for _ in range(int(4 * aux["k"]) + 4):
-        hole = fig & (lab < 0)
-        if not hole.any():
-            break
-        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
-            src = np.full_like(lab, -1)
-            ys = slice(max(dy, 0), H + min(dy, 0))
-            yd = slice(max(-dy, 0), H + min(-dy, 0))
-            xs = slice(max(dx, 0), W + min(dx, 0))
-            xd = slice(max(-dx, 0), W + min(-dx, 0))
-            src[yd, xd] = lab[ys, xs]
-            take = hole & (lab < 0) & (src >= 0)
-            lab[take] = src[take]
+    missing = fig & (lab < 0)
+    if not missing.any():
+        return lab
+    near = np.pad(missing, 1)
+    border = near[1:-1, :-2] | near[1:-1, 2:] | near[:-2, 1:-1] | near[2:, 1:-1]
+    frontier = deque(zip(*np.nonzero(border & (lab >= 0))))
+    while frontier:
+        y, x = frontier.popleft()
+        for Y, X in ((y, x - 1), (y, x + 1), (y - 1, x), (y + 1, x)):
+            if 0 <= X < W and 0 <= Y < H and fig[Y, X] and lab[Y, X] < 0:
+                lab[Y, X] = lab[y, x]
+                frontier.append((Y, X))
+    adopt(lab, fig)                                       # detached details too small to survive the working copy
     return lab
 
 
@@ -513,7 +515,7 @@ def draw(im, res, aux, out_dir, name):
     os.makedirs(out_dir, exist_ok=True)
     k, label, mask = aux["k"], aux["label"], aux["mask"]
     W, H = im.size
-    flab = full_labels(aux, (W, H))
+    flab = aux["labels_full"] if "labels_full" in aux else full_labels(aux, (W, H))
     col = np.zeros((H, W, 4), np.uint8)
     for i in range(len(aux["names"])):
         col[flab == i] = PALETTE[i % len(PALETTE)] + (120,)
@@ -549,7 +551,8 @@ def draw(im, res, aux, out_dir, name):
     pimg[pa == -2] = (0, 0, 0)
     pimg[~mask] = (40, 34, 46)
     Image.fromarray(pimg).resize((W, H), Image.NEAREST).save(os.path.join(out_dir, f"{name}_patches.png"))
-    Image.fromarray((flab + 1).astype(np.uint8)).save(os.path.join(out_dir, f"{name}_labels.png"))
+    label_type = np.uint8 if len(res["parts"]) <= 255 else np.uint16
+    Image.fromarray((flab + 1).astype(label_type)).save(os.path.join(out_dir, f"{name}_labels.png"))
     with open(os.path.join(out_dir, f"{name}_parts.json"), "w", encoding="utf-8") as fh:
         json.dump(res, fh, indent=1)
 

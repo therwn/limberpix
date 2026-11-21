@@ -46,7 +46,7 @@ WORK = 320                                                # the analysis copy's 
 # ---- silhouette, thickness, skeleton ---------------------------------------------------------------------------
 def silhouette(im):
     a = np.asarray(im.convert("RGBA")).astype(int)
-    if (a[..., 3] < 250).any() and (a[..., 3] > 5).any():
+    if (a[..., 3] < 250).any():
         return a[..., 3] >= 128
     rgb = a[..., :3]
     border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
@@ -432,23 +432,26 @@ def analyse(im, eye=None, floating=False, eye_at=None):
     full = silhouette(im)
     H, W = full.shape
     k = max(1, math.ceil(max(H, W) / WORK))
-    small_img = Image.fromarray((full * 255).astype(np.uint8)).resize((W // k, H // k), Image.BOX)
+    small_img = Image.fromarray((full * 255).astype(np.uint8)).resize((max(1, W // k), max(1, H // k)), Image.BOX)
     small = np.asarray(small_img) > 127
+    if small.sum() < 2:
+        raise ValueError("no body found")
     dist = distance(small)
     sk = prune(skeleton(small), dist)
+    if not sk.any():                                      # thinning a compact, even-width shape can erase its centre
+        sk[np.unravel_index(dist.argmax(), dist.shape)] = True
     eyexy = (eye_at[0] / k, eye_at[1] / k) if eye_at else None   # the eye: the head's end
     if eye and not eyexy:
         rgb = np.asarray(im.convert("RGB")).astype(int)
         e = eye.strip().lstrip("#")
         t = np.array([int(e[0:2], 16), int(e[2:4], 16), int(e[4:6], 16)])
-        hit = np.abs(rgb - t).sum(2) < 40
+        hit = full & (np.abs(rgb - t).sum(2) < 40)
         if hit.any():
             ys, xs = np.nonzero(hit)
             eyexy = (xs.mean() / k, ys.mean() / k)
     sp = spine(sk, dist, eyexy)
-    if len(sp) < 2:
-        raise ValueError("no body found")
-    ground = int(np.nonzero(small.any(1))[0].max())
+    left, top, right, bottom = Image.fromarray(small).getbbox()
+    ground = bottom - 1
     n5 = max(2, len(sp) // 5)
     thick = lambda seg: float(np.mean([dist[y, x] for x, y in seg]))   # noqa: E731
     if eyexy:
@@ -474,8 +477,9 @@ def analyse(im, eye=None, floating=False, eye_at=None):
     hr = 1.6 * max(1.0, dist[sp[0][1], sp[0][0]])         # spine zones: the head is the blob round the spine's
     head_end = next((i for i, p in enumerate(sp) if math.dist(p, sp[0]) > hr), max(2, len(sp) // 6))   # head end
     tail_start = tail_root if tail_root else len(sp)
-    near = ground - max(2, int(0.03 * small.shape[0]))   # the trunk lies on the ground when it touches it along a
-    cols = (region[near:] == 0).any(0)                    # fifth of its width (a serpent's belly), not at a point
+    ground_margin = max(2, int(0.03 * max(right - left, bottom - top)))   # independent of canvas padding
+    near = max(0, ground - ground_margin)
+    cols = (region[near:] == 0).any(0)                    # the trunk touches ground across a fifth of its width
     tx = np.nonzero((region == 0).any(0))[0]
     trunk_on_ground = (not floating and len(tx) and cols.sum() >= 0.2 * (tx.max() - tx.min() + 1))
     parts = []
@@ -501,7 +505,7 @@ def analyse(im, eye=None, floating=False, eye_at=None):
         if i is None:                                     # fork under the body is not on the spine itself)
             i = min(range(len(sp)), key=lambda j: math.dist(sp[j], b["joint"]))
         zone = "head" if i <= head_end else "tail" if i >= tail_start else "trunk"
-        touches = ys.max() >= ground - max(2, 0.03 * small.shape[0])
+        touches = ys.max() >= near
         long_ = length > 0.45 * len(sp) or share > 0.08
         if zone == "head":
             kind = ("ear/horn/antenna" if up else "tentacle/beard" if down and long_ else
@@ -541,7 +545,9 @@ def analyse(im, eye=None, floating=False, eye_at=None):
     upright = abs(hy - ty) > 1.3 * abs(hx - tx)
     body_len = len(sp)
     slender = body_len > 6 * max(1.0, trunk)
-    if eyexy:
+    if len(sp) == 1 and (eyexy is None or eyexy[0] == hx):
+        facing = "unknown"
+    elif eyexy:
         cx = float(np.mean([p[0] for p in sp]))
         facing = "right" if eyexy[0] > cx else "left"
     else:
@@ -613,6 +619,23 @@ def overlay(im, res, aux, path):
     out.save(path)
 
 
+def _looks_like_strip(im):
+    """A wide sheet with at least three silhouettes spaced one cell apart."""
+    if im.width <= 3 * im.height:
+        return False
+    mask = silhouette(im)
+    occupied = mask.any(axis=0)
+    edges = np.diff(np.r_[False, occupied, False].astype(int))
+    starts, ends = np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)
+    if len(starts) < 3 or im.width % len(starts):
+        return False
+    width = im.width // len(starts)
+    cells = np.arange(len(starts))
+    if not (np.array_equal(starts // width, cells) and np.array_equal((ends - 1) // width, cells)):
+        return False
+    return bool(mask.reshape(im.height, len(cells), width).all(axis=1).any())
+
+
 def main(argv):
     """The command line (see the module's help). Returns the exit code: 0 done, 1 no body found, 2 a usage error."""
     if "--help" in argv or "-h" in argv:
@@ -657,7 +680,7 @@ def main(argv):
         return 2
     src = pos[0]
     im = Image.open(src)
-    if im.width > 3 * im.height:
+    if _looks_like_strip(im):
         print(f"error: {src} is {im.width}x{im.height}: one drawing, not a strip (crop one frame)  "
               "(--help lists the options)", file=sys.stderr)
         return 2

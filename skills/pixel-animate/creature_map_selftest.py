@@ -7,12 +7,13 @@ What it does not prove: the fish is only checked to read as a floating body with
 real art: on real drawings the map is a first look only (see creature_map's help)."""
 import contextlib
 import io
+import json
 import math
 import os
 import sys
 import tempfile
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import creature_map as cm                                 # noqa: E402
@@ -196,7 +197,7 @@ def run():
             case(f"pixel walker x{scale}: runs (its plan is not judged)", bool(res["plan"]), res["plan"])
         except Exception as e:                            # noqa: BLE001 (any crash is the failure)
             case(f"pixel walker x{scale}: runs (its plan is not judged)", False, repr(e))
-    ok &= cli(case)
+    cli(case)
     print("selftest:", "all hold" if ok else "FAILED")
     return ok
 
@@ -208,11 +209,9 @@ def cli(case):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
             return cm.main(args), buf.getvalue()
-    ok = True
     for name, cond in (("cli: --help exits 0", run_main(["--help"])[0] == 0 and run_main(["-h"])[0] == 0),
                        ("cli: no arguments exit 2", run_main([])[0] == 2)):
         case(name, cond, "")
-        ok &= cond
     with tempfile.TemporaryDirectory() as tmp:
         src = os.path.join(tmp, "q.png")
         quadruped().save(src)
@@ -220,18 +219,38 @@ def cli(case):
         bad = [run_main([src, "--eye", "#ffc82"])[0], run_main([src, "--eye-at", "3"])[0],
                run_main([src, "--bogus"])[0], run_main([os.path.join(tmp, "none.png")])[0]]
         case("cli: bad --eye, --eye-at, option, file exit 2", bad == [2, 2, 2, 2], bad)
-        ok &= bad == [2, 2, 2, 2]
         lo = run_main([src, "--eye", EYEHEX, "--out", out, "--name", "lo"])
         up = run_main([src, "--eye", EYEHEX.upper().lstrip("#"), "--out", out, "--name", "lo"])
         same = lo[0] == up[0] == 0 and lo[1] == up[1]
         case("cli: --eye FFC828 read as #ffc828", same, (lo[0], up[0]))
-        ok &= same
+        slim = snake()
+        x0, y0, x1, y1 = ImageChops.difference(slim, Image.new("RGB", slim.size, BG)).getbbox()
+        slim = slim.crop((x0 - 2, y0 - 2, x1 + 2, y1 + 2))
+        slim.save(src)
+        code, msg = run_main([src, "--eye", EYEHEX, "--out", out])
+        case("cli: a single wide snake keeps its ground plan",
+             code == 0 and "serpent or worm" in msg and "facing right" in msg, msg)
+        round_body = Image.new("RGBA", (32, 32))
+        d = ImageDraw.Draw(round_body)
+        d.ellipse((8, 8, 24, 24), fill=BODY)
+        d.point((20, 13), fill=(0, 0, 0, 255))
+        round_body.save(src)
+        code, msg = run_main([src, "--eye", "000000", "--out", out, "--name", "round"])
+        case("cli: a round body with a black eye faces right", code == 0 and "blob" in msg and "facing right" in msg, msg)
+        if code == 0:
+            with open(os.path.join(out, "round_map.json"), encoding="utf-8") as fh:
+                res = json.load(fh)
+            case("cli: round body's centre and ground are mapped", res["ground_y"] == 24 and len(res["spine"]) == 1, res)
+        Image.new("RGBA", (32, 32)).save(src)
+        case("cli: an empty silhouette still exits 1", run_main([src, "--out", out])[0] == 1, "")
         strip = os.path.join(tmp, "strip.png")
-        Image.new("RGBA", (34 * 8, 22), (200, 148, 106, 255)).save(strip)
-        code = run_main([strip])[0]
+        frame = walker()
+        sheet = Image.new("RGBA", (frame.width * 8, frame.height))
+        for k in range(8):
+            sheet.paste(frame, (k * frame.width, 0))
+        sheet.save(strip)
+        code = run_main([strip, "--out", out])[0]
         case("cli: a strip of frames is a usage error (exit 2)", code == 2, code)
-        ok &= code == 2
-    return ok
 
 
 SHAPES = {"quadruped": quadruped, "biped": biped, "insect": lambda: bugs(6), "spider": lambda: bugs(8),
