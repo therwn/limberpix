@@ -90,6 +90,9 @@ Warnings (lines "warn: ...", not faults; look at them): the eye tick, reshape an
   orphans  a frame with over twice the loop's usual lone pixels     speck  a glaring pixel blinking once a loop
   doubles  a frame with over twice the loop's usual doubled outline cells
   drift    (with --ref) the idle's nearest pose differs from the drawing   swap (--sheet) a part switched off
+  split    the torso's two sides move rigidly by different amounts, a 1-px step between them where its drawing's
+           topline (or belly line) is level: a body cut into bands (not read on a flier)
+  hitch    the head (the eye's track), or a --parts part, steps alone after holding still 10+ frames at 30 fps
 After the faults it prints read-outs: per loop the steps, the eye's rows, the update and real-pose rates, the box and
 its anchor, rare colours; the move's bob, leg band and planted-foot speed; each action's phases and staging; parts.
 Writes <out>/<name>_check.png (each distinct pose zoomed, at most 12 a loop plus any a fault names, labelled with the
@@ -137,6 +140,9 @@ DOUBLES, DOUBLES_X = 2, 2.0                              # doubles over 2x the l
 REF_DRIFT = 0.02                                         # drift: the idle's nearest pose against the approved drawing
 VOLUME, VOLUME_PX, VOLUME_MIN = 0.10, 2, 40              # volume: a part of 40+ px keeps max(10 %, 2 px) of its area
 SWAP_LOW, SWAP_HIGH, SWAP_POSES, SWAP_BACK = 0.3, 2.0, 3, 0.7   # swap: a colour group dropping or doubling briefly
+SPLIT_ROWS, SPLIT_COLS, SPLIT_RUN, SPLIT_MIN = 0.6, 0.6, 0.3, 10   # split: the torso's rows and columns; each side
+HITCH_HOLD, HITCH_ELSE, HITCH_RIGID, HITCH_MIN = 10, 0.5, 0.7, 8  # hitch: frames held at 30 fps; the rest's change
+SPLIT_BLOCK = 0.25                                       # split: a side's pixels off its rigid move
 
 
 def hexrgb(v):
@@ -425,7 +431,7 @@ def check(loops, spec, warns=None):
     faults = (faults + frozen(loops, spec) + stiff(loops, spec) + cadence(loops, spec) + snap(loops, spec)
               + tick(loops, spec, warns) + hop(loops, spec) + vanish(loops, spec) + shallow(loops, spec)
               + reshape(loops, spec, warns) + palette(loops, spec) + marks(loops, spec, warns))
-    for later in (action, boil, skate, gait, parts, orphans, doubles, blend, drift, swap):   # warnings only
+    for later in (action, boil, skate, gait, parts, orphans, doubles, blend, drift, swap, split, hitch):   # warnings
         later(loops, spec, warns)
     return faults
 
@@ -1784,6 +1790,282 @@ def swap(loops, spec, warns):
                              f"{med:g}) for {L} pose(s) from frame {runs[i][0]}: a part switched "
                              f"{'off' if low else 'on'} for a cell; keep every part on every cell")
                 break
+    return []
+
+
+def _lines(a):
+    """Per column of an array the first drawn row (the topline) and the belly: the last row of the drawn run that
+    starts at the topline, None where that run reaches the figure's lowest rows (a leg, or the ground). None for an
+    empty column."""
+    h, w = a.shape
+    m = a > 0
+    rows = np.nonzero(m.any(1))[0]
+    bottom = int(rows.max()) if len(rows) else -1
+    top, belly = [None] * w, [None] * w
+    for x in range(w):
+        ys = np.nonzero(m[:, x])[0]
+        if not len(ys):
+            continue
+        y = top[x] = int(ys[0])
+        while y + 1 < h and m[y + 1, x]:
+            y += 1
+        if y < bottom - 1:
+            belly[x] = y
+    return top, belly
+
+
+def _torso(rest, eye, facing):
+    """The torso of the rest frame: (its columns, (top row, bottom row) of the body band), or None. The band is the
+    run of rows drawn on SPLIT_ROWS of the fullest row's pixels, holding it (legs and the tail's tip are thinner).
+    Its columns are those drawn on SPLIT_COLS of the band's rows and on every row of its middle half (a tail or a leg
+    leaves that open), whose topline lies in the band's top quarter (no neck, head, ears or raised tail above them),
+    the head's side of a line 1.5 head boxes (frozen's) behind the eye left out (a head and neck may turn against
+    the body); the longest run of them, SPLIT_MIN columns at least."""
+    m = rest > 0
+    cnt = m.sum(1)
+    if not cnt.max():
+        return None
+    ok = cnt >= SPLIT_ROWS * cnt.max()
+    y0 = y1 = int(cnt.argmax())
+    while y0 > 0 and ok[y0 - 1]:
+        y0 -= 1
+    while y1 < len(ok) - 1 and ok[y1 + 1]:
+        y1 += 1
+    top, _ = _lines(rest)
+    c0, c1 = y0 + (y1 - y0 + 1) // 4, y1 - (y1 - y0 + 1) // 4   # the band's core: a tail or a leg leaves it open
+    xs = np.nonzero(m.any(0))[0]
+    hr = max(3, round(0.12 * (xs.max() - xs.min())))     # frozen's head box (half its side)
+    best, run = [], []
+    for x in range(m.shape[1] + 1):
+        good = (x < m.shape[1] and m[y0:y1 + 1, x].mean() >= SPLIT_COLS and m[c0:c1 + 1, x].all()
+                and top[x] is not None and top[x] >= y0 - max(2, (y1 - y0 + 1) // 4))
+        if good and eye is not None:                      # the neck's root too: half a head box further back
+            good = x < eye[0] - 1.5 * hr if facing != "left" else x > eye[0] + 1.5 * hr
+        if good:
+            run.append(x)
+        else:
+            best, run = (run if len(run) > len(best) else best), []
+    return (best, (y0, y1)) if len(best) >= SPLIT_MIN else None
+
+
+def _torso_dx(a, R, X, band, reach=8):
+    """The sideways shift that best lays frame a's torso block (the band's rows, 3 px either side, over the torso's
+    columns) on the rest frame's, up to 3 px up or down allowed; the smallest on a tie (a walk in place gives 0)."""
+    h = R.shape[0]
+    ya, yb, xa, xb = max(0, band[0] - 3), min(h, band[1] + 4), X[0], X[-1] + 1
+    ref, best = R[ya:yb, xa:xb], None
+    for dx in range(-reach, reach + 1):
+        for dy in range(-3, 4):
+            s = _sh(a, -dy, -dx)[ya:yb, xa:xb]
+            key = (int(((s != ref) & ((s > 0) | (ref > 0))).sum()), abs(dx), abs(dy))
+            if best is None or key < best[0]:
+                best = (key, dx)
+    return best[1]
+
+
+def _seams(d, X, need, rest_line):
+    """The band seams in one pose change: d maps each torso column (rest coordinates) to how far the line moved
+    there. A seam is a column c where d changes by 1 px (a joint bent further is no band), with need+ columns moving
+    alike on each side of it (each side
+    rigid), where the rest line is level (c-1 and c on one row: the step is one the drawing does not have). A
+    staircase of 3+ levels, each a 1-px step the same way, is a shear spread over the length: no seam.
+    Returns [(c, d behind, d from c on, behind's columns, from c's columns)]."""
+    runs = []                                             # (first column, last column, d) of consecutive columns
+    for x in X:
+        if d.get(x) is None:
+            continue
+        if runs and runs[-1][1] == x - 1 and runs[-1][2] == d[x]:
+            runs[-1][1] = x
+        else:
+            runs.append([x, x, d[x]])
+    big = [r for r in runs if r[1] - r[0] + 1 >= 3]
+    lv = [r[2] for r in big]
+    if len(set(lv)) >= 3 and all(abs(q - p) == 1 for p, q in zip(lv, lv[1:])) and \
+            len({q - p for p, q in zip(lv, lv[1:]) if q != p}) == 1:
+        return []
+    out = []
+    for p, q in zip(runs, runs[1:]):
+        c = q[0]
+        if (p[1] == c - 1 and abs(q[2] - p[2]) == 1 and p[1] - p[0] + 1 >= need and q[1] - q[0] + 1 >= need
+                and rest_line[c] is not None and rest_line[c] == rest_line[c - 1]):
+            out.append((c, p[2], q[2], range(p[0], p[1] + 1), range(q[0], q[1] + 1)))
+    return out
+
+
+def _rigid(p, q, cols, dxp, dxq, dy, rows):
+    """Whether the block of pose p over cols (rest coordinates) moved dy rows is pose q's block there: under
+    SPLIT_BLOCK of their drawn pixels differ (a wing or a leg sweeping through does not move as a block)."""
+    h, w = p.shape
+    xs = [x for x in cols if 0 <= x + dxp < w and 0 <= x + dxq < w]
+    if not xs:
+        return False
+    a = _sh(p, dy)[rows][:, [x + dxp for x in xs]]
+    b = q[rows][:, [x + dxq for x in xs]]
+    drawn = int(((a > 0) | (b > 0)).sum())
+    return drawn > 0 and int(((a != b) & ((a > 0) | (b > 0))).sum()) <= SPLIT_BLOCK * drawn
+
+
+def split(loops, spec, warns):
+    """The torso cut into bands. The rest frame (--ref, else the idle's first frame) gives the torso (_torso): the
+    body band's rows and the columns whose topline is the torso's own. In every loop, each change from one distinct
+    pose to the next, both laid on the rest frame by their torso block (_torso_dx), is read along the topline and the
+    belly line: per torso column, how far the line moved. Warn when one column parts two sides that each move
+    rigidly over a quarter of the torso (SPLIT_RUN) by different amounts, with a 1-px step where the rest line is
+    level (_seams): the rear band riding the hips and the front band the shoulders, one a pose after the other.
+    A whole-body bob moves every column alike; a shear spread over the length is a staircase; a head turning
+    against the body lies outside the torso's columns; legs and a tail are thinner than the band. A flier is not
+    read: its back carries its wings. A warning only."""
+    if not loops or spec.flier:
+        return []
+    src = spec.ref if spec.ref is not None else (loops.get(spec.idle) or next(iter(loops.values())))[0]
+    R = _arrays([src], spec)[0][0]
+    if not R.any():
+        return []
+    got = _torso(R, _eye_at(src, spec), spec.facing)
+    if not got:
+        return []
+    X, band = got
+    rt, rb = _lines(R)
+    need_t = max(4, round(SPLIT_RUN * len(X)))
+    need_b = max(4, round(SPLIT_RUN * sum(1 for x in X if rb[x] is not None)))
+    w = R.shape[1]
+    mid = (band[0] + band[1]) // 2                        # the block whose line it is: the back down to the band's
+    blocks = (slice(max(0, min(rt[x] for x in X) - 2), mid + 1),   # middle, or the middle down to the belly
+              slice(mid, max([rb[x] for x in X if rb[x] is not None], default=band[1]) + 3))
+    for a, frames in loops.items():
+        figs, _ = _arrays(frames, spec)
+        if figs[0].shape != R.shape:
+            continue
+        runs = _same_runs(figs)
+        if len(runs) < 2:
+            continue
+        P = [figs[k] for k, _ in runs]
+        L = [_lines(p) for p in P]
+        dx = [_torso_dx(p, R, X, band) for p in P]
+        hits = []
+        for i in range(len(P)):
+            j = (i + 1) % len(P)
+            for name, line, need, rl in (("topline", 0, need_t, rt), ("belly line", 1, need_b, rb)):
+                lp = {x: L[i][line][x + dx[i]] for x in X if 0 <= x + dx[i] < w}
+                lq = {x: L[j][line][x + dx[j]] for x in X if 0 <= x + dx[j] < w}
+                d = {x: lq[x] - lp[x] for x in X if lp.get(x) is not None and lq.get(x) is not None}
+                hits += [(runs[i][0], runs[j][0], name, c, d0, d1) for c, d0, d1, back, front
+                         in _seams(d, X, need, rl) if _rigid(P[i], P[j], back, dx[i], dx[j], d0, blocks[line])
+                         and _rigid(P[i], P[j], front, dx[i], dx[j], d1, blocks[line])]
+        if hits:
+            f0, f1, name, c, d0, d1 = hits[0]
+            where = ", ".join(f"{a}[{p}]->[{q}] col {c}" for p, q, _, c, _, _ in hits[:4])
+            warns.append(f"warn: split: {a} {len(hits)} pose change(s) move the torso's two sides by different "
+                         f"amounts with a 1-px step its drawing does not have (first {a}[{f0}]->{a}[{f1}], the "
+                         f"{name} at column {c}: {d0:+d} px behind it, {d1:+d} px from it on; {where}): the torso "
+                         f"is one piece: bend it over its whole length (a shear or a curve), turn it whole about a "
+                         f"pivot, or let a 1-px step fall where the line already slopes")
+    return []
+
+
+def _eye_track(frames, spec):
+    """The eye's (row, column) per frame, as _eye_rows follows it; None on a frame with no eye."""
+    out, last = [], None
+    for f in frames:
+        pcs = _blobs(np.array([[v == spec.eye for v in r] for r in f]))
+        if not pcs:
+            out.append(None)
+            continue
+        cents = [(float(ys.mean()), float(xs.mean()), len(ys)) for ys, xs in pcs]
+        if last is None:
+            front = 1 if spec.facing != "left" else -1
+            c = max(cents, key=lambda t: (t[2], front * t[1]))
+        else:
+            c = min(cents, key=lambda t: (t[0] - last[0]) ** 2 + (t[1] - last[1]) ** 2)
+        last = c
+        out.append((math.floor(c[0] + 0.5), math.floor(c[1] + 0.5)))
+    return out
+
+
+def _hitches(figs, track, region, need, n):
+    """The lone steps of one feature: [(frame, hold, step, change round it, change elsewhere)]. track holds the
+    feature's place per frame; region(k, dy, dx) its pixels at frame k and moved by the step. A step counts when the
+    place held need+ frames before it, it does not come back within 3 frames (tick's), it changes HITCH_MIN+ px
+    round the feature, mostly as the feature moved whole (the frame moved by the step explains all but HITCH_RIGID
+    of that change), and the rest of the figure changes under HITCH_ELSE of it."""
+    out = []
+    for k in range(n):
+        q = (k + 1) % n
+        if track[q] == track[k]:
+            continue
+        hold = 1
+        while hold < n and track[(k - hold) % n] == track[k]:
+            hold += 1
+        if hold < need or any(track[(q + j) % n] == track[k] for j in range(1, 4)):
+            continue
+        dy, dx = track[q][0] - track[k][0], track[q][1] - track[k][1]
+        box = region(k, dy, dx)
+        ch = figs[k] != figs[q]
+        near = int((ch & box).sum())
+        rest = int((ch & ~_dilate(box, 2)).sum())
+        whole = int(((_sh(figs[k], dy, dx) != figs[q]) & box).sum())
+        if near >= HITCH_MIN and whole <= HITCH_RIGID * near and rest <= HITCH_ELSE * near:
+            out.append((k, hold, (dy, dx), near, rest))
+    return out
+
+
+def hitch(loops, spec, warns):
+    """A big feature stepping alone after a long hold. The eye's track (the head's place), and with --parts each
+    part of VOLUME_MIN+ px (its box's corner), per frame. Warn when it holds HITCH_HOLD+ frames (at 30 fps; 0.27 s),
+    then steps a pixel or more as one block while little else in the figure changes on that frame (_hitches): the
+    step reads as a jerk, not motion. A step back within 3 frames is tick's; a declared action's held key (its
+    single longest pose hold) may end in a step. A warning only."""
+    need = max(2, round(HITCH_HOLD * spec.fps / 30))
+    for a, frames in loops.items():
+        n = len(frames)
+        if n < need + 2:
+            continue
+        figs, _ = _arrays(frames, spec)
+        if not all(f.any() for f in figs):
+            continue
+        key = None
+        if a in spec.actions:
+            r = max(_same_runs(figs), key=lambda t: t[1])
+            key = {(r[0] + j) % n for j in range(r[1])}
+        h, w = figs[0].shape
+        found = []
+        if spec.eye and a not in spec.glows_eye:
+            tr = _eye_track(frames, spec)
+            if all(tr) and len(set(tr)) > 1:
+                xs = np.nonzero(np.any([f > 0 for f in figs], 0).any(0))[0]
+                hr = max(3, round(0.12 * (xs.max() - xs.min())))
+
+                def eye_box(k, dy, dx, tr=tr, hr=hr):
+                    b = np.zeros((h, w), bool)
+                    ey, ex = tr[k]
+                    b[max(0, ey - hr):ey + hr + 1, max(0, ex - hr):ex + hr + 1] = True
+                    return b | _sh(b, dy, dx)
+                found += [("the head (the eye's track)",) + t for t in _hitches(figs, tr, eye_box, need, n)]
+        labels = spec.parts.get(a)
+        if labels and len(labels) == n:
+            keys = {}
+            lab, _ = _arrays(labels, Spec(ink=set()), keys)
+            for c, code in keys.items():
+                masks = [x == code for x in lab]
+                if statistics.median(int(m.sum()) for m in masks) < VOLUME_MIN or not all(m.any() for m in masks):
+                    continue
+                tr = [(int(np.nonzero(m.any(1))[0][0]), int(np.nonzero(m.any(0))[0][0])) for m in masks]
+
+                def part_box(k, dy, dx, masks=masks):
+                    return masks[k] | _sh(masks[k], dy, dx)
+                found += [(f"part {c}",) + t for t in _hitches(figs, tr, part_box, need, n)]
+        by = {}
+        for what, k, hold, (dy, dx), near, rest in found:
+            if not (key and key <= {(k - j) % n for j in range(hold)}):
+                by.setdefault(what, []).append((k, hold, max(abs(dy), abs(dx)), near, rest))
+        for what, hits in by.items():
+            k, hold, px, near, rest = max(hits, key=lambda t: t[1])
+            at = ", ".join(f"{a}[{t[0]}] after {t[1]}" for t in sorted(hits)[:6])
+            warns.append(f"warn: hitch: {a} {what} steps {px} px alone after holding still {hold} frames "
+                         f"({hold / spec.fps:.2f} s; the rest of the figure changes {rest} px against its {near}) "
+                         f"{len(hits)} time(s) a loop ({at}; frame k is the change to the next): it reads as a jerk; "
+                         f"carry it on the neck as a chain on the body's beat, turn it a little over several "
+                         f"frames, or move other parts on the same pose")
     return []
 
 

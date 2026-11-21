@@ -157,6 +157,10 @@ cuts and turns are hidden by the shrink.
      3.5). Never turn a side-on wing like a door.
    - **Spread wings (front or 3/4 view):** turn them about the shoulder *point*, tips sweeping down past the body.
      A vertical squeeze moves only their top edge.
+   - **Torsos:** one piece. Bend it by a shear or a curve spread over its whole length, or turn it whole about a
+     pivot. Never move a hip band and a shoulder band rigidly by different amounts: where they meet, the back or
+     the belly line shows a 1-px step the drawing does not have, and the body reads as two pieces (`split`). A
+     1-px bend has to step somewhere: put the step where the line already slopes.
    - **Legs:** shear them below the hip (each row shifted in proportion to its depth below the joint), so the top
      stays joined. Turning a leg opens a wedge at the hip and shows the cut's straight edge. The foot swinging
      forward lifts.
@@ -177,7 +181,10 @@ cuts and turns are hidden by the shrink.
    - **Fins and sails standing on a back:** shear them from their base (the base row stays on the back). Turned,
      they break off the back at their root.
    - **Heads:** turn them on the neck. Nod on each step of the walk, look about in the idle, rise for the action.
-     Eyes and features move with the head.
+     Eyes and features move with the head. Carry a rise or a bow down the neck as a chain on the body's beat (the
+     neck first, the head a pose later, the ears a pose after it), turning the head a little so the change spreads
+     over its pixels and frames. Never step the head as a rigid block by a lone pixel after a long hold while the
+     rest stands still: it reads as a jerk (`hitch`).
    - **Ears, crests, whiskers, antennae:** they follow the head a beat late and flick now and then in the idle.
 4. **Hide the seams:**
    - A child gets a strip of overlap past its cut, drawn under its parent, so no gap opens when the two turn apart.
@@ -390,7 +397,8 @@ reject judgements on them by one reviewer (not included). Treat them as tested d
   number of poses, so its two steps match. Legs stepping under a body that never moves read as a board on wheels.
   Raise every part but the legs, and give the legs an overlap strip upward so no gap opens at the hip. Do not hold
   the leg poses two frames with the bob on a step of its own: a held frame, a small leg step, then the whole body
-  jumping reads as a hitch on every beat (`lurch`).
+  jumping reads as a hitch on every beat (`lurch`). Where the hips and the shoulders rise a pose apart, bend the
+  back between them over its length; two rigid bands leave a step in the back (`split`).
   - Size the rise in game pixels before rounding: a lift worked out in reference pixels can round to 0 after the
     shrink, and the torso then never moves (a rise of 12 ref px on a sprite shrunk 25:1 is nothing). Use exactly one
     game pixel's worth, and hold each level 4+ frames.
@@ -429,7 +437,8 @@ reject judgements on them by one reviewer (not included). Treat them as tested d
 - **Weight on all four feet;** never caught mid-stride. A reference drawn mid-stride gets its legs drawn in.
 - **A big part's 1-px move** (a head of 10-16 % of the figure) is staged over ≥ 2 poses: ears, then face, then neck
   on the bow; face, then neck, then ears on the rise. Avoid any single step that changes ≥ 8 % of the figure;
-  when one must, hold it ≤ 2 frames. Horns can lead like ears.
+  when one must, hold it ≤ 2 frames. Horns can lead like ears. A head that steps only every second or so needs
+  other parts changing on the same poses, or it jerks after each long hold (`hitch`).
 - **Rate:** for example 18 poses held 2 frames, something changing on every pose, every moving region changing at
   least every 6 frames. A longer loop (about 2.4 s) makes a big animal's 1-px nod less of a metronome, if the
   player reads the frame count from the data.

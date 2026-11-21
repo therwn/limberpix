@@ -142,7 +142,9 @@ Every frame of every loop must be the same size, with the figure kept in place r
 
 `size`, `empty`, `apart`, `eye`, `outline`, `ground`, `jump`, `still`, `shimmer`, `frozen`, `stiff`, `choppy`,
 `uneven`, `lurch`, `snap`, `tick`, `hop`, `vanish`, `shallow`, `reshape`, and with their options `palette` and
-`mark`. Warnings (`warn:` lines) add `skate`, `gait`, `boil`, the action checks and more; `--help` lists them all.
+`mark`. Warnings (`warn:` lines) add `skate`, `gait`, `boil`, the action checks, `split` (the torso moved as two
+bands with a 1-px step between them), `hitch` (the head or a part stepping 1 px alone after a long hold) and more;
+`--help` lists them all.
 Each fault, with its usual cause and fix, is
 in the table in [`skills/pixel-anim-check/SKILL.md`](../skills/pixel-anim-check/SKILL.md#2-what-each-fault-means-and-the-usual-fix).
 
@@ -179,28 +181,59 @@ stray piece: without it the same run reports 41 faults (40 `apart` and one `vani
 ### The showcase creatures
 
 [`examples/showcase/`](../examples/showcase) holds the three creatures in the README's pictures, each made by the
-pixel-animate method and passing the check with 0 faults: a songbird (`bird`, a flier), a fox (`beast`, a
-four-legged walker) and a lizard (`lizard`, a low sprawling walker). Each folder has the drawing as data
-(`creature.py`, every pixel placed by hand), the rig that poses its parts (`animate.py`, which rebuilds the strips),
-the drawing at 8x (`*_art_8x.png`) and the two loops at 30 fps:
+pixel-animate method and passing the check with 0 faults and 0 warnings: a young wolf (`beast`, a four-legged
+walker), a kingfisher-like diver (`bird`, a flier) and a chameleon-like lizard (`lizard`, a low walker with a tongue
+strike). Each folder has the drawing as data (`creature.py`, every pixel placed by hand, each moving part its own
+layer), the rig that poses the parts (`*_rig.py`, with `bird_wings.py` and `bird_heads.py` for the bird's drawn keys
+and `lizard_legs.py` for the lizard's legs), `animate.py`, which rebuilds the strips, the drawing at 8x
+(`*_art_8x.png`) and three loops at 30 fps, every pose held 2 frames:
 
-| Creature | Frame | Idle | Move | Check options |
-|---|---|---|---|---|
-| bird | 50x54 | 48 frames | 32 frames | `--frame 50 --eye "#120c1c" --ink "#1b1424,#2b4180,#8c3a2e" --flier --shadow "#3a3348,#544b63"` |
-| beast | 52x36 | 36 frames | 16 frames | `--frame 52 --eye "#3ad3a0" --ink "#2a1a2c,#6b3343"` |
-| lizard | 72x29 | 36 frames | 40 frames | `--frame 72 --eye "#f6c544" --ink "#1b1826,#2c4438" --effects "#e0517a"` |
+| Creature | Frame | Idle | Move | Attack | Road speed |
+|---|---|---|---|---|---|
+| beast | 93x53 | 72 frames | 32 frames | 39 frames, a lunge and a bite | 1.0 px a frame |
+| bird | 86x69 | 72 frames | 32 frames | 56 frames, a dive strike | 1.0 px a frame |
+| lizard | 113x40 | 64 frames | 32 frames | 34 frames, a tongue strike | 0.5 px a frame |
 
-Each one's lit outline is lighter than the default ink threshold, so `--ink` names both outline colours; the
-lizard's tongue is drawn without an outline, so `--effects` names it. For example:
+The move is drawn in place, to be shown over a road scrolling at the road speed (`ROAD_SPEED` in each `animate.py`):
+a planted foot goes back at that speed (the check prints the two side by side). `animate.py` also writes the check's other inputs into the
+creature's `check/` folder: a part strip for each loop (each rig part one flat colour), the drawing at game size and
+its palette. Each `animate.py` docstring ends with the creature's full check command. The beast's, from the repo
+root:
 
 ```
-python skills/pixel-anim-check/pixel_anim_check.py --loop idle=examples/showcase/beast/beast_idle.png --loop move=examples/showcase/beast/beast_move.png --frame 52 --eye "#3ad3a0" --ink "#2a1a2c,#6b3343" --out out --name beast
+python skills/pixel-anim-check/pixel_anim_check.py --loop idle=examples/showcase/beast/beast_idle.png --loop move=examples/showcase/beast/beast_move.png --loop attack=examples/showcase/beast/beast_attack.png --frame 93 --eye "#f2aa3c" --ink "#120f19,#191a2e,#242844,#323a5c,#404e78,#566594" --effects "#fff9e6,#ffd25e,#c3cdf0,#7d89b8" --action attack:strike:right --speed 1.0 --parts idle=examples/showcase/beast/check/beast_idle_parts.png --parts move=examples/showcase/beast/check/beast_move_parts.png --parts attack=examples/showcase/beast/check/beast_attack_parts.png --squash "#8c8c8c,#208040,#909020" --palette examples/showcase/beast/check/beast_palette.png --ref examples/showcase/beast/check/beast_art.png --out out --name beast
 python skills/pixel-animate/body_parts.py examples/showcase/beast/beast_art_8x.png examples/showcase/beast/marks.json --out out --name beast
 ```
 
-The first prints `beast: 0 fault(s)`; the second cuts the fox into ten parts from the bones in
-`examples/showcase/beast/marks.json` and exits 0. `examples/showcase/make_showcase.py` draws the README's pictures
-from these files (see [Development](#development)).
+The first prints `beast: 0 fault(s)` and exits 0. Each option has a reason:
+
+- `--ink` names the outline colours. The wolf's top and left edges carry a lit line of its fur ramp instead of ink,
+  and those tones are lighter than the default ink threshold: with only `--frame` and `--eye` the same loops report
+  149 faults (143 `outline`, 6 `apart`).
+- `--effects` names the attack's flash, sparks, speed lines and dust. With `--ink` but without it, they are 12 faults
+  (6 `apart` and 6 `outline`, on the strike's frames).
+- `--action attack:strike:right` has the attack's anticipation, strike and recovery judged, `--speed 1.0` prints
+  the planted feet's speed beside the road's, and `--parts`, `--squash`, `--palette` and `--ref` add the part
+  volumes, the colours of the drawing and the likeness of the rest pose (the neck stretches and the far legs pass
+  behind the near ones on purpose, hence `--squash`).
+
+The second cuts the wolf into eleven parts from the bones in `examples/showcase/beast/marks.json` and exits 0:
+
+```
+torso          torso      share 0.135 pieces 1 bbox [239, 168, 393, 312]
+tail           tail       share 0.146 pieces 1 bbox [31, 159, 175, 376]
+neck           neck       share 0.183 pieces 1 bbox [360, 85, 559, 279]
+head           head       share 0.066 pieces 1 bbox [455, 73, 623, 146]
+jaw            jaw        share 0.015 pieces 1 bbox [521, 142, 592, 175]
+ear_far        ear        share 0.015 pieces 1 bbox [455, 40, 512, 91]
+ear_near       ear        share 0.016 pieces 1 bbox [502, 31, 554, 87]
+hind_near      leg        share 0.212 pieces 1 bbox [135, 159, 288, 424]
+hind_far       leg        share 0.061 pieces 1 bbox [202, 288, 296, 424]
+front_near     leg        share 0.109 pieces 1 bbox [389, 192, 480, 424]
+front_far      leg        share 0.041 pieces 1 bbox [360, 292, 416, 424]
+```
+
+`examples/showcase/make_showcase.py` draws the README's pictures from these files (see [Development](#development)).
 
 ### Sample output, explained
 
@@ -365,7 +398,10 @@ python skills/pixel-animate/creature_map_selftest.py
 python examples/make_examples.py --verify
 ```
 
-`pixel_anim_selftest.py --verbose` also prints the numbers behind its special clean cases. `python examples/showcase/make_showcase.py` redraws the README's pictures in `docs/img` from the showcase creatures (it needs Pillow 10.1+ for its bundled font, and stops if a creature has a fault). `make_examples.py
---verify` checks the examples still match the selftests' creatures; without `--verify` it rewrites only the files
+`pixel_anim_selftest.py --verbose` also prints the numbers behind its special clean cases.
+`python examples/showcase/make_showcase.py` redraws the README's pictures in `docs/img` from the showcase creatures:
+it first checks every loop of every creature with that creature's full check options and stops on any fault, then
+writes `hero.gif`, `check.png` and `parts.png`, leaving a picture whose pixels and timing are unchanged as it is.
+After changing a creature, run its `animate.py` first. `make_examples.py --verify` checks the examples still match the selftests' creatures; without `--verify` it rewrites only the files
 whose pixels differ, and `--docs` also refreshes `docs/img` and the plugin icon. See
 [CONTRIBUTING.md](../CONTRIBUTING.md). Changes are listed in [CHANGELOG.md](../CHANGELOG.md).

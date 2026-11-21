@@ -6,7 +6,11 @@
 Two Claude Code skills for pixel-art sprite animation: animate a creature from one drawing so it moves like a living
 thing, and check every loop for broken motion before anyone sees it.
 
-![Three pixel-art creatures made with pixel-animate, a fox, a songbird and a lizard, playing their idle loops and then their move loops on one ground strip](docs/img/hero.gif)
+![Three pixel-art creatures animated with pixel-animate, a young wolf, a kingfisher-like bird and a chameleon-like lizard, each playing its idle, then its move over a scrolling road, then its attack: a lunge and bite, a dive and a tongue strike](docs/img/hero.gif)
+
+Three original creatures, each drawn once as data and animated from that drawing alone: an idle, a move over a road
+scrolling at the creature's own speed (a walker's planted feet keep pace with it) and an attack. Every loop
+passes pixel-anim-check with 0 faults; their sources are in [`examples/showcase/`](examples/showcase).
 
 **Requirements:** Python 3.8+ with numpy and Pillow (`python -m pip install -r requirements.txt`); Claude Code to use
 the skills.
@@ -49,14 +53,14 @@ into parts, pose them at full size, shrink every frame on one fixed grid, with t
 (whole-pixel steps, holds, wings, legs, tails, heads). Claude uses it to make or remake a sprite animation, or when
 one looks stiff, broken or unlike its drawing. `body_parts.py` cuts the drawing into parts.
 
-![body_parts.py on the fox's drawing: rough bones placed by eye, and the ten parts it cut along the drawing's own ink and colour edges, each tinted and named](docs/img/parts.png)
+![body_parts.py on the wolf's drawing: rough bones placed by eye, and the eleven parts it cut along the drawing's own ink and colour edges, each tinted and named](docs/img/parts.png)
 
 **[pixel-anim-check](skills/pixel-anim-check/SKILL.md)** measures every loop and names its faults: specks, a lost
 eye, open outlines, feet off the ground, pops, shimmer, choppy timing, 1-px ticks, a frozen head and more. It writes
 a contact sheet and a GIF for a look by eye. Claude uses it whenever an animation is made or changed, and before one
 is shown.
 
-![pixel-anim-check on the fox's walk: with the eye painted over on frames 6-7 it prints two eye faults and exits 1; the walk as drawn prints 0 faults and exits 0](docs/img/check.png)
+![pixel-anim-check on the wolf's walk: with the eye painted over on frames 6-7 it prints two eye faults and exits 1; the walk as drawn prints 0 faults and exits 0](docs/img/check.png)
 
 ## Docs
 

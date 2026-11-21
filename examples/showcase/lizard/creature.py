@@ -1,218 +1,429 @@
-"""The Emberback skink: an original pixel-art lizard for the showcase, drawn by hand pixel by pixel and kept as data.
+"""The lizard: an original crawling reptile, drawn by hand pixel by pixel and kept as data.
 
-A 3/4 view from above, facing right, lit from the top left: the back and the near flank show, the four legs splay out
-to both sides (the far pair above the back, the near pair in front of the flank), each foot with its toes. One clear
-dorsal pattern: a row of ember spots down the spine, evenly spaced, shrinking along the tail.
+A chameleon-like lizard of no real species. The body is a laterally flat barrel lit from the top left: one lit mass on
+the upper back over the rump, a core shadow along the lower flank, a warm olive bounce under it and a 1-px ochre
+highlight where the barrel turns under, following the round of the belly as it sags between the front and the hind legs
+and fading into the bounce. Three teal bands wrap the barrel at uneven gaps, each bowing toward the head across it and
+narrowing and darkening toward the belly; small lit tubercles in loose clusters along the barrel's curve, thinning into
+the shade, give the flank its grain; a row of small cones runs along the spine. The top value sits on the rump and the
+back only (two glints on the casque's rim); the legs' lit faces stay a step lower and end in a shadow tone at the
+joints. A tall casque with a lit rim; a turret eye drawn as its own cone (a lit rim on the top left, a shaded ring on
+the lower right, its opening and the pupil set toward the front); one mouth line from the snout back to below the eye.
+Below the eye the head is modelled as rounded masses: a lit cheek under the turret and behind the mouth corner turns
+into a core shadow toward the throat, where two soft gular folds (a lit ridge over a dark crease, running down and back)
+lie above the ochre gular stripe that runs on into the belly's highlight; the lower jaw, lit just under the mouth line,
+darkens toward the chin. The tail tapers from a thick root, a shadow notch where it leaves the rump, into a round
+one-turn curl lit on its outer top-left edge; its ochre underside stripe starts thin under the hip, follows the curl and
+fades out. The legs crouch: each thigh or upper arm leaves the body with shaded mass and bends at a clear knee (forward)
+or elbow (back), a short shin or forearm runs down to the foot, and each foot grips with two mitten pads, a back pair
+and a front pair. A dark crease on the body marks the back of the near upper arm, and a shadow notch the point of its
+elbow. The far legs stand a full value step darker, inked all round with no lit rim, each bent like its near partner at
+a gentler angle (the far hind's knee hidden under the belly and its shin raking back, the far front's elbow just below
+the belly and its forearm raking forward), their small two-pad feet in the gaps between the near feet with a pixel of
+air on each side (the far hind foot ahead of the near hind, the far front foot just behind the near front). Side view,
+facing right; 21 colours in hue-shifted ramps (greens from deep blue-teal to pale yellow, teals for the bands, ochres
+from plum-brown to ochre), the lit outline (a dark green) on the top-left contours and the near-black ink on the shadow
+side and at contacts.
 
-Everything here is data: a palette, the body as strings (one character a pixel, "." for air), a mask naming the part
-each body pixel belongs to, and the parts that move on their own (four legs, the eyelid, the tongue) as small layers
-with their origin. animate.py poses these parts; it never redraws them.
+One character is one pixel; '.' is empty. Every part that moves is its own layer, drawn whole (also where a part in
+front of it covers it), so a part that moves never opens a hole. A layer is (x, y, rows): its top-left pixel on the
+canvas and its rows. Joints are cut where one part overlaps another or the material changes:
+  the tail goes in under the rump; the torso is one layer; the neck (the nape under the casque and the throat
+  behind the jaw, coloured as the drawing at rest) lies over the torso's front, so the head can be carried on it: it
+  moves with the body or a pose after it, the head a pose later on it; the head (skull, casque and upper jaw) sits
+  over the neck, which it overlaps;
+  the jaw tucks under the head along the mouth line (the head's lowest row, a deep blue-teal line, not ink), its
+  hinge behind and below the eye, its throat green in the head's shade over a narrow gular stripe; the turret sits
+  on the head and the pupil (amber round a dark pupil at its front) in its opening;
+  each leg is two layers, the upper limb and the lower limb with its foot, sharing the drawn knee or elbow (a disc
+  of overlap in both). The near upper limbs carry a shaded crease on their back and lower edges where they lie
+  over the body. The mouth (its inside) and the tongue lie under the
+  jaw and the head and only show when the jaw drops. The tongue is drawn at full reach in its own colours (an
+  effect-like part): to show it shorter, cut its rod and draw its club (the last 8 columns) at the new tip.
 
-    python creature.py            # writes lizard_art_8x.png next to this file (the drawing at 8x)
+    python creature.py           # writes lizard_art_8x.png next to this file: the drawing at rest, 8x
+
+The loops (animate.py describes each in full). The torso always moves as one piece, and the head is carried on the
+neck as a chain, a band a pose from the bottom up (the jaw, the eye's band, the casque):
+  idle    the back breathes along its whole length twice a loop, the neck and then the head's bands following it a
+          pose apart; the turret rolls about (the pupil leading inside it), the throat's pouch swells once, and the
+          tail's coil loosens and curls back in as a chain from the root. The feet never leave their pixels.
+  move    a lateral-sequence walk: the near hind, the near front, then the far hind and the far front half a stride
+          later, the legs posed by two-bone inverse kinematics (lizard_legs.py); a planted foot goes back with the
+          road; the body rises a pixel twice a stride with the neck and the jaw, the eye's band and the casque a
+          pose and two behind, the tail link by link.
+  attack  a tongue strike. Anticipation: the turret locks on; the head draws back and down to aim in three steps,
+          the body rocking back over its feet a pose after each. Strike: the jaw turns down about its hinge and the
+          tongue shoots out straight (a 1-frame smear, then full reach). Held key: the club at full reach, sparks
+          off it, the back settling and the head after it. Recovery: the tongue reels in and the jaw closes as the
+          back rises, the head coming home a pose behind.
+  Check:  the eye is "E"'s colour; the ink is "o" and "O"; the tongue's and the mouth's colours are effects (pass
+          them as --effects), so the check does not take them for stray pieces of the creature.
 """
 import os
 
 KEY = "lizard"
-W, H = 74, 32                 # the canvas every pose is drawn in (room ahead of the snout for the tongue)
+W, H = 104, 44            # the canvas of every frame (room ahead of the snout for the tongue's full reach)
+GROUND = 41               # the ink row the feet stand on
 
-# 14 colours. Greens: a deep blue-green shadow, a cool shadow, the mid tone, a light and a warm yellow-green
-# highlight (shadows cooler, lights warmer). The outline is ink, lightened to a dark green where the light falls on
-# the back and the head.
 PALETTE = {
-    "o": "#1b1826",                                                    # ink
-    "O": "#2c4438",                                                    # lit outline (top edges)
-    "d": "#1f4a4f", "s": "#2e7458", "g": "#4f9e45", "l": "#8cc443", "h": "#d2e67a",   # scales, dark to light
-    "r": "#f08a3c", "R": "#b2432e",                                    # ember spots, light and dark
-    "c": "#ecdca2", "b": "#b89a6a",                                    # the lip, light and shadow
-    "e": "#f6c544", "W": "#fffbe8",                                    # iris, glint
-    "t": "#e0517a",                                                    # tongue
+    "o": "#140f1e",   # ink: the outline on the shadow side and at contacts, the pupil
+    "O": "#2f5634",   # lit ink: the outline where the light falls (back, crest, casque, snout, tail, near legs)
+    "1": "#152b37",   # scales, green ramp from a cool deep blue-teal (also the mouth line) ...
+    "2": "#1d4949",
+    "3": "#2b6a47",
+    "4": "#4c8c41",
+    "5": "#86b343",
+    "6": "#c6d769",   # ... to a warm yellow-green
+    "7": "#f0f4b0",   # the brightest lit points (casque rim, back, turret)
+    "Q": "#4a9c84",   # the bands' teal where the light falls ...
+    "q": "#2b706c",   # ... in the half light ...
+    "k": "#1f5257",   # ... and in the shade toward the belly
+    "h": "#4e5a2c",   # olive: the warm bounce just above the belly
+    "a": "#45262c",   # ochre ramp, from a plum-brown shadow ...
+    "b": "#74422f",
+    "c": "#a66a31",   # ... to ochre (the belly's and the throat's highlight)
+    "E": "#ffaf2e",   # the eye's amber ring (only the eye uses it: the check follows it)
+    "m": "#5e1830",   # the inside of the mouth
+    "t": "#8e2347",   # the tongue, dark ...
+    "u": "#d84a68",   # ... mid ...
+    "v": "#ff8f97",   # ... and light
 }
 INK = "oO"
-EYE = "e"
-TONGUE = "t"
+EYE = PALETTE["E"]
+TONGUE = "tuv"            # the tongue's own colours (and "m", the mouth): effect colours for the check
+EFFECTS = TONGUE + "m"
 
-# The body: tail, trunk, neck and head, drawn whole (also where the legs cover it, so a leg that steps away never
-# shows a hole). Its eye is 2x2: the glint, two iris pixels and the pupil.
-BODY = [
-    "..........................................................................",  # 0
-    "..........................................................................",  # 1
-    "..........................................................................",  # 2
-    "..........................................................................",  # 3
-    "..........................................................................",  # 4
-    "..........................................................................",  # 5
-    "..........................................................................",  # 6
-    "..........................................................................",  # 7
-    "..........................................................................",  # 8
-    "..........................................................................",  # 9
-    "................................OOOOOOOOOOOO......OOOOOOOO................",  # 10
-    ".............................OOOhhhhhhllllllOOOOOOllhhhhllOOO.............",  # 11
-    "..........................OOOhhhlllrrlllrrlllllllgllllllhhlllOO...........",  # 12
-    "........................OOhhhlrrgggRRgggRRgglrrlgggggldddllhhllO..........",  # 13
-    "....................OOOOhhlllgRRgggggggggggggRRggsgggdWedglllhllO.........",  # 14
-    "................oooorrlllrrgggggggggggggggggggggssgggdeodgggllllllo.......",  # 15
-    "............oooollllRRgggRRgggggggggggggggggggsssdsggsddsggggggldgo.......",  # 16
-    "........oooolllrggggggggggggggggggggggggggssssssddssssssssggggggggo.......",  # 17
-    "....oooollrlgggRggggssssssssssssssssssssssssssddddsoooooooooooooooo.......",  # 18
-    ".ooogRggggggssssssssssssssssssssssssssssssssddddddocccccccccbbbo..........",  # 19
-    "ogggssssssssddddddddddddddddddddssssssssssssdddddobbssssssooooo...........",  # 20
-    ".oooooooooooooooooooooooooddddddddddddddddddddddo.oooooooo................",  # 21
-    "..........................oooooooooooooooooooooo..........................",  # 22
-    "..........................................................................",  # 23
-    "..........................................................................",  # 24
-    "..........................................................................",  # 25
-    "..........................................................................",  # 26
-    "..........................................................................",  # 27
-    "..........................................................................",  # 28
-    "..........................................................................",  # 29
-    "..........................................................................",  # 30
-    "..........................................................................",  # 31
-]
+LAYERS = {
+    "far_hind_thigh": (28, 25, [
+        ".oooo.......",
+        "o3333o......",
+        "o33322oo....",
+        ".o3322222o..",
+        "..o3322222o.",
+        "...o332222o.",
+        "....o332222o",
+        ".....o32222o",
+        "......o3222o",
+        ".......oooo.",
+    ]),
+    "far_hind_shin": (32, 32, [
+        "...o32o",
+        "...o32o",
+        "...o32o",
+        "..o32o.",
+        "..o32o.",
+        ".o32o..",
+        ".o32o..",
+        "o32o2o.",
+        "o3oo2o.",
+        "ooo.oo.",
+    ]),
+    "far_front_arm": (38, 25, [
+        ".....oooo.",
+        "....o3332o",
+        "...o33322o",
+        "...o3322o.",
+        "..o3322o..",
+        "..o322o...",
+        ".o3322o...",
+        ".o322o....",
+        "o322o.....",
+        ".ooo......",
+    ]),
+    "far_front_hand": (38, 32, [
+        "o32o....",
+        "o32o....",
+        ".o32o...",
+        "..o32o..",
+        "..o32o..",
+        "...o32o.",
+        "...o32o.",
+        "..o32o2o",
+        "..o3oo2o",
+        "..ooo.oo",
+    ]),
+    "tail": (1, 16, [
+        "...................65..",
+        "...............O6777653",
+        "...............77776653",
+        "...........OOOO76666543",
+        ".........OO775665555432",
+        "......OOO77766552222221",
+        "....OO777666522222222cc",
+        "...OQQ666552222222bbbbc",
+        "..OQQQ522222bbcccccccc.",
+        "..OQQQk22cccooo........",
+        ".O6QQkkcoooo...........",
+        ".O65kkbo...............",
+        "O6622ao..OOo...........",
+        "O6522o..O555o..........",
+        "O6522o.o4oo34o.........",
+        "O5522o..o..o5o.........",
+        "oQQkko.....o3o.........",
+        ".OQQk2o...o25o.........",
+        ".oqq222ooo223o.........",
+        "..o44222kk242o.........",
+        "...o3444qq32o..........",
+        "....oo22kkoo...........",
+        "......oooo.............",
+    ]),
+    "body": (14, 10, [
+        ".............o...o...o....................",
+        ".........o...OOOO4OOO3o..o................",
+        ".........OOOO6666665555OOo................",
+        ".......OO6666Q666666655555OOoo............",
+        "......O6777766Q66666655Q555554o...........",
+        "....OOQ7777666QQ66665555QQ55544Oo.........",
+        "...O777QQ666665QQQ455555QQ5555454O3.......",
+        "...7777Qqq66555Qqq656655Qqq4444444443.....",
+        "..O7776Qqq66555Qqq4444544Qqq45454454432...",
+        "..66666Qqq446555Qqqq56554Qqq44434444444332",
+        ".666666qqq555554qqqq44444qqq44544444444333",
+        ".555555qq4444444qqkk54444qqk33333333333333",
+        ".555555qq444454qqk4445444qqk44333333333333",
+        "345544q44444444qqk444354qq3332334333333333",
+        ".43o33354544444qk4444333qk3332333333333332",
+        ".oo.4444444344kk33334333k33323333222222222",
+        "....4333333333k33333333k333422222222222222",
+        "....223hh3333k3333333333222222222222222222",
+        "....oohhhhhhh22222222222222222hh2222222222",
+        "......ooohhhhhhhh2222222222hhhhhh222222222",
+        ".........oooohbbbhhhh222hhhbhhoooooooooooo",
+        ".............oooobbcchhhcbbooo............",
+        ".................oooocccooo...............",
+        ".....................ooo..................",
+    ]),
+    "neck": (47, 12, [
+        "...6655",
+        "..O6555",
+        ".O65554",
+        "OO55444",
+        "O555555",
+        "5555555",
+        "5555444",
+        "54444qq",
+        "44qqqqq",
+        "qqqq444",
+        "4444554",
+        "3344555",
+        "3334455",
+        "2333444",
+        "2333444",
+        "2233444",
+        "3333333",
+        "2223222",
+        "2222344",
+        "o22222.",
+        "..322..",
+    ]),
+    "mouth": (57, 25, [
+        "............m",
+        "........mmmmm",
+        "....mmmmmmmmm",
+        ".mmmmmmmmmmm.",
+        "mmmmmmmm.....",
+        "mmmm.........",
+        "m............",
+    ]),
+    "tongue": (60, 24, [
+        "....................................tttt..",
+        "...................................tuvvut.",
+        "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvtuvvvuut",
+        "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuutttttuuuuuut",
+        "...................................tuuuut.",
+        "....................................ttt...",
+    ]),
+    "jaw": (47, 26, [
+        "3333444443............43o",
+        "3333444333........44443o.",
+        "3333333322....44433332o..",
+        "2223222244.233332211oo...",
+        "222234432222332221oo.....",
+        "o22222334432bbaooo.......",
+        ".ob222222bcbooo..........",
+        "..obbcccbooo.............",
+        "...oooooo................",
+    ]),
+    "head": (47, 5, [
+        "......Oo.................",
+        ".....O76o................",
+        ".....O664o...............",
+        "....O6654o...............",
+        "....O66534o..............",
+        "...O765534o..............",
+        "...O6655534o.............",
+        "..O665554434o............",
+        "..O6555444434OOO.........",
+        ".O65554444443666OO.......",
+        ".O5544444433333336OO.....",
+        "O5555555544333333366O....",
+        "555555544433333333356O...",
+        "55554444qq333333333545O..",
+        "54444qqqqq333333333444O..",
+        "44qqqqqq443333333334444o.",
+        "qqqq44444433333333344o4o.",
+        "444455444433333333344444o",
+        "334455544443333333444443o",
+        "333445544444444444334433o",
+        "233344444443444333332211o",
+        "2333444443333333221111...",
+        "223344433332221111.......",
+        "33333333222111...........",
+        "222322224431.............",
+    ]),
+    "turret": (57, 15, [
+        "..OOOOO..",
+        ".O665542.",
+        "O65422231",
+        "O54222242",
+        "O54222242",
+        "O43222232",
+        "O43344421",
+        ".2333221.",
+        "..21112..",
+    ]),
+    "pupil": (61, 18, [
+        ".EE",
+        "EEo",
+        ".EE",
+    ]),
+    "near_hind_thigh": (18, 23, [
+        "...45554.........",
+        ".3455554O........",
+        "o34555544O.......",
+        "o234555443O......",
+        "o2334554433O.....",
+        ".o2334444433O....",
+        "..o2233444433O...",
+        "....o223333444O..",
+        "......o22333445O.",
+        "........o2223344O",
+        "..........oo2233o",
+        "............ooo..",
+    ]),
+    "near_hind_shin": (21, 31, [
+        ".........445O..",
+        ".........3344O.",
+        ".......oO44322o",
+        "......O5432o...",
+        ".....O543o.....",
+        "....O543o......",
+        "...O54o........",
+        "..O5443o.......",
+        ".O543o43o......",
+        "O543o.o43o.....",
+        "oooo...ooo.....",
+    ]),
+    "near_front_arm": (41, 23, [
+        "....455...",
+        "...4555431",
+        "..O4554321",
+        "..O455431.",
+        ".O454321..",
+        ".O544313..",
+        "O5443o....",
+        "O4432o....",
+        "o3322o....",
+        ".ooo......",
+    ]),
+    "near_front_hand": (41, 30, [
+        ".4432...........",
+        "O4432o..........",
+        "o12443O.........",
+        ".o2344455OO.....",
+        "..oo2344455OO...",
+        ".....o234445OO..",
+        ".......o23444O..",
+        ".........O54o...",
+        "........O5443o..",
+        ".......O543o43o.",
+        "......O543o.o43o",
+        "......oooo...ooo",
+    ]),
+}
+ORDER = ["far_hind_thigh", "far_hind_shin", "far_front_arm", "far_front_hand", "tail", "body", "neck", "mouth",
+         "tongue", "jaw", "head", "turret", "pupil",
+         "near_hind_thigh", "near_hind_shin", "near_front_arm", "near_front_hand"]
+HIDDEN_AT_REST = ("mouth", "tongue")
 
-# Which part each body pixel belongs to: T tail, B trunk, N neck, H head (jaw and throat included).
-# The tail bends along its spine as a chain, the trunk bends side to side, the neck shears, the head is rigid.
-PARTS = [
-    "..........................................................................",  # 0
-    "..........................................................................",  # 1
-    "..........................................................................",  # 2
-    "..........................................................................",  # 3
-    "..........................................................................",  # 4
-    "..........................................................................",  # 5
-    "..........................................................................",  # 6
-    "..........................................................................",  # 7
-    "..........................................................................",  # 8
-    "..........................................................................",  # 9
-    "................................BBBBBBBBBBBB......HHHHHHHH................",  # 10
-    ".............................BBBBBBBBBBBBBBBBBNNNNHHHHHHHHHHH.............",  # 11
-    "..........................BBBBBBBBBBBBBBBBBBBBNNNNHHHHHHHHHHHHH...........",  # 12
-    "........................TTBBBBBBBBBBBBBBBBBBBBNNNNHHHHHHHHHHHHHH..........",  # 13
-    "....................TTTTTTBBBBBBBBBBBBBBBBBBBBNNNNHHHHHHHHHHHHHHH.........",  # 14
-    "................TTTTTTTTTTBBBBBBBBBBBBBBBBBBBBNNNNHHHHHHHHHHHHHHHHH.......",  # 15
-    "............TTTTTTTTTTTTTTBBBBBBBBBBBBBBBBBBBBNNNNHHHHHHHHHHHHHHHHH.......",  # 16
-    "........TTTTTTTTTTTTTTTTTTBBBBBBBBBBBBBBBBBBBBNNNNHHHHHHHHHHHHHHHHH.......",  # 17
-    "....TTTTTTTTTTTTTTTTTTTTTTBBBBBBBBBBBBBBBBBBBBNNNNHHHHHHHHHHHHHHHHH.......",  # 18
-    ".TTTTTTTTTTTTTTTTTTTTTTTTTBBBBBBBBBBBBBBBBBBBBNNNNHHHHHHHHHHHHHH..........",  # 19
-    "TTTTTTTTTTTTTTTTTTTTTTTTTTBBBBBBBBBBBBBBBBBBBBNNNNHHHHHHHHHHHHH...........",  # 20
-    ".TTTTTTTTTTTTTTTTTTTTTTTTTBBBBBBBBBBBBBBBBBBBBNNN.HHHHHHHH................",  # 21
-    "..........................BBBBBBBBBBBBBBBBBBBBNN..........................",  # 22
-    "..........................................................................",  # 23
-    "..........................................................................",  # 24
-    "..........................................................................",  # 25
-    "..........................................................................",  # 26
-    "..........................................................................",  # 27
-    "..........................................................................",  # 28
-    "..........................................................................",  # 29
-    "..........................................................................",  # 30
-    "..........................................................................",  # 31
-]
-HIP_X, SHOULDER_X = 29, 43    # the girdles: the columns the hind and the front legs join the body at
-HEAD_X = 50                   # the head's first column (the neck is the columns between the trunk and it)
-EYE_X = 53                    # head columns from here forward hold the eye (the middle stage of a head lift)
-FACE_X = 58                   # head columns from here forward (snout, nostril, the front of the jaw) lead a head lift
-
-# The legs: origin (x, y) of the top-left cell, the rows ("." is air), the pivot row (the shoulder or hip, which
-# stays on the body), the foot's rows, and which side. Each is drawn whole. The far legs are drawn behind the body
-# and reach up from it; the near legs are drawn in front of the flank and reach down. Diagonal pairs step together.
-FAR_HIND = {"origin": (21, 4), "pivot": 8, "foot": 2, "far": True, "rows": [
-    ".o.o.o......",
-    "odododo.....",
-    ".odsssdoo...",
-    "..oodssddo..",
-    "....oodsdso.",
-    "......odsgo.",
-    ".....odssgo.",
-    ".....odssgo.",
-    ".....odssgo.",
-]}
-FAR_FRONT = {"origin": (39, 3), "pivot": 8, "foot": 3, "far": True, "rows": [
-    ".......o.o.o.",
-    "......odododo",
-    "....oodsssdo.",
-    "..oodsdsoo...",
-    ".odsdoo......",
-    ".odsso.......",
-    "..odsso......",
-    "..odssgo.....",
-    "..odssgo.....",
-]}
-NEAR_HIND = {"origin": (25, 19), "pivot": 2, "foot": 3, "far": False, "rows": [
-    "...ogllgo....",
-    "..oglllggo...",
-    "..ogllggso...",
-    "...oggggso...",
-    "....oggsso...",
-    "...ogggsdo...",
-    "..ogggsdo....",
-    ".oglggso.....",
-    "ogllggso.....",
-    "ogogogoo.....",
-    ".o.o.o.......",
-]}
-NEAR_FRONT = {"origin": (40, 19), "pivot": 2, "foot": 4, "far": False, "rows": [
-    "..ogllgo.....",
-    ".ogllggso....",
-    ".ogllggso....",
-    "..oggsgso....",
-    "...oggssdo...",
-    "....oggsso...",
-    ".....ogglgo..",
-    "....oogllggo.",
-    "....ogllggso.",
-    "....ogogogogo",
-    ".....o.o.o.o.",
-]}
-LEGS = {"far_hind": FAR_HIND, "far_front": FAR_FRONT, "near_hind": NEAR_HIND, "near_front": NEAR_FRONT}
-
-# The face, on the head (origins in the rest pose; they move with the head).
-LID = {"origin": (54, 14), "rows": ["ss"]}                  # a half-blink: the upper lid over the eye's top row
-TONGUE_OUT = [                                               # the flick: out, forked, out (the fork stays joined)
-    {"origin": (66, 18), "rows": ["tt"]},
-    {"origin": (66, 17), "rows": ["....t", "tttt.", "....t"]},
-]
-
-for _grid in (BODY, PARTS):
-    assert len(_grid) == H and all(len(_r) == W for _r in _grid)
-assert all((BODY[y][x] == ".") == (PARTS[y][x] == ".") for y in range(H) for x in range(W))
-for _leg in LEGS.values():
-    assert len({len(_r) for _r in _leg["rows"]}) == 1, "a leg's rows must have one width"
+# The rig's points, in canvas pixels (the drawing at rest). Each is where a part turns or what it aims from.
+RIG = {
+    "neck_root": (47, 24),            # where the neck layer joins the body (it moves a pose ahead of the head)
+    "neck": (48, 22),                 # where the head sits on the neck
+    "jaw_hinge": (56, 29),            # behind and below the eye: the jaw drops about this, never at the mouth corner
+    "turret": (61, 19),               # the turret's centre pixel; the pupil (a dark pixel in an amber ring) looks out
+    "pupil": (63, 19),                # the pupil's dark pixel at rest, looking ahead
+    "mouth": (69, 26),                # the tongue leaves the mouth here: its rod is rows 26 (light) and 27
+    "tongue_reach": 101,              # the club's last column at full reach
+    # the tail's spine, root to tip (x, y, half-width), evenly spaced along it: cut the tail into links across it to
+    # curl it as a chain
+    "tail_spine": [(21.0, 20.6, 4.2), (16.3, 21.6, 3.7), (12.0, 23.5, 3.3), (7.4, 25.0, 3.1), (4.4, 28.5, 2.9),
+                   (4.5, 33.2, 2.6), (8.0, 36.2, 2.4), (12.5, 35.2, 2.0), (13.2, 30.8, 1.6), (9.4, 30.7, 1.0)],
+    # each leg: the hip or shoulder (it stays on the body), the knee or elbow (where its two layers meet), the
+    # ankle or wrist, and the back and front pads' tips (their soles on the row above the ground ink)
+    "near_hind": [(23, 26), (32, 32), (25, 37), (21, 40), (30, 40)],
+    "far_hind": [(30, 26), (36, 33), (34, 38), (33, 40), (36, 40)],
+    "far_front": [(45, 26), (39, 33), (42, 38), (41, 40), (44, 40)],
+    "near_front": [(47, 26), (43, 32), (51, 37), (47, 40), (56, 40)],
+}
 
 
-def paste(grid, origin, rows):
-    """Draw rows onto a grid (a list of lists of keys) at origin; "." is air."""
-    x0, y0 = origin
-    for j, r in enumerate(rows):
-        for i, c in enumerate(r):
-            if c != "." and 0 <= y0 + j < len(grid) and 0 <= x0 + i < len(grid[0]):
-                grid[y0 + j][x0 + i] = c
-    return grid
+def layer_pixels(part, dx=0, dy=0):
+    """{(x, y): char} for one layer, moved by (dx, dy)."""
+    x0, y0, rows = LAYERS[part]
+    return {(x0 + i + dx, y0 + j + dy): ch for j, row in enumerate(rows) for i, ch in enumerate(row) if ch != "."}
+
+
+def compose(placed):
+    """One frame from placed pixels, a list of {(x, y): char} back to front. The outline is drawn last: a pixel of
+    the creature that a pose left at an open edge gets ink (the tongue and the mouth keep their own colours)."""
+    canvas = {}
+    for px in placed:
+        canvas.update(px)
+    frame = [["."] * W for _ in range(H)]
+    for (x, y), ch in canvas.items():
+        if 0 <= x < W and 0 <= y < H:
+            frame[y][x] = ch
+    for y in range(H):
+        for x in range(W):
+            ch = frame[y][x]
+            if ch == "." or ch in INK or ch in EFFECTS:
+                continue
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if not (0 <= nx < W and 0 <= ny < H) or frame[ny][nx] == ".":
+                    frame[y][x] = "o"
+                    break
+    return ["".join(r) for r in frame]
 
 
 def rest():
-    """The drawing as it stands: far legs, body, near legs."""
-    g = [["."] * W for _ in range(H)]
-    paste(g, FAR_HIND["origin"], FAR_HIND["rows"])
-    paste(g, FAR_FRONT["origin"], FAR_FRONT["rows"])
-    paste(g, (0, 0), BODY)
-    paste(g, NEAR_HIND["origin"], NEAR_HIND["rows"])
-    paste(g, NEAR_FRONT["origin"], NEAR_FRONT["rows"])
-    return ["".join(r) for r in g]
+    return compose([layer_pixels(p) for p in ORDER if p not in HIDDEN_AT_REST])
+
+
+ART = rest()
 
 
 def to_image(rows, scale=1):
     from PIL import Image
     im = Image.new("RGBA", (len(rows[0]), len(rows)), (0, 0, 0, 0))
-    for y, r in enumerate(rows):
-        for x, c in enumerate(r):
-            if c != ".":
-                v = PALETTE[c]
-                im.putpixel((x, y), (int(v[1:3], 16), int(v[3:5], 16), int(v[5:7], 16), 255))
-    return im.resize((im.width * scale, im.height * scale), 0) if scale > 1 else im
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch != ".":
+                h = PALETTE[ch]
+                im.putpixel((x, y), tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) + (255,))
+    return im.resize((im.width * scale, im.height * scale), Image.NEAREST) if scale != 1 else im
+
+
+def crop(rows, pad=1):
+    """The rows cut to the drawing's box, with pad pixels of air round it."""
+    ys = [y for y, r in enumerate(rows) if r.strip(".")]
+    xs = [x for r in rows for x, c in enumerate(r) if c != "."]
+    return [r[max(0, min(xs) - pad):max(xs) + pad + 1] for r in rows[max(0, ys[0] - pad):ys[-1] + pad + 1]]
 
 
 if __name__ == "__main__":
-    here = os.path.dirname(os.path.abspath(__file__))
-    rows = rest()
-    ys = [y for y, r in enumerate(rows) if r.strip(".")]
-    xs = [x for r in rows for x, c in enumerate(r) if c != "."]
-    crop = [r[max(0, min(xs) - 1):max(xs) + 2] for r in rows[max(0, ys[0] - 1):ys[-1] + 2]]   # a pixel of air round
-    to_image(crop, 8).save(os.path.join(here, f"{KEY}_art_8x.png"))
-    print(f"wrote {KEY}_art_8x.png: {max(xs) - min(xs) + 1}x{ys[-1] - ys[0] + 1} px, {len(PALETTE)} colours")
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{KEY}_art_8x.png")
+    art = crop(ART)
+    to_image(art, 8).save(path)
+    print(f"wrote {KEY}_art_8x.png: {len(art[0]) - 2}x{len(art) - 2} px, {len(PALETTE)} colours")

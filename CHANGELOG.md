@@ -30,16 +30,20 @@ First public release.
   caught.
 - Claude Code plugin and marketplace manifests (`/plugin marketplace add therwn/limberpix`).
 - `examples/` with clean and broken strips and a body_parts figure, all generated from the selftests' creatures.
-- `examples/showcase/`: three original creatures (a fox, a bird and a lizard) drawn as data and animated by the
-  skills' rules, each with an idle and a move that pass pixel-anim-check. `make_showcase.py` builds the README's
-  pictures from them.
+- `examples/showcase/`: three original creatures (a young wolf, a kingfisher-like bird and a chameleon-like lizard)
+  drawn by hand as data, with hue-shifted ramps, form shading and texture, and animated by the skills' rules from
+  their one drawing: an idle, a move to be shown over a road scrolling at each one's `ROAD_SPEED`, and an attack (a
+  lunge and bite, a dive strike, a tongue strike), all passing pixel-anim-check with 0 faults and 0 warnings under
+  the full options (`--action`, `--parts`, `--palette`, `--ref`). `make_showcase.py` checks them and builds the
+  README's pictures from them, all text in its own pixel font.
 - A short README; the full reference is in `docs/usage.md`.
 - Rules and checks learned from public pixel-art animation guides (sources in each skill's REFERENCES.md):
   action phases (anticipation, strike, recovery), jumps and landings, planted feet that do not slide, walk bobs,
   follow-through lag, smears, arcs, staging, layered idle periods, effect timing. New faults `palette` and `mark`;
   `jump` now catches a pose held on twos knocked sideways; new warnings `skate`, `gait`, `boil`, `counter`,
   `strike`, `recover`, `stage`, `piston`, `gravity`, `squash`, `volume`, `lag`, `blend`, `orphans`, `speck`,
-  `doubles`, `drift` and `swap`, with options `--action`, `--speed`, `--parts`, `--squash`, `--palette`, `--ref`,
+  `doubles`, `drift`, `swap`, `split` (a torso moved as two bands with a 1-px step between them) and `hitch` (a
+  head or part stepping 1 px alone after a long hold), with options `--action`, `--speed`, `--parts`, `--squash`, `--palette`, `--ref`,
   `--glow`, `--mark` and `--sheet`.
 - CI on Ubuntu and Windows with Python 3.9 and 3.12, Python 3.8 on Ubuntu 22.04, and a NumPy 2 job that treats
   deprecation warnings as errors.

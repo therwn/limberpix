@@ -56,7 +56,7 @@ def _half(v):
 
 
 def walker_frame(t, kind, bob=True, rise=None, lead=False, cut=False, nudge=0, nods=True, bobs=2, lunge=None,
-                 labels=False):
+                 labels=False, band=0):
     """A four-legged walker 34x22 standing on row 20: in the move it walks in place (a planted foot goes back at an
     even pace, a lifted one swings forward), the body rising a pixel as the legs pass under it; the head nods and
     the tail wags in both loops.
@@ -65,7 +65,8 @@ def walker_frame(t, kind, bob=True, rise=None, lead=False, cut=False, nudge=0, n
     column and lowest row off (a snout cut flat, as a redrawn sheet cell may); nudge moves the back planted foot
     that many px forward; nods False holds the head on the body; bobs 1 lifts the body once a loop, not twice;
     lunge (dx, dy) carries the head that far on a neck (a bite); labels draws the part strip instead (each part one
-    flat colour, no outline)."""
+    flat colour, no outline); band raises the body's rear half (columns left of 16) that many px on its own, a torso
+    cut into two bands."""
     g = [[None] * 34 for _ in range(22)]
     s = math.sin(2 * math.pi * t)
     up = 1 if bob and kind == "move" and (abs(s) < 0.5 if bobs == 2 else s > 0) else 0
@@ -80,6 +81,15 @@ def walker_frame(t, kind, bob=True, rise=None, lead=False, cut=False, nudge=0, n
             dx = _half(dx) + (nudge if i == 0 and not lift else 0)
         _line(g, hx, 14 - up, hx + dx, 19 - lift, LEG_L if labels else "#a8744e", 2)
     _disc(g, 15.5, 11.5 - up, 8, 3.6, fur, belly)
+    if band:                                              # the rear half drawn again band px higher, rigidly
+        for y in range(22):
+            for x in range(16):
+                if g[y][x] in (fur, belly):
+                    g[y][x] = None
+        for y in range(22):
+            for x in range(16):
+                if ((x - 15.5) / 8) ** 2 + ((y + band - 11.5 + up) / 3.6) ** 2 <= 1:
+                    g[y][x] = belly if y + band > 11.5 - up else fur
     if lead and not labels:
         for x in range(34):
             if g[11][x] in (FUR, BELLY):
@@ -362,7 +372,7 @@ def run(verbose=False):
 # ---- the later checks: helpers, the clean cases that must stay quiet, the broken ones that must be caught --------
 LATER = {"jump", "skate", "gait", "boil", "strike", "counter", "recover", "stage", "piston", "gravity", "squash",
          "lag", "volume", "blend", "orphans", "speck", "doubles", "drift", "swap", "mark", "palette", "choppy",
-         "uneven"}
+         "uneven", "split", "hitch"}
 GEM, PATCH, DARK = "#5ad1e0", "#3a6ea5", "#2a1a20"
 
 
@@ -634,6 +644,16 @@ def later_cases():
         L["move"][5] = _with_gem([walker_frame(5 / 16, "move")], dx=2)[0]   # the gem 2 px off for one frame
         return {"marks": [GEM]}
     cases.append(("mark", "walker", gem_jump))
+
+    def banded(L):                                        # the torso's rear half raised a pixel on its own for
+        L["idle"] = [walker_frame(k / 24, "idle", band=1 if 6 <= k < 18 else 0) for k in range(24)]   # 12 frames
+    cases.append(("split", "walker", banded))
+
+    def lone_head(L):                                     # the head held, then stepping a pixel down and back up,
+        L["idle"] = [walker_frame(k / 24, "idle", nods=False, lunge=(0, 1 if 3 <= k < 15 else 0))   # each after a
+                     for k in range(24)]                  # 12-frame hold, on frames where the tail holds too
+        return {}
+    cases.append(("hitch", "walker", lone_head))
 
     def shield_off(L):                                    # a sheet cell drops its patch
         L["move"] = _with_patch(L["move"])

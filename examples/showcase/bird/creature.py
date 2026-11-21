@@ -1,297 +1,330 @@
-"""The showcase creature as data: a small round songbird (a "tuftwing"), side view, facing right.
+"""The bird: an original river diver, drawn by hand pixel by pixel and kept as data.
 
-Everything here is hand-placed pixels. A palette maps one character to one colour; each part is a list of strings,
-one character per pixel ("." is empty), placed on the frame at `at`. The parts are cut where they will move apart:
+A kingfisher-like bird of no real species, big-headed and heavy-bodied: a deep teal back, a rust-orange breast
+brightest high under the throat and darkening past a clear terminator to a plum underside, a white throat, a round
+teal cap with faint lighter bars, highest over the eye and falling in a curve to the nape, a white flash running back
+and down from behind the rust cheek toward the nape, a crest swept back off the rear of the cap as one tapered strand
+(a teal root on the cap, a darker underside, an azure tip), a rust face band round a dark eye, a long dagger bill
+(dark, the lower mandible orange at its base), a short tail whose pale band is shaded across its form (lit on top,
+slate below) and whose dark tip is forked into two tines, and two coral feet, each a short tarsus and a toe tapering
+forward to one dark claw. Side view, facing right, light from the top left. 31 colours in hue-shifted ramps: the
+teal's shadows lean toward navy and its lights toward mint, the rust's shadows toward plum and its lights toward gold,
+the whites' shadows toward slate blue, the azure's shadow toward deep blue, the underwing's slate toward teal, the
+coral feet's shadow toward plum.
 
-    tail_root  the tail where it leaves the rump; tail_up, tail_mid, tail_low are the fan's three feathers, its
-               children: a chain (the fan turns a tick after the root) that spreads and closes
-    body       the round body; the breast is shaded in curved clusters round the ball, lit from the top left
-    head       cap, cheek and throat; `beak` and `crest` are its children (the crest follows the head a tick late)
-    WINGS      the near wing in five hand-drawn keys of its stroke (pixel-animate 3.5: a side-on wing seen
-               foreshortened): raised (+1), half up (+0.5), edge-on (0), half down (-0.5) and down under the belly
-               (-1). Up and half up show the upper side (coverts, then four primaries, one dark line between each);
-               edge-on is a tapered blade with one highlight row; the down keys show the pale underside, the
-               feathers spreading down and back. The far wing is the same keys a tone darker (FAR_TONES).
-    EYE        the eye with its glint, laid down whole at the head's place after everything else
+One character is one pixel; '.' is empty. Every layer is ((x, y) of its first character, rows) on the W x H frame,
+drawn whole where a part in front covers it, so a part that moves never opens a hole. The parts carry no outline:
+compose() draws it last, round what is on the frame (see there). The rig, back to front:
 
-At 50 px a wing squeezed by numbers collapses into dashes when edge-on and into a mirror when down, so the wing's
-foreshortening is drawn, once per key, and the rig only picks the key and moves it by whole pixels.
+    wing_far   the far wing: its own drawn key where WINGS has one (up_far), else the near key set back by
+               FAR_OFFSET; always one tone darker (FAR_TONES: one step down the same ramp, so its feather bars and
+               lit edges stay), showing only as a rim of feather tips behind the near wing
+    tail       a short banded tail, forked at the tip; its root runs under the rump, so it can turn and lift
+    body       the torso (back, flank, breast) as one piece: lit along the back, the flank's rust darkening
+               past a terminator that runs from the front of the breast down to the vent
+    foot_far   } the feet, tucked in flight; their top rows run up under the belly; open air parts them (no
+               pocket closed between them), the far one a tone darker and shorter
+    foot_near  }
+    wing       the near wing: one of the hand-drawn keys (WINGS, in bird_wings.py), pivoting at SHOULDER
+    neck       the neck: the nape's teal at the back, the bright upper breast in front; drawn whole under the head
+               and over the body's breast (strips of overlap both ways), so the head can be carried on it: it bends
+               to carry the head (its upper rows ride the head, the lower ones the body)
+    nape       the crest: one strand swept back and a little up off the rear of the cap, tapering to an azure
+               tip lit over a darker step; a child of the head (it follows a pose late)
+    head       cap, face, eye and the white throat; it rides on the neck
+    bill_low   the lower mandible: the jaw, hinged at the gape's base (JAW_HINGE), so the bill can open
+    bill_up    the upper mandible, the gape line its bottom row
 
-The parts carry no outline: animate.py draws a one-pixel outline round each group as it lays them down, back to
-front (the pixel-animate method: draw the outline last), and gives the edges facing the light a lighter outline
-(M on blue, N on warm). Sixteen colours. The ramps shift hue: the blue's shadow leans violet and its light green,
-the warm shadow leans rose and its light yellow.
+Cuts sit where the drawing changes material or one part overlaps another: the neck under the white throat, the tail
+under the rump, the wing at the shoulder, the jaw on the gape line. Head, nape, neck and body join with no line
+between them (MERGE); every other part is set off from what is behind it by a line.
+
+The wing keys are drawings, not squeezes made at run time: at this size a wing pressed flat by numbers loses its
+feathers. Keys (bird_wings.py): up (+1, the upper side), half_up (+0.5), level (0, a thin blade seen edge-on),
+half_down (-0.5) and down (-1, the underside) for the beat; cock, cock_far, sweep and fold (closed along the flank)
+for the attack. The up key
+is a fan: four primaries radiating from the wrist (the outermost the highest and longest, each further one lower and
+swung further back) and four secondaries radiating from the elbow into a scalloped trailing edge, every feather a
+band with a lit front edge and a shadow line where it lies on the next, under a lit covert band along the leading
+edge with mint glints. up_far is the same fan turned a little forward and raised, kept only where it shows behind
+the near wing: a rim of staggered feather tips above and behind it.
+
+The loops (animate.py describes each in full). In all of them the torso moves as one piece (the body layer whole,
+the neck bending between it and the head), and the head rides the neck as a chain on the body's beat: the body
+first, the head a pose later, the bill and the crest a pose after it, the bill's lag drawn as a small turn of the
+head (the nod keys in bird_heads.py), never a lone step of the head as a block.
+    idle   a hover: three slow beats through the beat keys, the body rising a pixel on the downstroke and the head,
+           the bill, the crest, the tail and the hanging feet following as chains; a call on the second beat (the
+           bill opens about JAW_HINGE), a look down at the water on the third (the head turned down, the nods 3
+           and 6)
+    move   level flight: two quicker beats, the body bobbing, the head a pixel lower and the tail a pixel higher,
+           the head nodding on the beat, the tail steering as a chain, the feet tucked away
+    attack a dive strike: the head pitched nose up and the wings cocked up and back (anticipation), swept back for
+           a run forward, then folded for the drop along the bill's line (strike), the head carried whole as one
+           of its drawn dive keys (bird_heads.py); held at the end of the thrust, then a recoil on an arc in small
+           turns, the head turning back up with the body a pose behind it (a drawn key every pose), the wings
+           unfolding through the swept key, and one beat back to hover
 
     python creature.py           # writes bird_art_8x.png next to this file: the drawing at rest, 8x
-    python animate.py            # the loops (see there)
 """
 import os
-from collections import namedtuple
+import sys
 
-Layer = namedtuple("Layer", "at rows")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bird_wings import WINGS  # noqa: E402
 
-W, H = 50, 54                                             # the frame, in game pixels
-KEY = "bird"                                              # file stem of everything written
+KEY = "bird"
+W, H = 80, 64                 # the frame: room ahead of the bill and below the belly for the dive
+SHOULDER = (39, 31)           # the near wing's pivot (every wing key is drawn on it)
+JAW_HINGE = (55, 29)          # the lower mandible turns about the gape's base
+FAR_OFFSET_DEFAULT = (-3, -1)  # the far wing sits a little back and up, so it peeks past the near one;
+FAR_OFFSET = {"fold": (-1, -1),  # folded it shows only as a sliver above the back, edge-on as a rim over the near
+              "level": (-1, -1),  # blade (its rear never reaching past the tail root),
+              "half_down": (-2, 1), "down": (-2, 1)}   # and on the downstroke it peeks below the near wing
 
 PALETTE = {
-    "K": "#1b1424",   # outline: plum black (shadow side)
-    "M": "#2b4180",   # outline on lit edges of the blue plumage
-    "N": "#8c3a2e",   # outline on lit edges of the warm plumage and the beak
-    "e": "#120c1c",   # the eye
-    "w": "#fbf0d6",   # cream: cheek, the eye's glint, the underwing's light
-    "a": "#2a2c66",   # blue ramp: shadow (violet-blue)
-    "b": "#2f5c9c",   #            base
-    "c": "#3f90c2",   #            light
-    "d": "#8ad8c8",   #            highlight (toward green)
-    "u": "#a9c6e0",   # underwing: pale blue
-    "r": "#a3354d",   # warm ramp: shadow (rose)
-    "o": "#d9623a",   #            base
-    "p": "#f2a04c",   #            light
-    "y": "#ffd88a",   #            highlight (toward yellow)
-    "S": "#3a3348",   # ground shadow
-    "T": "#544b63",   # ground shadow, faded (its ends while the bird is up)
+    "o": "#0e0a16",   # ink: the outline on shadow sides, the gape line
+    "O": "#1f5d68",   # lit outline on teal, white and slate (edges facing the light): a dark teal, not ink
+    "P": "#5a1f2c",   # lit outline on rust, white and the feet
+    "a": "#101a31",   # teal ramp: shadow (navy)
+    "b": "#15314d",   #   dark
+    "c": "#17525f",   #   low
+    "d": "#1c767a",   #   mid
+    "e": "#2d9d93",   #   light
+    "f": "#5ac8ae",   #   highlight (toward mint)
+    "g": "#b2efd3",   #   spots and glints
+    "z": "#43cfe9",   # azure: the crest's glowing tips, lit
+    "Z": "#2386b4",   #   and their shadow step
+    "r": "#4a1c2e",   # rust ramp: shadow (plum)
+    "s": "#82312c",   #   dark
+    "t": "#b44d27",   #   low
+    "u": "#da732e",   #   mid
+    "v": "#f29d46",   #   light
+    "x": "#ffd27c",   #   highlight (toward gold)
+    "n": "#3d6274",   # underwing: the flight feathers' slate, leaning teal toward the upper side
+    "N": "#5e8e98",   #   and their lit vanes
+    "q": "#6c7a96",   # white ramp: shadow (slate), also the underwing's lit vanes
+    "W": "#c0c8d0",   #   mid
+    "w": "#f5f3e8",   #   light
+    "h": "#7c2c45",   # feet, coral: shadow (toward plum)
+    "i": "#d9606e",   #   mid
+    "j": "#ff9c8c",   #   light
+    "k": "#272133",   # bill: dark, also the claws
+    "l": "#4d4661",   #   mid
+    "m": "#7d7791",   #   highlight
+    "E": "#22110f",   # the eye (only the eye uses it: the check follows it)
+    "G": "#fffbea",   # the eye's glint
 }
-OUTLINE, OUTLINE_LIT, OUTLINE_WARM = "K", "M", "N"
-BLUES, WARMS = set("abcduw"), set("ropy")
-INK = ("K", "M", "N")                                     # what pixel_anim_check is told is outline (--ink)
-EYE_COLOUR = PALETTE["e"]                                 # --eye
-SHADOWS = ("S", "T")                                      # --shadow
-FAR_TONES = {"d": "c", "c": "b", "b": "a", "a": "a", "u": "c", "w": "u"}   # the far wing: a step darker
+INK = "oOP"
+EYE = PALETTE["E"]
+TEAL, RUST, WHITE, BILL, FEET = set("abcdefgnNzZ"), set("rstuvx"), set("qWw"), set("klm"), set("hij")
+GLOW = set("zZ")   # the crest's bright tips: they keep their colour on the edge instead of taking the outline
+FAR_TONES = {"g": "f", "f": "e", "e": "d", "d": "c", "c": "b", "b": "a", "a": "a", "z": "Z", "Z": "c",   # one step
+             "x": "v", "v": "u", "u": "t", "t": "s", "s": "r", "r": "r", "w": "W", "W": "q", "q": "n", "N": "n",
+             "n": "b", "j": "i", "i": "h", "h": "h"}
 
-PARTS = {
-    "tail_root": Layer(at=(13, 35), rows=[
-        "....bbb",
-        "...bbab",
-        "..bbaab",
-        ".bbaaab",
-        "bbaaaa.",
-        "baaaa..",
+LAYERS = {
+    "tail": ((7, 34), [
+        "................eeeed",
+        "...........weeeeedddd",
+        "......eeeewwdddddddcc",
+        "deeeeeeeeewWddddccccc",
+        "dddddddddddWWcccccccbb",
+        "cccccccccccWqccbbbbbb",
+        "....bccccccqqbbbbbbbb",
+        ".ccccccccccqbbbbbbb",
+        ".bbbbbbbbbbbbbb",
+        "..bbbbbbbbb",
     ]),
-    "tail_up": Layer(at=(4, 38), rows=[
-        "........ccc",
-        ".....cccbbb",
-        "..cccbbbaaa",
-        "dcbbbaaa...",
-        ".baaa......",
+    "body": ((20, 27), [
+        "...............eeeddd",
+        "...........eeeeedddddccc",
+        ".........eeeeeddddddccuvvv",
+        ".......eeeeeddddddddcuvvvvvu",
+        ".....deeeeddddddddddcuuvvxxvvu",
+        "...edeeeedddddddddcuuuvvxxxvvu",
+        "...ddeeedddddddddcuuuuvvvxvvvut",
+        "..dddeedddddddccuuuuuuvvvvvuuut",
+        ".ddddddddddcuvvuuuuuuvvuuuuuutt",
+        ".cdddddddcctuuuuuuvvuuuuuuuttts",
+        "ddddddddcctuuuuvuuuuuuuuuttttts",
+        "dddddcccuuvvuuuuuuuuuutttttsss",
+        "cdddcccuuuuttuuuuuutttttttssss",
+        "cccbbbtuuuuuuuuututtttttsssrr",
+        ".cbbbtuuttuuuuuuuttttttsssrr",
+        ".bbbttuuuuuuutttttttssssrrr",
+        "..bttttuuuuuutttttsssssrrr",
+        "...rstttttttttsssssssrrr",
+        ".....rrsssssssssrrrr",
+        "........rrrrrrr",
     ]),
-    "tail_mid": Layer(at=(5, 39), rows=[
-        "........cc",
-        "......ccbb",
-        "....ccbbaa",
-        "..ccbbaa..",
-        "dcbbaa....",
-        ".baa......",
+    "foot_far": ((33, 44), [
+        "hhhi",
+        "hhhii",
+        ".hhhii",
+        ".hhhiii",
+        "..hhhik",
     ]),
-    "tail_low": Layer(at=(7, 41), rows=[
-        "......cc",
-        ".....cbb",
-        "...ccbaa",
-        "..cbba..",
-        "dcbaa...",
-        ".ba.....",
+    "foot_near": ((39, 43), [
+        ".hiij",
+        ".hiij",
+        "..hiij",
+        "..hhiijjj",
+        "...hhiiijjjkk",
+        "....hhhhiii",
     ]),
-    "body": Layer(at=(15, 23), rows=[
-        "..........cccc..........",
-        ".......cdddccbb.........",
-        ".....cddddddccbb........",
-        "....cdddddddcccbb.......",
-        "...cddddddddcccbbb......",
-        "..ccdddddddccccbbbp.....",
-        "..cccdddddcccccbbppp....",
-        ".ccccccccccccbbbppyypp..",
-        ".cccccccccccbbbppyyyyppo",
-        "cbccccccccbbbpppyyyyppoo",
-        "cbbcccccbbbbppppyyyppppo",
-        "cbbbbbbbbbppppppppppppoo",
-        "abbbbbbbpppppppppppppooo",
-        ".abbbbooppppppppppppooor",
-        ".aaboooopppppppppppooor.",
-        "..arooooopppppppppoorrr.",
-        "..rroooooooppppppoorrr..",
-        "...rrroooooooooooorrrr..",
-        ".....rrrrooooooorrrr....",
-        "......rrrrrrrrrrrrr.....",
-        "..........rrrrr.........",
+    "nape": ((33, 15), [
+        "..zzOOO....",
+        "..oZeeefOO.",
+        "....occdde.",
+        ".....oobc..",
     ]),
-    "head": Layer(at=(28, 15), rows=[
-        ".....cdddcc.....",
-        "...cddddddccc...",
-        "..cddddddcccbb..",
-        ".cdddddcccccbbb.",
-        ".ccdddccccccbbb.",
-        "ccccccccccccbbbb",
-        "bccccccwwwwwwbbb",
-        "bbccccwwwwwwwwwb",
-        "abbcccwwwwwwwwww",
-        ".abbcwwwwwwwwwy.",
-        ".abbbwwwwwwwyyp.",
-        "..abpyyyyyyyppo.",
-        "...bppyyyyyppo..",
-        ".....pppppppo...",
+    "neck": ((39, 26), [
+        "bcc............",
+        "bccd...........",
+        "bccdd..........",
+        "bccddt.........",
+        "bccdtuuu.......",
+        "bccdtuuvvvu....",
+        "bcdtuuvvvvvvuut",
+        "bcttuvvxxvvvuut",
+        ".ctuvvxxxvvvuut",
+        "..tuvvxxvvvuuts",
+        "..tuuvvvvvuutts",
+        "...tuuvvuuutts.",
+        "....ttuuuttss..",
+        "......tttss....",
     ]),
-    "beak": Layer(at=(44, 21), rows=[
-        "yp..",
-        "yppo",
-        "or..",
+    "head": ((39, 15), [
+        "......dffee",
+        "....deffgffed",
+        "..cdeffeeffgfee",
+        ".cdeffgeeeffeeed",
+        "cddeefffeeeeffedd",
+        "ccddeeeeffeeeeedd",
+        "ccddeeffeeeeedddcc",
+        "cccdddeeeeeedddccc",
+        ".cccdtuuuvvvuuuucc",
+        ".bcctuuvvvvvuuuuuc",
+        ".bccwwvvvvuGEvvutc",
+        ".bcwwWuuvuuEEuuttc",
+        ".bwWWquuuuuuuuutts",
+        ".wWqccccccccccccc",
+        ".bcccccbbbbcccbbbb",
+        "..bcccWwwwwwwWWq",
+        "..bccWwwwwwwWWqq",
+        "...ccWwwwwWWWq",
+        "....cWWWWWqq",
     ]),
-    "crest": Layer(at=(29, 9), rows=[
-        "c........",
-        "dd.......",
-        ".cdd.d...",
-        "..ccddd..",
-        "...bccddc",
-        "....bcccc",
+    "bill_low": ((55, 29), [
+        "tuuuutlllkkkk",
+        "stttskkkk",
+        "rssk",
     ]),
-}
-
-# The near wing's five keys, from raised to down. Each is placed on the frame as drawn (then lifted with the body).
-WINGS = {
-    1.0: Layer(at=(7, 5), rows=[
-        "....c..............",
-        "....ddc............",
-        ".....ddc...........",
-        "..c..ddc...........",
-        "..ccaddc...........",
-        "...ccaddc..........",
-        "...ccaddc..........",
-        ".c..ccaddc.........",
-        ".ccaccaddc.........",
-        "..ccaccaddc........",
-        "..ccaccaddc........",
-        "c..ccaccaddc.......",
-        "ccaccaccaddc.......",
-        ".ccaccaccaddc......",
-        ".ccaccaccaddc......",
-        "..ccaccaccaddb.....",
-        "..ccaccacbddcb.....",
-        "...ccaccaddcccb....",
-        "...ccacbddccccb....",
-        "....ccaddccccccb...",
-        "....cbddcccccccb...",
-        ".....ddcccccccccb..",
-        "......cccccccbbbbb.",
-        "........ccccbbbbbb.",
-        "...........bbbbbb..",
-    ]),
-    0.5: Layer(at=(8, 17), rows=[
-        "....c.............",
-        "..c.ddc...........",
-        "..ccaddc..........",
-        ".c.ccaddc.........",
-        ".ccaccaddc........",
-        "c.ccaccaddc.......",
-        "ccaccaccaddc......",
-        ".ccaccaccaddc.....",
-        "..ccaccaddcccb....",
-        "...ccacddcccccb...",
-        "....cbddcccccccb..",
-        ".....dccccccbbbbb.",
-        "......cccccbbbbbbb",
-    ]),
-    0.0: Layer(at=(9, 25), rows=[
-        "cddd..............",
-        "bbccdddd..........",
-        "..aabbccdddd......",
-        "......aabbccdddddd",
-        "..........aabbbccb",
-        ".............aaaa.",
-    ]),
-    -0.5: Layer(at=(8, 26), rows=[
-        "............uuuwwc..",
-        ".........uuuuuuuuwwc",
-        ".......uuuuuuuuuuwwc",
-        "......cccccccccccwc.",
-        ".....uuucuucuucwuu..",
-        "...uuucuuucuucwuu...",
-        ".uuuucuucuuucwuu....",
-        "cuucuuucuuucwuu.....",
-        "..uuuucuuucwuu......",
-        "..cuucuuucwuu.......",
-        "....uuuucwuu........",
-        "....cuucwuu.........",
-        ".......cuc..........",
-    ]),
-    -1.0: Layer(at=(8, 26), rows=[
-        "............uuuwwc..",
-        ".........uuuuuuuuwwc",
-        ".......uuuuuuuuuuwwc",
-        "......cuuuuuuuuuuwc.",
-        "......cccccccccccwc.",
-        "......uucuucuucwuu..",
-        ".....uucuuucuucwuu..",
-        "....uuucuucuuucwu...",
-        "...uuucuuucuucwuu...",
-        "..uuucuuucuuucwu....",
-        ".uuuucuuucuuucwu....",
-        ".cuucuuucuuucwu.....",
-        "....uuuucuuucwu.....",
-        "...uuuucuuuucwu.....",
-        "....cuucuuucwu......",
-        ".......uuuucwu......",
-        "......uuuucwu.......",
-        ".......cuucwu.......",
-        "..........wuc.......",
-        "..........cc........",
+    "bill_up": ((55, 24), [
+        "kkkk",
+        "lmmmkkkk",
+        "llllmmmmkkkk",
+        "kkkkllllmmmmkkk",
+        "oooooooooolllkkk",
     ]),
 }
 
-# The eye is laid down last at the head's place, whole, so the head's tilt never smears it: the glint top left.
-EYE = Layer(at=(37, 19), rows=["we", "ee", "ee"])
-
-# Pivots, in frame coordinates (pixel x covers x..x+1, so its centre is x + 0.5).
-PIVOT = {
-    "tail_root": (17.0, 38.0),    # where the tail leaves the rump
-    "tail_fan": (14.5, 39.5),     # the fan's joint on the root: its three feathers spread about it
-    "head": (38.0, 20.5),         # the head turns about the eye, so the eye stays put
-    "crest": (34.5, 14.5),        # the tuft's root on the crown
-}
-FAR_WING_OFFSET = (5, -2)         # the far wing sits a little ahead and higher, seen past the body
-
-# The ground shadow: fixed rows at the bottom of the frame (a flier's shadow never slides; its bottom row keeps its
-# columns). While the bird is up it fades: the top row loses a pixel each end, the bottom row's ends turn pale.
-SHADOW = Layer(at=(18, 51), rows=[
-    "..SSSSSSSSSSSS..",
-    "SSSSSSSSSSSSSSSS",
-])
-SHADOW_UP = Layer(at=(18, 51), rows=[
-    "...SSSSSSSSSS...",
-    "TTSSSSSSSSSSSSTT",
-])
-
-# Back to front. Each group is laid down inside one outline, so the head and body read as one silhouette.
-GROUPS = [["far_wing"], ["tail_root", "tail_low", "tail_mid", "tail_up"], ["body", "beak", "head", "crest"],
-          ["wing"]]
-# Parts too small to turn (a turned 3-px beak loses its point): they follow their parent by whole pixels only.
-RIGID = {"beak": (45.0, 22.5)}    # the point whose place, rounded, carries the part
+ORDER = ["wing_far", "tail", "body", "neck", "foot_far", "foot_near", "wing", "nape", "head", "bill_low", "bill_up"]
+MERGE = {frozenset(p) for p in (("head", "body"), ("nape", "head"), ("nape", "body"), ("bill_low", "bill_up"),
+                                ("neck", "body"), ("neck", "head"), ("nape", "neck"))}
+SHADE_LINE = {"t": "a", "r": "r", "w": "q", "b": "o", "f": "o"}   # an inner line on a lit side: the darkest of the material
+SOFT = {("wing", "body"): "b"}   # the near wing's lower edge on the back: a dark teal, not ink, so the wing grows out of it
 
 
-def pixels(layer):
-    """{(x, y): char} of a layer, placed on the frame."""
-    x0, y0 = layer.at
-    return {(x0 + i, y0 + j): ch for j, row in enumerate(layer.rows) for i, ch in enumerate(row) if ch != "."}
+def material(ch):
+    return "t" if ch in TEAL else "r" if ch in RUST else "w" if ch in WHITE else "f" if ch in FEET else "b"
 
 
-def rgb(ch):
-    v = PALETTE[ch]
-    return int(v[1:3], 16), int(v[3:5], 16), int(v[5:7], 16)
+def layer_pixels(name, dx=0, dy=0):
+    (x0, y0), rows = LAYERS[name]
+    return {(x0 + i + dx, y0 + r + dy): ch for r, row in enumerate(rows) for i, ch in enumerate(row) if ch != "."}
 
 
-def _selfcheck():
-    named = list(PARTS.items()) + [(f"wing {s:+}", lay) for s, lay in WINGS.items()]
-    for name, layer in named + [("eye", EYE), ("shadow", SHADOW), ("shadow up", SHADOW_UP)]:
-        widths = {len(r) for r in layer.rows}
-        assert len(widths) == 1, f"{name}: rows of different widths {sorted(widths)}"
-        bad = {ch for r in layer.rows for ch in r if ch != "." and ch not in PALETTE}
-        assert not bad, f"{name}: characters not in the palette {sorted(bad)}"
-        for (x, y) in pixels(layer):
-            assert 0 <= x < W and 1 <= y < H, f"{name}: pixel ({x}, {y}) off the frame"
-    assert len(PALETTE) <= 16, "the palette has grown past 16 colours"
+def wing_pixels(key, far=False, dx=0, dy=0):
+    """A wing key as pixels. The far wing is its own drawing where one exists (KEY_far: the same feathers turned
+    forward about the shoulder and a little smaller, so its fingertips fan out past the near wing's), else the near
+    key set back by FAR_OFFSET; either way a tone darker (FAR_TONES)."""
+    if far and key + "_far" in WINGS:
+        key, far_drawn = key + "_far", True
+    else:
+        far_drawn = False
+    (x0, y0), rows = WINGS[key]
+    if far and not far_drawn:
+        ox, oy = FAR_OFFSET.get(key, FAR_OFFSET_DEFAULT)
+        dx, dy = dx + ox, dy + oy
+    return {(x0 + i + dx, y0 + r + dy): (FAR_TONES.get(ch, ch) if far else ch)
+            for r, row in enumerate(rows) for i, ch in enumerate(row) if ch != "."}
 
 
-_selfcheck()
+def compose(parts):
+    """One frame (a list of strings) from placed parts: [(group, {(x, y): ch}), ...] in ORDER. The outline is drawn
+    last, on the parts' own edge pixels: toward the air it is a lit line where the edge faces the light (air above or
+    to the left, unless the pixel is also open below and to the right): O, a dark teal, on teal, white and slate, P,
+    a plum, on rust and the feet; and ink where it faces away. Where a part lies over another it does not MERGE
+    with, its edge gets a line too: ink on its shadow sides (a dark teal where the near wing lies on the back, SOFT),
+    its own darkest tone on the lit ones (a selective outline). The crest's glowing tips (GLOW) and pixels the
+    drawing marks as ink stay as drawn."""
+    canvas, owner = {}, {}
+    rank = {g: i for i, g in enumerate(ORDER)}
+    for group, px in sorted(parts, key=lambda p: rank[p[0]]):
+        for k, ch in px.items():
+            canvas[k] = ch
+            owner[k] = group
+    out = dict(canvas)
+    for (x, y), ch in canvas.items():
+        if ch in INK or ch in GLOW:
+            continue
+        me, mat = owner[(x, y)], material(ch)
+        air = {d: (x + dx, y + dy) not in canvas for d, dx, dy in (("d", 0, 1), ("r", 1, 0), ("l", -1, 0), ("u", 0, -1))}
+        line = None
+        if any(air.values()):
+            lit = (air["u"] or air["l"]) and not (air["d"] and air["r"])
+            line = ("O" if mat in "tw" else "o" if mat == "b" else "P") if lit else "o"
+        else:
+            for nx, ny, lit in ((x, y + 1, False), (x + 1, y, False), (x - 1, y, True), (x, y - 1, True)):
+                other = owner[(nx, ny)]
+                if other != me and frozenset((me, other)) not in MERGE and rank[other] < rank[me]:
+                    line = SHADE_LINE[mat] if lit else SOFT.get((me, other), "o")
+                    if not lit:
+                        break
+        if line:
+            out[(x, y)] = line
+    frame = [["."] * W for _ in range(H)]
+    for (x, y), ch in out.items():
+        if 0 <= x < W and 0 <= y < H:
+            frame[y][x] = ch
+    return ["".join(r) for r in frame]
+
+
+def rest(near="up", far="up"):
+    """The drawing at rest: both wings raised, the far one set back and darker, every part in place."""
+    parts = [("wing_far", wing_pixels(far, far=True)), ("wing", wing_pixels(near))]
+    parts += [(name, layer_pixels(name)) for name in LAYERS]
+    return compose(parts)
+
+
+ART = rest()
+
+
+def to_image(rows, scale=1):
+    from PIL import Image
+    im = Image.new("RGBA", (len(rows[0]), len(rows)), (0, 0, 0, 0))
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch != ".":
+                h = PALETTE[ch]
+                im.putpixel((x, y), tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) + (255,))
+    return im.resize((im.width * scale, im.height * scale), Image.NEAREST) if scale != 1 else im
+
 
 if __name__ == "__main__":
-    import animate
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{KEY}_art_8x.png")
-    animate.art_preview(path)
-    print("wrote", os.path.basename(path))
+    to_image(ART, 8).save(path)
+    used = {ch for row in ART for ch in row if ch != "."}
+    print(f"wrote {KEY}_art_8x.png ({len(PALETTE)} colours, {len(used)} in the rest pose)")

@@ -1,0 +1,3 @@
+# The part strips each animate.py writes into check/ are inputs of the creature's check command and of
+# make_showcase.py, so they are kept with the loops (the root .gitignore drops every other *_parts.png).
+!*/check/*_parts.png
