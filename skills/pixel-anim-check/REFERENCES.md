@@ -55,3 +55,65 @@ REFERENCES.md.
 - Smoothness measures (SPARC, jerk), read but not used as gates because they only rank loops:
   https://pmc.ncbi.nlm.nih.gov/articles/PMC4674971 ; https://monalysa.readthedocs.io/en/latest/smoothness.html ;
   https://peerj.com/articles/9843
+
+## The later checks (section 2b of SKILL.md, and jump on held poses, palette and mark)
+
+These sources describe what good motion does; none of them gives a pixel threshold either. The later checks turn
+their statements into first-guess margins, kept as warnings until they are fitted on accepted animations. Each line
+says what the check takes from the source, in our words. The videos are cited by title and channel (YouTube); no
+stable link was found for them.
+
+- Pedro Medeiros (saint11) and others, the animation tutorials indexed on Lospec (Walk Cycle, Quadruped Walk and
+  Trot, Squash and Stretch, Easing, Death and Take Hit, Slide-Roll-Dash, Motion Blur, Wings and Flying, Character
+  Idle, Seamless Looping, Less Than 1 Pixel Movement; Sandy Gordon on attacks and on walk and run cycles;
+  finalbossblues on walks; Luke Sadface on motion lines): https://lospec.com/pixel-art-tutorials/tags/animation .
+  Behind `skate` (the planted foot slides back evenly), `gait` (one bob a step), `counter`, `strike`, `recover`
+  (an anticipation, a fast strike, an eased return), `gravity` and `squash` (spacing that grows on the fall, a
+  squash that keeps its mass), `piston` (an attack's arc).
+- Raymond Schlitter, Slynyrd Pixelblog 8, Intro to Animation (already above): a single orphan pixel is glaring in a
+  loop (`orphans`, `speck`); a walk's width at contact against its passing pose (read out by `gait`, not judged:
+  a long-bodied animal's width barely changes).
+- Sandro Maglione, "Pixel art character animations guide":
+  https://www.sandromaglione.com/articles/pixel-art-character-animations-guide . Hair that lags a frame behind the
+  head (`lag`), a jump's squash that lands on the anticipation drawings (`squash`), a lone bright pixel drawing the
+  eye (`mark`).
+- Sprite-AI, "Animation principles": https://www.sprite-ai.art/guides/animation-principles . Staging (a key pose must
+  change the silhouette: `stage`), arcs (`piston`), timing of the strike against its anticipation (`strike`), a base
+  sprite locked first (`drift`).
+- SpriteGen, "How to animate pixel art": https://spritegen.io/guides/how-to-animate-pixel-art/ . No foot skating, a
+  planted foot holding its pixel (`skate`); motion along arcs (`piston`); one palette over every frame (`palette`).
+- Kyle McArthur, "The process of pixel art animation: a beginner's guide" (ArtStation):
+  https://www.artstation.com/blogs/calamity_kyle/wVE2/the-process-of-pixel-art-animation-a-beginners-guide . A fixed
+  ground line, motion fixed on flat blobs first (`--parts`), a plume a frame late (`lag`), the approved still kept
+  in view (`drift`).
+- SpriteCanvas, "Pixel art animation": https://spritecanvas.com/pixel-art-animation/ . Generated walks that boil and
+  drift in palette (`boil`, `palette`, `orphans`).
+- PixelEngine: https://pixelengine.ai . Per-frame quantising flickers (`boil`, `blend`); room round the figure for
+  a reach (the `outline` note on a figure cut by its cell).
+- PixelLab: https://www.pixellab.ai . An animation's first frame is its input drawing, unchanged (`drift`); a colour
+  cap over the whole animation (`palette`).
+- "The ONLY Pixel Art Guide You Need (Beginner to Advanced)", Juniper Dev (YouTube video). No doubled outlines or
+  L-corners in any frame (`doubles`); one light source and one palette over a loop (`palette`); a squash keeping
+  its area within about 15 % (`squash`); a walk's body bob (`gait`).
+- "Creating Real Pixel Art Animations with AI", Sorceress Gamedev (YouTube video). Generated sheets come as held
+  pairs whose second frame redraws only a trace along the outline (`boil`, and why `jump` compares a held pose with
+  the poses either side of the hold); a part switched off for one cell (`swap`); cell scale and anchor drifting
+  (the box read-out).
+- "Pixel Art Animation Tips For Beginners", Broadleaf Digital (YouTube video). Silhouette first, colour-coded parts
+  (`stage`, `--parts`); an attack timed as anticipation, a one-frame strike and a held key (`strike`, the action's
+  held key in `choppy`); a strike drawn without a smear (why smears are not checked).
+- "The secrets to good Pixel Art animation! (Animation tutorial)", Pixel Overload (YouTube video). Anticipation,
+  strike and settle; a head lagging the hip by a drawing (`lag`); sub-pixel in-betweens that are small and
+  edge-only but lead the move (why `boil` asks for a step that reverts).
+
+## Why the slower timings in these sources do not loosen `choppy`
+
+Many hand-made sources time walks and runs at 80-150 ms a drawing (7-12 a second) and hold idle drawings 200-800 ms
+(3 to 24 frames at 30 fps, which `choppy` would flag): Slynyrd, finalbossblues, Sprite-AI's idles, Pixel Overload,
+Broadleaf Digital, Juniper Dev and SpriteCanvas among them. Their sprites are 16-48 px, and each of their pose
+changes is a clean whole-pixel step of a whole part. The 10-a-second floor and the rule against a hold of 4+ frames
+inside a cycle were set on a calibration set of larger textured creatures, where slower rates were judged choppy,
+so they stay, stricter than these sources on purpose. What these sources teach is spacing (one big strike step,
+eased steps elsewhere), not a slower rate. A declared action may hold one key up to 13 frames (the sources' 4-13),
+and only that one.
+

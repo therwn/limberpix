@@ -1,6 +1,6 @@
 ---
 name: pixel-anim-check
-description: Check a pixel-art sprite animation (idle, walk, attack or any loop of a character or creature) for faults that make sprite motion look broken. Takes sprite strips, frame folders or GIFs plus the eye colour. Reports size mismatches, stray specks, a lost eye, open outlines, feet off the ground, pops, texture shimmer, a frozen head, choppy or uneven timing, dead stops, 1-px ticks, hops, vanishing parts, shallow wing beats and a redrawn face; writes a contact sheet and a GIF for a look by eye. Use whenever a sprite animation is made or changed, and before showing or shipping one.
+description: Check a pixel-art sprite animation (idle, walk, attack or any loop of a character or creature) for faults that make sprite motion look broken. Takes sprite strips, frame folders or GIFs plus the eye colour. Reports size mismatches, stray specks, a lost eye, open outlines, feet off the ground, pops and held poses knocked sideways, texture shimmer, a frozen head, choppy or uneven timing, dead stops, 1-px ticks, hops, vanishing parts, shallow wing beats, a redrawn face, colours off the palette and lost marks; warns on sliding feet, walk bobs, outline boil, action timing (anticipation, strike, recovery, jumps), part volume and lag, blends, orphan pixels, doubled outlines and drift from the approved drawing; writes a contact sheet and a GIF for a look by eye. Use whenever a sprite animation is made or changed, and before showing or shipping one.
 ---
 
 # Pixel-art animation check
@@ -35,6 +35,8 @@ The script is `pixel_anim_check.py`; its tests are in `pixel_anim_selftest.py`.
 python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop move=walk.png --frame 32 \
        --eye "#ffcc33" [--flier --shadow "#2b2430"] [--effects "#fff4c8,#ffd27a"] [--allow attack=12] \
        [--glows-eye attack] [--idle idle --move move] [--facing left] [--legless] [--fps 30] \
+       [--action bite:strike:right] [--speed 0.5] [--parts move=move_parts.png --squash "#ff0000"] \
+       [--palette approved.png] [--ref approved.png] [--glow "#fff4c8"] [--mark "#5ad1e0"] [--sheet move] \
        --out check --name fox
 ```
 
@@ -50,16 +52,34 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
 - The outline is every colour darker than lightness 40, unless `--ink` names it.
 - `--facing left` for a creature whose head faces left (where `reshape` reads the face); `--legless` for a snake or
   slug (no body rise asked of its move, and `hop` judges every loop); `--fps` the rate the game plays the loops at.
+- `--action NAME[:KIND[:DIR]]` declares an action loop. Every declared action may hold one key (a wind-up or a
+  contact) for up to 13 frames at 30 fps outside `choppy` and `uneven`; its other frames keep every rule. KIND
+  `strike` judges its phases (DIR the way it strikes: right, left, up or down; default the facing). KIND `jump` may
+  leave the ground (`ground` is not asked). Any other word (`breath`, `spit`, `bell`) is a gesture: no phase checks,
+  since a breath or a bell has no counter-move.
+- `--speed PX` is the road's scroll in game px a frame, for a walker drawn walking in place. The planted feet's speed
+  is printed beside it, and the GIF scrolls a ground line under the move. The road may ease, so it is a read-out.
+- `--parts LOOP=PATH` gives a part strip: the same frames with each rig part filled in one flat colour (the cut's
+  labels). Per-part `volume` and `lag` are read from it. `--squash` names the part colours whose area changes on
+  purpose (wings, a squashed body).
+- `--palette PATH` (the approved drawing at game size) makes any colour outside it a fault; `--ref PATH` compares the
+  idle with it (`drift`); `--glow` names colours that show in some frames on purpose (glow steps, glints, blink lids).
+- `--mark` names small defining marks (a gem, a lamp, a lone bright pixel) that must show on every frame and never
+  jump 2 px in one frame. `--sheet LOOP` says a loop was drawn as a sheet or by AI (`swap` looks for a part switched
+  off for a cell).
 - In a project with its own pipeline, call `pixel_anim_check.check(loops, Spec(...))` from a small adapter.
   - Pixels may be any colour key; pass `lum` and `rgb` to read them.
   - Import the module from the skill folder, or vendor a copy of `pixel_anim_check.py` and `pixel_anim_selftest.py`
     (the selftest needs both). If you vendor them, make changes in one place first and copy them over, so the
     copies do not drift apart.
 
-It prints the faults, then warnings (`warn:` lines: the eye tick and `reshape` outside the
-idle, where an action may jump or open its jaw on purpose; look at them, they do not count), then per loop the
-**per-step change list** (the share of the figure changed from each frame to the next, a 1-px bob forgiven) and the
-**eye's row track** (runs of `(row, frames)`). The exit code is 0 for no fault, 1 for one or more, 2 for a usage
+It prints the faults, then warnings (`warn:` lines: the eye tick, `reshape` and `mark` outside the idle, where an
+action may jump or open its jaw on purpose, and the later checks of section 2b; look at them, they do not count),
+then per loop the **per-step change list** (the share of the figure changed from each frame to the next, a 1-px bob
+forgiven), the **eye's row track** (runs of `(row, frames)`), and the later read-outs: the update rate against the
+real-pose rate, the box's height, width and anchor (a sheet's scale drifting shows here), rare colours, the move's
+bob and leg band and planted-foot speed, the eye's lag behind the figure's top, each action's phases and staging,
+and each part's area and lag. The exit code is 0 for no fault, 1 for one or more, 2 for a usage
 error. Frame numbers are 0-based: `move[3]` is the move's fourth frame, and "frame k" in a `jump` or `snap` is the
 change from frame k to the next. It writes:
 - `<name>_check.png`: the contact sheet, each distinct pose zoomed (at most 12 a loop, plus any a fault names) and
@@ -75,13 +95,13 @@ change from frame k to the next. It writes:
 | `size` | frames differ in size | trimmed per frame: crop every loop to one union box |
 | `apart` | a piece apart from the figure | a cut part's leftover edge, a thin joint lost when shrinking, loose bits (embers, hair) that blink in and out: keep the main piece, or `--allow` what is thrown on purpose |
 | `eye` | the eye gone on a frame | the eye not moved with its part (the head), or a glow recolouring it (`--glows-eye` that loop) |
-| `outline` | coloured edge pixels with no ink | two drawings put together: ink the seam |
+| `outline` | coloured edge pixels with no ink | two drawings put together: ink the seam. A figure cut by the cell edge shows here too (the border counts as open): size the cell from the farthest reach of every loop, with 1 px of air |
 | `ground` | a walker's feet leave the ground line outside the move; a flier's shadow slides | a lift applied to the whole figure; a limb turned about its hip pushes the toes through the floor: shift it back up, or shear instead of turning |
-| `jump` | one change far over the loop's mean, or one frame knocked sideways | a pose out of order, a stray offset, a part stepping two levels at once |
+| `jump` | one change far over the loop's mean (a declared strike's own step left out), or one pose knocked 2+ px sideways out of step. A pose held on twos or threes is one pose: it is compared with the distinct poses either side of the hold, and every frame of it is named (`move[6-7] (a held pose)`) | a pose out of order, a stray offset, a part stepping two levels at once, a sheet cell placed off its anchor |
 | `still` | the move changes under 1.5 % of the figure a frame | amplitudes too small for the sprite's size |
 | `shimmer` | pixels flipping to another tone for one frame and back, often | texture redrawn each frame (AI frames), or a part scaled or turned a fraction every frame and resampled: hold small motions two frames a step and in whole steps (whole pixels, 1.5° turns). A sub-pixel in-between (an edge's mid tone stepping monotonically into a 1-px move) is not counted; switching a few pixels on and off is |
 | `stiff` | a walker's body never rises or falls in the move (not asked of a `--legless` crawler) | legs stepping under a board: raise the body (not the feet) a whole pixel as the legs pass under it, twice a stride; fill the hips with an overlap |
-| `choppy` | a continuous loop (4+ moves, no rest of a third of the loop) updating under 10 times a second however small its steps, or dropping one update (median hold 3+ and one hold twice it); give `--fps` | a few drawings each held long (a big animal's idle stepping one part every 6 frames: 5/s), or two quantised ticks running on one pose (a 3-frame cadence with one 6-frame hold). Give a new pose at least every 0.1 s: at 30 fps hold every pose 2 frames (15/s; 3 is the floor, never 4+ inside a cycle), at 12 fps 1 frame; put all parts on one clock (`k // 2 * 2`) with phases staggered 0.4-1.2 rad so something changes on every tick; or draw in-betweens. Never lower the pose rate to silence `uneven` |
+| `choppy` | a continuous loop (4+ moves, no rest of a third of the loop) updating under 10 times a second however small its steps, or dropping one update (median hold 3+ and one hold twice it); give `--fps`. A declared `--action` leaves out its single longest hold (up to 13 frames): the rest must still update at 10/s | a few drawings each held long (a big animal's idle stepping one part every 6 frames: 5/s), or two quantised ticks running on one pose (a 3-frame cadence with one 6-frame hold). Give a new pose at least every 0.1 s: at 30 fps hold every pose 2 frames (15/s; 3 is the floor, never 4+ inside a cycle), at 12 fps 1 frame; put all parts on one clock (`k // 2 * 2`) with phases staggered 0.4-1.2 rad so something changes on every tick; or draw in-betweens. Never lower the pose rate to silence `uneven` |
 | `uneven` | the holds between moves jump in turn (1, 3, 1, 3) in a cycle of 4+ moves | parts rounded on their own (each part's turn rounded separately lands on different frames), or a sequence of mixed holds: put every part on one beat (`k // 3 * 3`) and hold every pose alike. Ease doubling the hold at a sway's turns is fine |
 | `lurch` | a held cycle (6+ moves) whose moves alternate big and small | a whole-body bob on its own step between small leg steps, with frames held between: give the legs a new pose every frame and let the bob ride them; or a sine sampled so two poses running fall on one angle (sin 60 = sin 120): sample it half a step off |
 | `frozen` | the head (round the eye) hardly moves against the body in the idle or the move | a living creature with a mask for a head: nod it on the steps, let it look about in the idle, flick the ears |
@@ -90,11 +110,47 @@ change from frame k to the next. It writes:
 | `hop` | a grounded body leaves its contact: the columns resting on the lowest row shrink under half the usual, or 60 %+ of a big step is the whole body shifted (the idle of any non-flier; every loop of a `--legless` body) | a lift or a seat step that moves a whole layer or frame (the belly row stays while all above it rises): pin the body where it lies on the ground, move only the parts above it (neck, head, arches), never translate a frame |
 | `vanish` | a piece of 8+ px switches off (or on), its place stays empty 3+ frames, while the rest is nearly still (the piece over 1.1 times the mean change while it is gone) | a far wing hidden at the turn of a shallow stroke (an edge-hidden rule firing where the stroke is slowest): hide a part only while it crosses edge-on, for at most 5 frames; otherwise keep 25-30 % of it showing. A part hidden behind others is not seen here: lint the rig's hide rule (see below) |
 | `shallow` | a flier's idle puts under 0.3 times as much of its change in the lower half of the figure as its move does (with no move: under 80 % of its rows or 60 % of its pixels ever change) | a wing squeezed about its own lower edge only shortens from the top: beat the same wing more slowly, not less far (depth 0.7+, crossing the shoulder line: edge-on, then under the belly) in the idle too; turn spread wings about the shoulder point. Walkers are not judged: a standing idle rightly keeps its legs still |
+| `palette` | (with `--palette`) a frame holds a colour outside the approved drawing's, `--effects`, `--shadow` and `--glow` | a resample or a per-cell quantise: map the whole sheet to one palette, clearing key fringe first; sub-pixel mid tones must come from the drawing's ramp; declare glow steps |
+| `mark` | (with `--mark`) a mark missing on a frame, or its centroid jumping 2+ px in one frame, in the idle or the move (a warning elsewhere) | a small gem or lamp lost below `vanish`'s 8 px, or not moved with its part: paste it with its part, a pixel at a time |
 | `reshape` | the face window (from 1 px behind the eye forward; `--facing`), aligned on itself, changes class (air, ink, colour) on over 10 % of its pixels per pose change on average, in the idle (a warning elsewhere) | a sheet or AI drawings redrawing the head in every cell, or block lines read per cell that merge a narrow snout column: draw the head once and paste one approved head at each drawing's place (placed by the eye), re-ink the seam; read every cell on one shared grid. A jaw opened on purpose in an action is a warning only |
 
 A whole-figure bob of a pixel, a glow's pulse, a limb sweeping past, a wing coming back at the end of its stroke,
 and tones too alike to tell apart are motion on purpose. The check aligns or ignores them. If one is reported, fix
 the check, not the art (step 4).
+
+## 2b. The later checks (warnings until fitted)
+
+These were added from a review of animation guides (see [REFERENCES.md](REFERENCES.md)). Most margins are first
+guesses from those sources; those of `orphans`, `speck`, `doubles` and `blend` were widened after a run on a set of
+accepted textured creatures, whose own variation they had flagged. So they print `warn:` lines and never fail a
+run. Rerun them on your accepted set, and raise a margin rather than redraw an accepted loop for one of them.
+
+| Warning | Meaning | Usual cause, fix |
+|---|---|---|
+| `boil` | 2+ steps change only the outline (80 %+ inside the 1-px edge band, under a quarter of the median step) and come back a pose or two later, and they are a quarter of the updates or hide a real-pose rate under 10/s | AI or sheet frames redrawing every edge: a frame that changes only the outline is not a pose. Drop it, or thin a generated clip evenly (every 2nd or 3rd frame). A sub-pixel lead is small and edge-only too, but it settles into the move and never reverts, so it is not counted |
+| `skate` | in the move, a planted foot (a run of cells on the lowest row, matched pose to pose by overlap) slides 1+ px forward, or one foot's steps while planted differ by over 2 px | drawn walking in place, a planted foot goes back the same amount every pose until it lifts: the road's speed (stride / frames planted). A foot drawn at a sine of the phase goes back, then forward again while planted. Near and far feet merge on small sprites: a contact with another within 2 px in either pose (feet splitting apart or merging) is not judged; judge per foot with `--parts` |
+| `gait` | the move's body-top track does not bob twice a loop, or the move has an odd number of poses | a two-step walk rises and sinks once a step; an odd pose count cannot mirror its two halves. The bob's size is printed as a share of the height (sources give 3-8 %; a whole pixel is enough on a small sprite). Only a clear wave count is judged (every other count under 0.7 of it): a top row shifting a pixel at uneven times, as on a many-legged crawler, has none |
+| `counter` | a declared strike: nothing (the eye or the leading edge) moves 1+ px against the strike before it | a still anticipation has no force: wind up the other way over 2-5 small poses |
+| `strike` | the strike step (the biggest step carrying the lead forward; a second forward step over half of it joined) is under 3 times the anticipation's median step | the strike spread over even steps: strike in 1-2 frames, after small eased ones |
+| `recover` | after a strike, or after a jump's landing, under 2 steps back to rest, or one over half the strike (the loop's biggest step for a jump) | snapping back: follow through, then return over 2-5 poses, steps growing then shrinking; a small overshoot is fine |
+| `stage` | the strike's contact pose keeps 90 %+ of the rest pose's filled silhouette (effects included) | the key does not read: push it (a longer reach, a lower crouch). Every action prints its most changed pose's share as a read-out |
+| `piston` | from the rest pose to the contact, the eye (or with `--parts` the farthest-travelling part's tip) strays under 1 px from a straight chord of 4+ px, over 3+ poses | a straight A-to-B slide: move the lead on an arc (the head rises, then drops into the bite) |
+| `gravity` | an action whose figure's bottom rises 2+ px: airborne steps (px a frame) speeding up toward the apex, or a fall at an even pace | a jump spaced evenly: steps shrink on the way up, two drawings near the apex, steps grow on the fall |
+| `squash` | in such an action, a pose changing height by 10 %+ narrows as it squashes (or widens as it stretches), changes its area by over 15 %, or stays deformed on the ground 3+ poses | squash wider, stretch narrower, keep the mass; a squash lasts 1-2 frames |
+| `volume` | (with `--parts`) a part of 40+ px whose area leaves its median by over max(10 %, 2 px); `--squash` parts left out | a part scaled or cut differently per frame. Small parts are left out: a turned ear changes area by rasterising alone |
+| `lag` | (with `--parts`) in the idle or the move, every part riding the body (off the ground, moving 0.75+ px, with the body's wave count) moves on the body's own frame, or one trails it by over a quarter of the loop | no follow-through: let the head, ears or tail come a pose late (one pose is enough at sprite scale). Without parts the eye's lag behind the figure's top is a read-out only: a whole-figure lift rightly gives 0 |
+| `blend` | (a `--sheet` loop) a colour shown in under a quarter of the frames whose lightness lies between two tones it touches | a per-cell quantise or a resample: snap to the drawing's ramp, or declare a glow step with `--glow`. A rig turning parts a fraction makes such tones on purpose, so rigged loops get only the rare-colours read-out |
+| `orphans` | a frame holds more lone pixels (matching none of the 8 round them; the eye and `--glow` left out) than twice the loop's usual count (its median, or the `--ref` drawing's if higher) plus 3 | stray pixels from a resample or a redraw. Compared with the loop itself: a shrunk texture holds many on purpose, and accepted loops vary up to 1.75 times |
+| `speck` | a pixel steady in every bob-aligned frame takes a lone colour for 1-2 frames once a loop, while its 8 neighbours keep theirs, 60+ of lightness from its own colour and every neighbour, and lighter or darker than all of them (a tone between two neighbours, as between an outline and its fill, is an edge blending) | a glaring blinking speck (`shimmer` needs a flip on a sixth of the frames): clean it |
+| `doubles` | a frame's outer outline holds more doubled cells (2x2 blocks, L-clumps) than twice the loop's usual count plus 2; the new places are named | an outline thickened by the shrink or re-inked on a turned part: thin it to one pixel. A leg or wing turning at a joint makes some on purpose |
+| `drift` | (with `--ref`) the idle's nearest pose, after the best shift, differs from the approved drawing on over 2 % of it | the rest render drifted from the drawing: a part cut, a pivot off, a colour snapped differently |
+| `swap` | (a `--sheet` loop) a colour group of 8+ px drops under 30 % of its median, or doubles, in one step for 1-3 poses and comes back in one step | an AI sheet dropping a shield or moving a sword across for a cell: keep every part on every cell. A foreshortening wing passes through the counts between and is not caught |
+
+Not checked, on purpose: smears (an option, and good strikes exist without one), the figure touching the cell edge
+(a loop cropped to one union box touches it in some frame; a cut reach shows as `outline`), footfall order (diagonal
+pairs land together in a trot, and contacts merge on small sprites), a flier's rise and fall timing (wing pixels
+change on both strokes), hit reactions (one source, nothing to fit on) and effect timing (a spark starts at full
+size on purpose; a breath of fire lasts long on purpose).
 
 ## 3. Look at it yourself
 
@@ -103,6 +159,12 @@ First read the two tracks the run printed, before the GIF. A fault shows there b
   dwelling under 4 frames. Each level the eye takes should last 4+ frames at an extreme (3 on a smooth path).
 - **The per-step change list**: a long run of zeros followed by a big step (a dead stop, then a lurch); a lone
   doubled hold among even ones (a dropped update); steps alternating big and small (a lurch).
+- **The later read-outs**: a real-pose rate well under the update rate (boil); a box whose height or anchor swings
+  more than 1 px with no design behind it (a sheet's cells scaled or anchored apart: anchor walkers by the feet,
+  fliers by the body's centre); the planted feet's speed against the road's (`--speed`).
+
+If you have a part strip, look at it first, at 1x: the motion should read on the flat colours before the texture
+goes on. With `--speed`, watch the move over the GIF's scrolling ground line: a planted foot must not slide on it.
 
 If your pipeline has a rig, also lint its pose curves, where the frame grid cannot see the cause: for example a
 squeezed wing that never crosses 0 in its idle (a shallow stroke), a part hidden at a turn rather than while
@@ -140,6 +202,16 @@ Run `python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --selftest`.
   update, a dead stop then a burst, a 2-frame 1-px blip, a body lifted off its feet's row, a far wing switched off
   at the bottom of its stroke, a wing squeezed from its top only, a snout cut on every other pose, uneven holds, a
   lurching bob, a narrowed frame. Each must be caught by its own fault.
+- For the later checks it passes, with no fault and no warning of theirs: the walker on twos and on threes, its
+  idle swaying 2 px over 12 poses, a bite (a strike on threes with one 9-frame key) and a leap (a jump with one
+  6-frame key) declared as actions, the walker with its part strip, against its palette and its drawing, with a gem,
+  and with a patch read as a sheet, and the flier read as a sheet. It then breaks them: a held pose knocked 3 px on
+  twos and 2 px on threes, a planted foot nudged forward, the bite left undeclared (`choppy`), a bite with no
+  wind-up, one spread over even steps, one snapping back, one barely changing shape, one on a straight line, a leap
+  falling evenly, one narrowing as it lands, one landing straight to rest, a boiled sheet, one bob a loop, an odd
+  pose count, a head riding the body with no lag, a part shrinking a row, a stray colour, a blend, a blinking speck,
+  scattered lone pixels, a doubled outline, a drawing with its snout cut, a gem lost and a gem jumping, a patch
+  dropped for a cell. Each must be reported as its own fault or warning.
 - The thresholds of `choppy`, `snap`, `tick`, `hop`, `vanish`, `shallow` and `reshape` were fitted to a private
   calibration set: 39 animated creatures, with 15 accept or reject judgements on them by one reviewer (the margins
   are in each function's docstring). That set is not included here. No source gives a pixel threshold for judder (see

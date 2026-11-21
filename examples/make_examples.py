@@ -2,7 +2,8 @@
 
     python examples/make_examples.py              # write the example files that differ from what is on disk
     python examples/make_examples.py --verify     # rebuild them in memory and compare with the files on disk (CI)
-    python examples/make_examples.py --docs       # also run the tools on them, refresh docs/img and the plugin icon
+    python examples/make_examples.py --docs       # also refresh the plugin icon and the README's pictures (docs/img,
+                                                  # drawn by showcase/make_showcase.py)
     python examples/make_examples.py --skills DIR # read the skills from DIR (default: ../skills)
     python examples/make_examples.py --help
 
@@ -21,7 +22,6 @@ Needs Python 3.8+, numpy and Pillow."""
 import argparse
 import json
 import os
-import subprocess
 import sys
 
 import numpy as np
@@ -36,7 +36,8 @@ def _options(argv):
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--verify", action="store_true", help="compare with the files on disk; write nothing")
-    mode.add_argument("--docs", action="store_true", help="also refresh docs/img and the plugin icon")
+    mode.add_argument("--docs", action="store_true",
+                      help="also refresh the plugin icon and docs/img (showcase/make_showcase.py)")
     ap.add_argument("--skills", default=os.path.join(ROOT, "skills"), metavar="DIR",
                     help="the folder holding the two skills (default: ../skills)")
     return ap.parse_args(argv)
@@ -146,35 +147,10 @@ def icon(files, path, cells=40, zoom=16):
 
 
 def docs():
-    """Run the real CLIs on the examples and keep their pictures in docs/img."""
-    img = os.path.join(ROOT, "docs", "img")
-    os.makedirs(img, exist_ok=True)
-    py = [sys.executable, "-I"]
-    check = os.path.join(CHECK_DIR, "pixel_anim_check.py")
-    runs = [
-        [check, "--loop", "idle=" + os.path.join(HERE, "walker_idle.png"),
-         "--loop", "move=" + os.path.join(HERE, "walker_move.png"), "--frame", "34", "--eye", "#ffcc33",
-         "--out", img, "--name", "walker"],
-        [check, "--loop", "idle=" + os.path.join(HERE, "walker_idle.png"),
-         "--loop", "move=" + os.path.join(HERE, "broken_move.png"), "--frame", "34", "--eye", "#ffcc33",
-         "--out", img, "--name", "broken"],
-        [os.path.join(ANIMATE_DIR, "body_parts.py"), os.path.join(HERE, "figure.png"),
-         os.path.join(HERE, "marks.json"), "--out", img, "--name", "figure"],
-    ]
-
-    def shown(text):                                      # paths as the repo names them, never the local ones
-        for path, alias in ((img, "docs/img"), (HERE, "examples"), (SKILLS, "skills")):
-            text = text.replace(path + os.sep, alias + "/").replace(path, alias)
-        return text.replace(os.sep, "/") if os.sep != "/" else text
-
-    for cmd in runs:
-        r = subprocess.run(py + cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-        print(shown("$ python " + " ".join(cmd)))
-        print(shown(r.stdout).rstrip(), "\n(exit {})\n".format(r.returncode))
-    for extra in ("figure_patches.png", "figure_labels.png", "figure_parts.json"):
-        p = os.path.join(img, extra)
-        if os.path.exists(p):
-            os.remove(p)
+    """The README's pictures in docs/img: showcase/make_showcase.py draws them from the showcase creatures."""
+    sys.path.insert(0, os.path.join(HERE, "showcase"))
+    import make_showcase                                  # here, with this run's own Python and Pillow
+    make_showcase.main([])
 
 
 if __name__ == "__main__":
