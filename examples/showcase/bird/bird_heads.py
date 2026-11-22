@@ -5,10 +5,10 @@ outline and the part strip. A key is drawn for the head turned about its pivot (
 base); the rig moves it whole, by whole pixels, to where the body's own turn takes the neck.
 
 The nods, turned about the neck (NECK, where the head sits on the body), so the back of the head stays on the neck
-and the turn spreads over the face: the bill moves most, the eye stays on its pixel. They carry the head's rises and
-falls as a chain (the back of the head with the neck, the bill a pose later) and its looks:
-    -3   nose up a little: on a fall the bill stays up a pose after the head has come down
-     3   nose down a little: on a rise the bill stays down a pose after the head has come up
+and the turn spreads over the face: the bill moves most, the eye stays on its pixel. They carry the head's looks
+and the attack's pitch (the idle and the move carry the head whole with the body: animate.head_chain):
+    -3   nose up a little: the attack's anticipation, the bill rising against the strike
+     3   nose down a little: the idle's look turning down, and the attack's last turn up
      6   nose down a little more: the idle's look down at the water, and the attack's last turn up but two
 The dive's keys, turned about KEY_PIVOT:
     45   the head in line with the dive: the strike, the held thrust and the recoil's first pose

@@ -113,10 +113,11 @@ cut into whole frames).
 | `--idle NAME --move NAME` | which loops are the rest and the travel loop (default `idle`, `move`). A name given here must match a `--loop`, or it is a usage error. With no loop of the default name, a `note:` line says which checks do not run: `snap`, `hop`, `shallow` and `drift` need the idle; `still`, `stiff`, `skate` and `gait` need the move; and without a move a walker's `ground` judges every loop |
 | `--legless` | a snake or slug: no body rise asked of its move |
 | `--facing right\|left` | which way the head faces (default right) |
-| `--fps N` | the rate the game plays the loops at (default 30; a decimal is allowed). It sets the GIF's speed and how a GIF input is sampled, and scales `choppy`, `boil`'s rates, `snap`, `hitch`, the eye `tick`'s dwell and an action's held key |
+| `--fps N` | the rate the game plays the loops at (default 30; a decimal is allowed). It sets the GIF's speed and how a GIF input is sampled, and scales `choppy`, `boil`'s rates, `snap`, `hitch`, the eye `tick`'s dwell and an action's held keys |
 | `--out DIR` | where `<name>_check.png` and `<name>_check.gif` go (default `.`, the current folder) |
 | `--name NAME` | the stem of the written files (default `anim`) |
-| `--action NAME[:KIND[:DIR]]` | that loop is an action: one key may be held up to 13 frames. `strike` (with a direction) has its phases judged; `jump` is not asked to keep to the ground |
+| `--action NAME[:KIND[:DIR]]` | that loop is an action: up to two keys (a wind-up and a follow-through) may be held, each up to 13 frames. `strike` (with a direction) has its phases judged; `jump` is not asked to keep to the ground |
+| `--min-rate R` | `choppy`'s floor for the idle and the move, in updates a second (a number over 0), for a style held longer than the fitted floors allow. Without it the floor is 10, 5.2 for a move whose every pose change is big (a new drawing of the stride), and 2.5 for an idle whose every pose moves the body |
 | `--speed PX` | the road's scroll in game px a frame: the planted feet's speed is printed beside it, and the GIF scrolls a ground line under the move |
 | `--parts LOOP=PATH` | a part strip for that loop (the same frames, each rig part one flat colour): per-part volume and lag are judged on it |
 | `--squash #hex,...` | part colours whose area changes on purpose (wings, a squashed body) |

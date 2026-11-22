@@ -73,36 +73,72 @@ elsewhere, at a uniform frame time (Broadleaf's attack and Sandy Gordon's attack
 
 ## Smooth motion at sprite scale (3.0)
 
-Raymond Schlitter's Pixelblog (Slynyrd), all 91 posts read, its animated GIFs split frame by frame and measured
-(frame counts, each frame's time, each region's offset per frame). The numbers in 3.0 come from these:
-- 8, Intro to Animation (idles, runs of 8, 6 and 4 frames on one loop length):
+Raymond Schlitter's Pixelblog (Slynyrd): the text of all 91 posts was read (64 numbered Pixelblogs and 27 unnumbered
+devlogs and Pixel Diaries); animation is taught in about 25 of them. The GIFs of 20 of those posts (94 files) were
+then measured: each sprite's region on a lesson sheet found and its pose times read. Each number below says where it
+comes from: *text* (written in the post), *measured* (read from its GIF) or *unverified* (neither: the sheet's fixed
+lines defeated the automatic measure, and the text does not give it). No measure contradicts the text.
+- 8, Intro to Animation (frames dropped from a run of 8 in a set order; idles):
   https://www.slynyrd.com/blog/2018/8/19/pixelblog-8-intro-to-animation
-- 9, Melee Attacks: https://www.slynyrd.com/blog/2018/9/8/pixelblog-9-melee-attacks
-- 24, Items (a float eased by step size: 0, -1, -3, -5, -6, -5, -3, -1 at 80 ms):
-  https://www.slynyrd.com/blog/2019/12/21/pixelblog-24-items
-- 25, Motion Cycles (a human and a dog walk, a bird's flap; the dog's tail a pose late and damped):
+  Run of 8 at 80 ms a pose and of 4 at 160 ms (*text*); of 6 at 120 ms and of 3 drawings as 4 × 200 ms (*measured*);
+  idles of 2 × 800, 4 × 400, 6 × 200 and 8 × 200 ms (*measured*). A plume falling after the body: *unverified*.
+- 9, Melee Attacks (one-frame anticipation, smear, follow-through held, one-frame recovery, then the rest pose a
+  pixel back; *text*): https://www.slynyrd.com/blog/2018/9/8/pixelblog-9-melee-attacks
+- 24, Items: https://www.slynyrd.com/blog/2019/12/21/pixelblog-24-items
+  Item idles step at 80 ms with long still spells between (*measured*); a float eased by step size, 0, -1, -3, -5, -6
+  px: *unverified*.
+- 25, Motion Cycles (a puppet of colour-coded parts first; a dog's hind leg a step behind the opposite foreleg, hips
+  and shoulders rising and falling opposite but equal; *text*):
   https://www.slynyrd.com/blog/2020/1/23/pixelblog-25-motion-cycles
-- 33, Wind Effects (hair and cloth waves): https://www.slynyrd.com/blog/2021/7/16/pixelblog-33-wind-effects
-- 37, Castlevania study (a bat's wing pose held 160 ms while it moves every 40 ms):
-  https://www.slynyrd.com/blog/2022/3/19/pixelblog-37-classic-castlevania-study
-- 38, Metroid study (the hips in one column): https://www.slynyrd.com/blog/2022/5/24/pixelblog-38-metroid-study
-- 47, Tiny Pixels: https://www.slynyrd.com/blog/2023/11/26/pixelblog-47-tiny-pixels
-- 50, Human Walk Cycle (the head 0, 0, -2, -1; dropping frames on one loop length):
+  Human walk 8 × 140 ms, dog walk 8 × 100 ms, wing 8 × 80 ms (*measured*). The dog's tail root 0, +1, +1, 0 (a pose
+  late and damped) and a 12 px wing: *unverified*.
+- 33, Wind Effects (flow points 12 px apart moving 2 px a frame over 6 frames; waves growing to the tip; a leaf
+  tipping the frame after its neighbour; 0.2 s a frame; *text*):
+  https://www.slynyrd.com/blog/2021/7/16/pixelblog-33-wind-effects
+- 36, 16x16 hero attack (strike, follow-through and overshoot frames 80 ms, 320 ms of idle before the next; *text*);
+  a 2-pose idle of 2 × 800 ms and a walk at 160 ms (*measured*).
+- 37, Castlevania study: https://www.slynyrd.com/blog/2022/3/19/pixelblog-37-classic-castlevania-study
+  A walk of 4 × 160 ms and a second loop of 4 × 240 ms (*measured*). A bat's wing pose held 160 ms while it moves
+  every 40 ms: *unverified*.
+- 38, Metroid study (the hips in one column; *text*): https://www.slynyrd.com/blog/2022/5/24/pixelblog-38-metroid-study
+- 45 (a 16 px mouse and pawn, 4 frames × 200 ms, *text* and *measured*; fire 6 × 100 ms with a 50 ms glint, *text*,
+  measured as 12 × 50 ms).
+- 47, Tiny Pixels (at least a pixel of motion a frame; a tiny hero's walk 4 × 100 ms, *measured*):
+  https://www.slynyrd.com/blog/2023/11/26/pixelblog-47-tiny-pixels
+- 48 (a jet's thrust 2 × 50 ms, a propeller 4 × 50 ms; *text*).
+- 50, Human Walk Cycle (contact lowest, passing highest, the head a triangle wave, not a sine; *text*):
   https://www.slynyrd.com/blog/2024/5/24/pixelblog-50-human-walk-cycle
-- 52, Idle Fighting Stance (8 poses, 100 ms up and over, 50 ms down; torso and head 1 px a step, limbs 2, fists
-  2-4): https://www.slynyrd.com/blog/2024/9/26/pixelblog-52-idle-fighting-stance
-- 53, Punches and Kicks (interior "sub-pixel" detail): https://www.slynyrd.com/blog/2024/11/25/pixelblog-53-punches-and-kicks
-- 55, Top Down Character Animation (an idle of 200, 200, 400 ms; a run bob of 1, 2, 0):
+  Walk of 8 × 140 ms with the head at 0, 0, -2, -1, 0, 0, -2, -1 px; of 6 at 200, 180, 180 ms with the head 0, 0, -2;
+  of 4 × 280 ms with the head 0, -2; all three 1120 ms a loop (*measured*).
+- 52, Idle Fighting Stance (8 poses, 1-4 at 100 ms and 5-8 at 50 ms; the torso and head 1 px a step, shoulders and
+  elbows 2, a fist up to 4; the head holding over 3→4 and 7→8 while the body moves; *text*):
+  https://www.slynyrd.com/blog/2024/9/26/pixelblog-52-idle-fighting-stance
+- 53, Punches and Kicks (no anticipation on a jab; interior "sub-pixel" detail; *text*):
+  https://www.slynyrd.com/blog/2024/11/25/pixelblog-53-punches-and-kicks
+- 55, Top Down Character Animation (an even idle reads "robotic"; the hair slides on two frames of four; *text*):
   https://www.slynyrd.com/blog/2025/3/24/pixelblog-55-top-down-character-animation
-- 56, Top Down Attacks: https://www.slynyrd.com/blog/2025/5/23/pixelblog-56-top-down-character-attack-animation
-- 59, Tiny Sci-Fi (a run of 100, 150, 100 ms): https://www.slynyrd.com/blog/2025/11/28/pixelblog-59-tiny-sci-fi-pixels
-- 60, Side View Run 'N Gun (the head two poses at each level while the limbs change every pose):
-  https://www.slynyrd.com/blog/2026/1/26/side-view-run-n-gun
-- 64, Ninja Platformer (a gorilla 6 × 200 ms, a spider tank 6 × 100 ms):
+  An idle of 200, 200, 400, 200, 200, 400 ms with the head 0, +1, +2, +2, +1, 0 px; a run of 6 × 100 ms (*measured*).
+- 56, Top Down Attacks (sword 100, 50, 50, 50, 100, 50 ms; spear 200, 50, 50, 50, 150, 50; hammer 250, 50, 50, 50,
+  300, 100; *text*): https://www.slynyrd.com/blog/2025/5/23/pixelblog-56-top-down-character-attack-animation
+- 58 (a run of 6 × 100 ms, *text* and *measured*; noise: flickering pixels that pull the eye from the motion; *text*).
+- 59, Tiny Sci-Fi (a hero's run of 100, 150, 100, 100, 150, 100 ms, *text* and *measured*; a mech walk of 12 × 100 ms,
+  *text*): https://www.slynyrd.com/blog/2025/11/28/pixelblog-59-tiny-sci-fi-pixels
+- 60, Side View Run 'N Gun (idle and walk 120 ms, run, shot and landing 60 ms; no anticipation on a player's jump;
+  *text*; a walk of 8 × 120 ms, *measured*): https://www.slynyrd.com/blog/2026/1/26/side-view-run-n-gun
+  The head two poses at each level while the limbs change every pose: *unverified*.
+- 63 (roll, not rotation, for a craft's pitch; the player's hitbox in one place every frame; *text*).
+- 64, Ninja Platformer (a gorilla's 6-frame loop, hind legs a step ahead, head and body one piece; *text*):
   https://www.slynyrd.com/blog/2026/9/25/pixelblog-64-ninja-platformer
-The blog never teaches how to join cut parts without a seam, nor shifting a shape by a fraction of a pixel: it
-redraws limbs whole each pose. The seam rule in 3.0 comes from this repo's showcase (the wolf's neck, the lizard's
-torso), judged by one person.
+  A ninja at 8 × 200, 4 × 400 and a run of 6 × 50 ms; enemies stepping at 50, 100 and 200 ms (*measured*).
+
+Across the measures: a walk pose lasts 100-280 ms, a run pose 50-160 ms, an idle pose 100-800 ms, and dropping frames
+keeps the loop's length.
+
+What the blog does not say: it never teaches how to join cut parts without a seam, nor shifting a shape by a fraction
+of a pixel (it redraws limbs whole each pose). The seam rule in 3.0 comes from this repo's showcase (the wolf's neck,
+the lizard's torso), judged by one person. So does the rule's general form "the body moves on every pose, never a small
+part alone": 52's idle and the walks of 25, 50 and 60 move that way, but 55's hair moves on two frames of four, 33's
+leaves tip one at a time, 39's idle is still, and for 8 an idle only has to move.
 
 ## Stillness and the moving hold (3.3, 3.8)
 

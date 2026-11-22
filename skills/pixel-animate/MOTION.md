@@ -2,50 +2,54 @@
 
 Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are in [REFERENCES.md](REFERENCES.md).
 
-### 3.0 Smooth motion at sprite scale: the body moves on every pose
+### 3.0 Smooth motion at sprite scale
 
-At sprite scale a part moves in whole-pixel steps, and each step is seen as a step. Motion reads smooth when a step
-is the whole figure moving; it reads as clicking when the figure holds and one small part steps alone, and as a
-shiver when parts step one after another a pose apart (the trunk, then the neck, then the muzzle, then the ears).
-Measured on Slynyrd's animations (REFERENCES.md) and on this repo's showcase, judged by one person:
-- **The body's mass moves on every pose of a cycle.** Slynyrd 52's idle moves the torso 0, -1, -2, -1, 0, +1, +2, +1
-  (up negative) over 8 poses, the head and arms with it; his walks and dog cycles (25, 50, 64) change the whole figure
-  every pose. A pose that moves only an ear, a blink or a tail tip while the body holds is a click.
-- **Further from the body, more pixels a pose.** Torso and head 1 px a step, shoulders and elbows 2, fists 2-4
-  (Slynyrd 52); a bird's wing travels about 12 px while its body moves 2 (25).
-- **A part may lag only while the body moves.** The head holds a pose at the bob's turn while the torso moves under
-  it (52, 50, 60); it never steps on its own a pose after the body has stopped. A free tip is the exception: a
-  tail's end or a plume may finish the body's move a pose late (8: the plume still up as the body drops, then
-  falling). What clicks is a small part stepping on a beat of its own (an ear flick, a muzzle step) on a still body.
-- **Parts joined by a seam move together at 1-px steps.** A cut layer moved a pixel off the layer it joins shows
-  the cut: a head off its neck, a neck off the chest it overlaps, a back lifted alone over a still belly while the
-  neck over it rides the head (the torso splits). Move overlapping layers as one piece, and give the lag to a free
-  tip, a tail's end, a hanging foot, never more than a pixel off its parent a pose (further, a hanging tail's rows
-  stretch). Slynyrd redraws limbs whole every pose and moves only the head, or a whole item, as a rigid block.
-- **Ease with timing and with step size.** Slow over the top, quick on the drop: 52 holds the rise and the top 100
-  ms a pose and the drop 50 ms (here 3 frames and 2). A bob is an uneven triangle, one big step and smaller ones
-  (the head 0, -2, +1, +1 in 50's walk; a run's 1, 2, 0 in 55). An item's float steps 1 px at the turns and 2 in the
-  middle (24).
-- **Hold lengths.** Slynyrd's idles hold 100-400 ms a pose (52: 100 and 50; 55: 200, 200, 400), walks 100-140 ms,
-  runs 50-100 ms, heavy creatures longer (64: a gorilla 6 × 200 ms, a spider tank 6 × 100 ms). Long holds read
-  smooth only because every pose moves the whole figure: an idle so drawn may hold a pose up to 400 ms, and
-  pixel-anim-check's `choppy` then asks for 2.5 updates a second instead of 10. Where only parts move over a still
-  body, keep the usual hold at 2-3 frames (3.2). Walks and runs keep the 10-a-second floor in the check; his 100-140 ms
-  walks are under it and untested here.
-- **Frame counts.** Idles 4-8 poses, walks 8 (6 as an economy, 4 the keys alone), runs 6; tiny sprites 3-4, the
-  neutral pose reused (0, 1, 0, 2). Dropping frames, keep the loop's length (8 × 80 = 6 × 120 = 4 × 160 ms) and drop
-  the in-betweens first (8).
-- **A planted foot moves with the ground on every frame.** Over a road scrolling a pixel a frame, draw the walk on
-  ones: a foot held two frames falls a pixel behind the road and catches up, and the feet judder against it. Keep
-  the sprite's travel apart from its drawing rate: a bat's wing pose may hold 160 ms while the sprite moves 2 px
-  every 40 ms (37), and translation steps stay even (23).
-- **Anchor the centre of gravity.** The hips hold one pixel column every frame (38), the feet hold the ground row
-  in a run (55, 60).
-- **"Sub-pixel" here is interior detail.** Fold lines, shading edges and hair locks move inside a still outline
-  and sell a turn or a twist (52, 53); a shape is never shifted by a fraction. Keep shading simple where it moves,
-  or it flickers (33, 58).
-- Build the motion on a flat-colour dummy first (legs, arms, head, then the bob; a quadruped one leg pair at a
-  time), and add texture only when it reads (25, 50, 55); section 6 of SKILL.md's part strip is that dummy.
+At sprite scale every whole-pixel step is seen. Motion reads smooth when a step moves the body's mass; it reads as
+clicking when one small part steps alone on a still body, and as a shiver when parts take a rise one after another a
+pose apart (the trunk, then the neck, then the muzzle, then the ears). Each rule says where it comes from: Slynyrd's
+Pixelblog, from its text or measured from its GIFs (REFERENCES.md lists which number is which), or this repo's
+showcase, judged by one person.
+- **The body moves on every pose of a cycle.** In Slynyrd 52's idle (text) the torso moves on every frame, 0, -1,
+  -2, -1, 0, +1, +2, +1 (up negative), while the head holds its place on two of the eight changes (frames 3 to 4 and
+  7 to 8); "everything" follows the torso's motion. His walk cycles redraw the whole figure every pose (25, 50).
+  That no small part may step alone on a still body is this repo's generalisation, from its showcase (one person's
+  judgment); the blog does not state it, and does otherwise where it suits: hair shifting on 2 of an idle's frames
+  (55, text), leaves tipping one after another (33, text), a still idle (39, text). Here a free tip may finish the
+  body's move a pose late; a part stepping on a beat of its own on a still body is the click to avoid.
+- **Further from the body, more pixels a pose** (52, text): head and torso 1 px a step, shoulders and elbows 2, the
+  inner fist 4.
+- **Parts joined by a seam move together at 1-px steps** (this repo's showcase, one person's judgment; the blog
+  redraws limbs each pose and never teaches joining cut parts). A cut layer moved a pixel off the layer it joins
+  shows the cut: a head off its neck, a neck off the chest it lies over, a back lifted alone under a neck carried
+  whole (the torso splits). Move overlapping layers as one piece, and give the lag to a free tip (a tail's end, a
+  hanging foot), never more than a pixel off its parent a pose; further, a hanging tail's rows stretch.
+- **Ease with timing and with step size.** 52 (text): frames 1-4 at 100 ms, 5-8 at 50 ms (here 3 frames and 2).
+  55 (text): equal idle frames read as robotic, so the extremes are held longer (measured from the GIF: 200, 200,
+  400 ms). A bob is a triangle wave, not a sine (50, 55, text): a run's head down 1, down 1, up 2 a step (55, text);
+  a walk's head 0, 0, -2, -1 (50, measured from the GIF).
+- **Hold lengths.** Walks hold a pose 100-280 ms (measured from the GIFs: 25 and 50, 8 × 140 ms; 50's six poses
+  200, 180, 180 ms; text: 60, 120 ms), runs 50-160 ms (text: 8, 80 and 160 ms; measured: 55 and 58, 100 ms), idles
+  100-800 ms (text: 52, 100 and 50 ms; measured: 55, 200, 200, 400 ms; 8's five idles from 2 × 800 to 8 × 200 ms;
+  64's ninja 8 × 200 ms). pixel-anim-check's `choppy` asks for 10 updates a second where parts move over a still
+  body, 5.2 for a walk whose every pose is a new drawing of the stride, 2.5 for an idle moving its whole body every
+  pose; `--min-rate` sets the floor for a style held longer (the blog's 8-16 px sprites, 200-800 ms a pose).
+- **Frame counts** (8, text): build 8; going to 6, drop the recoil, going to 4, the high point; never drop the
+  contact or the passing pose. Hold the poses left longer so the loop keeps its length (80 ms on 8, 160 ms on 4,
+  text; 120 ms on 6, measured from the GIF). Too many in-betweens make the motion sluggish: trust the keys. 6
+  serve most walks; idles take 4-8. Very small sprites (45, 47, 59, text): at least 1 px of motion a frame, 4 frames
+  for most, 6 for weight, holds up to 200 ms, the neutral pose reused (0, 1, 0, 2).
+- **A planted foot moves with the ground every frame** (this repo's showcase: the wolf's walk on ones over a road
+  a pixel a frame; held two frames, a foot fell behind the road and caught up). A scroll moves the same pixels every
+  frame, at a speed that divides the canvas, never slower than a pixel a frame, which jitters (23, 46, 63, text).
+- **Hold the centre of gravity and the hitbox in place** on every frame (38, 63, text). A flier pitching up or down
+  rolls rather than rotates: rotation breaks clusters at low resolution (63, text).
+- **Noise** (58, text): pixels flickering in the interior detail pull the eye from the motion; play the loop at
+  full speed to see them, and cut colours and simplify clusters. Clear motion comes before keeping every pixel.
+  pixel-anim-check's `shimmer` finds a texture flipping back and forth. "Sub-pixel" in the blog means interior
+  detail moving inside a still outline (52, 53, text), never a shape shifted by a fraction.
+- **Build on a flat-colour dummy first**, legs, arms, head, then the overall bob (25, text; also 22, 50, 52, 55,
+  58, 60, 64), the outline last (57, 63, text); detail that flickers in motion reads as noise (53, 55, 58, text).
+  The part strip of SKILL.md section 2, step 6, is that dummy.
 
 ### 3.1 Whole pixels and sub-pixel motion
 
@@ -78,14 +82,13 @@ Measured on Slynyrd's animations (REFERENCES.md) and on this repo's showcase, ju
 ### 3.2 Cadence: holds against crawl
 
 - **The rate:**
-  - Continuous motion (a sway, a beat, a bob) gets a new picture at **15/s: hold 2**. This is the target.
-  - **Hold 3 (10/s)** is the floor, and only for a uniform whole-body beat (a big, slow animal).
-  - **The tempo is what fails: a usual hold of 4 or more** (under 10 updates a second at 30 fps) reads as a low
-    frame rate when parts move over a still body, whatever the step size. Six small idle poses held 6 frames each
-    read as a dropped frame rate, even at 6-13 % of the figure a step. An idle whose every pose moves the whole
-    body is the exception: up to 12 frames a pose (3.0).
-  - The mean update rate (moves × fps / frames) is ≥ 10/s.
-  - Holds of 3 read as smooth enough; holds of 4 read as a dropped rate.
+  - How long a pose may hold depends on what moves on it (3.0, hold lengths). Where parts move over a still body,
+    hold a pose 2-3 frames at 30 fps (15-10 updates a second): **a usual hold of 4 or more** reads as a low frame
+    rate whatever the step size, and six small idle poses held 6 frames each read as a dropped rate, even at 6-13 %
+    of the figure a step (this skill's private calibration set). Where every pose is a new drawing of the whole
+    body, longer holds read smooth: a walk at 100-200 ms a pose, an idle breathing with its whole body up to 400 ms
+    (Slynyrd's walks and idles, 3.0). The showcase's idles hold 3 frames over the top and 2 on the drop, its wolf
+    walks on ones.
   - **One longer hold belongs only where the motion stops:** at a sway's turn (below), in an idle's rest (3.3), on
     an action's held key (3.13). In the middle of a running motion it is a lost update (below): the check sees it
     only when the usual hold is 3+ (`choppy`) or at the loop's seam (`seam`), not as one 4-frame hold among twos, so
@@ -130,7 +133,10 @@ Measured on Slynyrd's animations (REFERENCES.md) and on this repo's showcase, ju
   moving hold, carried by a breath, a blink or the tail, and the accent eases in and out as above.
 - A heavy, rooted body with no head (a plant, a shell, a statue) may hold still while its light appendages carry
   the idle. A creature with a head keeps the head and ears alive.
-- An action holds one key on purpose (3.13); this rule is for the idle.
+- An action holds one or two keys on purpose (3.13); this rule is for the idle.
+- **The blog's idle options** (Slynyrd 8, 36, 39, text): a breathing idle is the most common; a 2-frame walk used
+  as the idle (36: 2 × 800 ms, measured) and a still idle (39) are used too, and for 8 an idle only has to move,
+  not to make sense. "An idle never stops dead" is this repo's choice, from its calibration set, not the blog's rule.
 - Sources: Animation Mentor, "the moving hold"; AnimSchool, "never still"; Slynyrd 52 (extremes 100 ms, the middle
   50 ms); the twelve principles (slow in and out); Broadleaf Digital (the accent-and-rest idle, a rooted body).
 
@@ -259,6 +265,15 @@ Measured on Slynyrd's animations (REFERENCES.md) and on this repo's showcase, ju
     each quarter stride. A trot moves the diagonal pairs together.
   - Each leg runs contact, drag, rise, forward. The back paw trails its knee; the front elbow moves fast at contact
     and release, and the paw snaps forward on release.
+  - Slynyrd's quadrupeds (25 and 64, text) put it the other way round: each back leg comes a step behind the
+    opposite front leg (64's gorilla: the back legs a step ahead of the arms), the front and back legs cover the same
+    distance (else the body stretches and shrinks like an accordion), and the hips and shoulders rise and fall
+    opposite and equal. The two agree on a walk's quarter-stride spacing; the blog's version also sets the body's
+    rock. A rock from hips to shoulders spread over the torso's length passes pixel-anim-check's `split`; one that
+    moves the rear and the front half rigidly by different amounts, with a 1-px step between, is a `split`.
+- **A walk's four poses** (Slynyrd 50 and 60, text): contact (the lowest), down, passing (the highest), up; the
+  next four mirror them. The head draws a triangle wave, not a smooth sine, which reads as unnatural; arms swing
+  against the legs.
 - **Near and far limbs:** the far limb swings less (one biped's arms: about half), both eased at their extremes
   (small end steps, larger mid-swing). Offset the far leg a little in time or place: never drive the near and far
   legs with one mirrored function. A far limb made by mirroring a near one is shaded a tone darker with little
@@ -266,8 +281,9 @@ Measured on Slynyrd's animations (REFERENCES.md) and on this repo's showcase, ju
 - **Idle: layers, each on its own phase and period,** staggered so no frame stops everything or moves everything:
   1. a breath from the belly up to the chest: 1 px, or a sub-pixel tone (3.1). A soft body (fur, a blob) may widen
      by at most 1 px as it sinks; a shell or a golem keeps its width;
-  2. a slow head drift or bow, the muzzle first and the poll a pose later;
-  3. the ears a pose after the head, with one flick a loop;
+  2. a slow head drift or bow, the head moving whole with its neck (at 1-px steps a muzzle, then a poll, then ears
+     a pose apart read as a shiver: 3.0);
+  3. the ears with the head, one flick a loop riding a pose on which the body moves too;
   4. the tail as a chain, the middle leading and the tip following;
   5. a blink or an eye dart in any long stretch.
 
@@ -277,13 +293,12 @@ Measured on Slynyrd's animations (REFERENCES.md) and on this repo's showcase, ju
   the body's (a flame, a swinging lamp, a banner), really hides the loop. That is a pipeline choice for whoever owns
   the engine side.
 - **Weight on all four feet;** never caught mid-stride. A reference drawn mid-stride gets its legs drawn in.
-- **A big part's 1-px move** (a head of 10-16 % of the figure) is staged over ≥ 2 poses: ears, then face, then neck
-  on the bow; face, then neck, then ears on the rise. Avoid any single step that changes ≥ 8 % of the figure;
-  when one must, hold it ≤ 2 frames. Horns can lead like ears. A head that steps only every second or so needs
-  other parts changing on the same poses, or it jerks after each long hold (`hitch`).
-- **Rate:** for example 18 poses held 2 frames, something changing on every pose, every moving region changing at
-  least every 6 frames. A longer loop (about 2.4 s) makes a big animal's 1-px nod less of a metronome, if the
-  player reads the frame count from the data.
+- **A big part's 1-px move** (a head of 10-16 % of the figure) goes with the body's own step: the head, neck and
+  ears move together on a pose the trunk moves on, never staged part by part over the poses after it (3.0). A head
+  that steps alone after a long hold jerks (`hitch`); give it the body's step instead.
+- **Rate:** the showcase's beast breathes in 8 poses held 3 frames over the top and 2 on the drop (3.0); a longer
+  loop (about 2.4 s) makes a big animal's breath less of a metronome, if the player reads the frame count from the
+  data.
 - Sources: Game Developer, "Animating four-legged beasts" (head offset from hips and chest, tail last); Animation
   Mentor and AnimSchool (layered, never still); MoCap Online (base breathing, a slight head drift); Merck Vet Manual
   (resting breathing rates: a short loop can only stylise them); Slynyrd 52 (parts move different amounts);
@@ -316,15 +331,20 @@ Measured on Slynyrd's animations (REFERENCES.md) and on this repo's showcase, ju
   up in about 0.3 s. This is for links that move several pixels (a tail's swing, a wing); a 1-px rise is carried
   by the parts joined by seams together, and only a free tip lags it.
 - **One pose of lag is enough** at sprite scale, and it may be one-sided: hair, a plume or a free tail tip comes
-  down a pose late and rises with the body (Slynyrd 8: the plume still up as the body drops). A dog's tail base
-  takes the hip's 0, +1, +2, +1 as 0, +1, +1, 0: a pose late and damped (Slynyrd 25).
-- **The head on a bob.** Where the head is joined without a seam (redrawn each pose, or a neck drawn under it at
-  both places), it may hold a pose at the bob's turn while the body moves under it (Slynyrd 50: 0, 0, -2, -1). A
-  head cut from its neck rides the body: a pixel off, it opens the cut. Either way it never takes the rise alone a
-  pose after the body, or the eye ticks (3.4).
+  down a pose late and rises with the body. A tail base may take the hip's 0, +1, +2, +1 as 0, +1, +1, 0: a pose
+  late and damped. Both are this repo's preference: a plume falling late (Slynyrd 8) and a dog's tail root moving
+  so (25) are in neither post's text and could not be measured from their GIFs (unverified, REFERENCES.md).
+- **The head on a bob.** Where the head is joined without a seam (redrawn each pose, or a neck drawn under it at both
+  places), it may hold a pose at the bob's turn while the body moves under it (Slynyrd 50, measured: 0, 0, -2, -1). A
+  head cut from its neck rides the body: a pixel off, it opens the cut. Either way it never takes the rise alone a pose
+  after the body, or the eye ticks (3.4).
 - **Paired appendages** (two antennae, two ears) alternate about half a loop apart, stepping on the poses the body
   moves on; an ear flicking alone while the body holds reads as a hop off the head.
 - **Thin tips drag** 1-2 px against the travel on a contact or impact frame.
+- **A wave along hair, cloth or a flag** (Slynyrd 33, text): the flow points' spacing is the pixels moved a frame
+  times the loop's frames (12 px = 2 px × 6 frames), so the wave loops; it starts small and grows toward the tip, at
+  even spacing and constant speed. In a chain of leaves or tufts, the neighbour tips the frame after; 2-4 positions
+  a leaf and 4 frames are enough. On a small sprite flat colour keeps the motion pure; shading can add noise.
 - **Drive every link from one wave** with a fixed phase offset per link, not keyed link by link. A tail's amplitude
   grows toward the tip; cloth may keep an even amplitude and lag more (about a fifth of its cycle per link).
 - Sources: Babbitt and Williams (successive breaking of joints); SIGGRAPH HyperGraph on follow-through; AzureLib and
@@ -357,7 +377,9 @@ Measured on Slynyrd's animations (REFERENCES.md) and on this repo's showcase, ju
   - Avoid shapes that read as symbols you did not intend.
   - **Timing:** a dust puff runs small, bigger, fading over 3 frames, about 4×4 px. A hit spark is 2 frames: a
     flash, then scattered pixels. Debris flies 2-3 poses after contact. A pop lasts about 3 frames (150 ms). A
-    trail fades over 1-2 frames in darker tones.
+    trail fades over 1-2 frames in darker tones. Slynyrd's (text): a fire of 6 frames × 100 ms with a 50 ms glint
+    (45), a jet's thrust 2 × 50 ms and a propeller 4 × 50 ms (48), a round blast in 3 frames and a hit flash as two
+    frames swapped fast or a colour swap (36, 38).
   - A charge glow may light the creature's own pixels within a few px of its source, no further (Glow, above).
 
 ### 3.13 Actions and attacks
@@ -384,17 +406,37 @@ An action is a gesture, not a cycle. Its timing has its own rules; everything el
   5. Typical ratios of anticipation, strike and recovery: 5:1:5 or 5:1:2 poses.
   6. Pose the strike on a *line of action:* one long line from the planted foot through the body to the striking
      part.
-  - Only the one held key is exempt from the cadence rules (3.2); every other frame keeps them.
+  - Only the one held key is exempt from the cadence rules (3.2); every other frame keeps them (Slynyrd's pattern
+    below holds two).
   - A breath, a spit or a ringing bell has no strike: it needs no counter-move, and 1, 2 and 4 do not apply. Tell
     the check which actions are strikes, and their direction.
+- **Slynyrd's pattern, equally valid** (Slynyrd 9, 36, 53, 56, text): few frames, two of them held.
+  1. *Anticipation:* one frame, held (longer for a heavy weapon). A jab has none: it strikes "without a readable
+     anticipation" (53).
+  2. *Smear:* 1-3 short frames on the strike's path only; never in the anticipation or the recovery. In an
+     animation of few frames it is needed, not optional.
+  3. *Follow-through:* the limb a pixel further than the hit, held.
+  4. *Recovery:* one frame.
+  5. *Overshoot:* the first rest pose shown a pixel back, for one frame (9, 53), then the idle.
+  - Timings in 6 frames (56, text): a sword 100, 50, 50, 50, 100, 50 ms; a spear 200, 50, 50, 50, 150, 50; a hammer
+    250, 50, 50, 50, 300, 100. A 16x16 hero (36, text): the strike, follow-through and overshoot frames 80 ms, then
+    320 ms of idle before the next attack.
+  - Too much anticipation reads as input lag, too much recovery as stickiness; a fully realistic pose looks stiff,
+    so stretch the limbs a little at their farthest (9, 53, text).
+  - The check lets a declared action hold these two keys, each within 13 frames at 30 fps. Its `counter`, `strike`
+    and `recover` warnings ask for the multi-pose pattern above and may show here (pixel-anim-check's SKILL.md says
+    when).
+- **Which to choose:** a quick attack the player triggers takes Slynyrd's pattern (it answers the button at once);
+  a heavy creature's attack that plays by itself, where the telegraph is the point, takes the multi-pose pattern
+  above (this repo's choice).
 - **Arcs, not pistons:** the leading part moves on a curve. The head rises, then drops into the bite; a tail or
   weapon tip sweeps a circle about its joint; a walk's head bob follows an arc too. Over 3+ key positions spanning
   4+ px, a path within 1 px of its straight chord reads as a piston.
-- **Smears** (optional, actions only): on the fastest frame, a part that moves farther than its own length may be
-  stretched along its path (to about the distance moved), or its swept path drawn as one shape in effect colours
-  (a wedge, a crescent, ghost copies, an arc line). It lasts 1 frame, then a trail fades over 1-2 frames in darker
-  tones. Limit it to the moving limb, a body stretch or the effect layer; never smear the face. A clean one-frame
-  strike with no smear reads too.
+- **Smears** (actions only; optional in the multi-pose pattern, needed in Slynyrd's): on the fastest frame, a part that
+  moves farther than its own length may be stretched along its path (to about the distance moved), or its swept path
+  drawn as one shape in effect colours (a wedge, a crescent, ghost copies, an arc line). It lasts 1 frame, then a trail
+  fades over 1-2 frames in darker tones. Limit it to the moving limb, a body stretch or the effect layer; never smear
+  the face. In the multi-pose pattern a clean one-frame strike with no smear reads too.
 - **Hit reactions:** the full displacement on the first frame, then a decay with no second peak (about 100, 70,
   60, 50, 30, 10, 0 % of it). One contrast flash frame may lead it.
 - **Deaths:** the first frame throws the figure fully. It stops recovering halfway, the limbs and head lagging,
@@ -405,7 +447,9 @@ An action is a gesture, not a cycle. Its timing has its own rules; everything el
 
 ### 3.14 Jumps and landings
 
-- **Anticipation:** a squat 15-20 % lower, the width kept or wider, against the coming move.
+- **Anticipation:** a squat 15-20 % lower, the width kept or wider, against the coming move. Not on a jump the
+  player controls: there the jump happens at the press, with no anticipation frame, since one reads as input lag; the
+  jump and the crouch may share a pose, and the landing pose lasts a frame or none (Slynyrd 60, text).
 - **Launch:** a stretch, taller and narrower.
 - **Apex:** two drawings near the top, or the apex held about 2×.
 - **Fall:** the vertical steps grow on the way down; never even.

@@ -29,6 +29,10 @@ All notable changes to this project are listed here. The format follows
 - **pixel-anim-check** `ground` warns when a legged walker's lowest drawn row moves in the move (a whole-figure
   lift; a run leaves the ground on purpose, so it is not a fault).
 
+- **pixel-anim-check** `--min-rate R` (`Spec.min_rate`): `choppy`'s floor for the idle and the move, in updates a
+  second, for a style held longer than the fitted floors allow (the blog's 8-16 px sprites hold a pose 200-800 ms).
+  A value that is no number over 0 is a usage error.
+
 ### Changed
 
 - **Showcase** re-timed for smooth motion. The idles were a ripple of 1-px steps, one part a pose after another (the
@@ -41,20 +45,20 @@ All notable changes to this project are listed here. The format follows
   neck no longer bends row by row when the head is carried off (its ruff slid over the shoulder as a light stripe):
   it moves whole with the head over its own fur at rest, the near foreleg's bare pixels kept over it, and the
   wound-up head sinks with the body; the lizard's held key no longer settles its back alone under a still neck.
-- **pixel-animate** method: a new MOTION.md 3.0, measured on Slynyrd's Pixelblog (all 91 posts read, the animated
-  GIFs split frame by frame): the body's mass moves on every pose and no small part steps alone; further from the
-  body, more pixels a pose; parts joined by a seam move as one piece at 1-px steps, the lag going to a free tip;
-  ease by timing (slow over the top, quick on the drop) and by step size; a planted foot moves with the ground every
-  frame; hold lengths and frame counts as measured. SKILL.md's default rules say the same; 3.3 and 3.10 no longer
-  ask for a part to move while the body holds; 3.5 keeps the two wings from thinning at once and tucks feet in
-  stages. Sources in REFERENCES.md.
-- **pixel-anim-check** rules that forced the clicking: `frozen` reads the frames as drawn (a head carried whole on
-  the body's rise moves); `hop` counts a whole-body shift only when air opens above the contact (legs stretching
-  under a risen trunk are a breath); `uneven` and `lurch` no longer judge the idle (its breath is eased on purpose);
-  `lag`'s "no follow-through" warning asks for it only where the body steps 1.5 px or more; `choppy` lets an idle
-  whose every pose moves the whole body (the top of 80 %+ of its columns shifting) update 2.5 times a second and hold
-  one pose twice the others, as Slynyrd's idles do (200, 200, 400 ms). Judged on this repo's
-  showcase by one person; not rerun on the private calibration set.
+- **pixel-animate** method: a new MOTION.md 3.0, after Slynyrd's Pixelblog (the text of its 91 posts read, animation
+  taught in about 25; the GIFs of 20 measured): the body's mass moves on every pose and no small part steps alone;
+  further from the body, more pixels a pose; parts joined by a seam move as one piece at 1-px steps, the lag going to a
+  free tip; ease by timing (slow over the top, quick on the drop) and by step size; a planted foot moves with the ground
+  every frame; hold lengths and frame counts as measured. SKILL.md's default rules say the same; 3.3 and 3.10 no longer
+  ask for a part to move while the body holds; 3.5 keeps the two wings from thinning at once and tucks feet in stages.
+  Sources in REFERENCES.md.
+- **pixel-anim-check** rules that forced the clicking: `frozen` reads the frames as drawn (a head carried whole on the
+  body's rise moves); `hop` counts a whole-body shift only when air opens above the contact (legs stretching under a
+  risen trunk are a breath); `uneven` and `lurch` no longer judge an idle that breathes (its body moving whole, its
+  other pose changes small; a breath is eased on purpose); `lag`'s "no follow-through" warning asks for it only where
+  the body steps 1.5 px or more; `choppy` lets an idle whose every pose moves the whole body (the top of 80 %+ of its
+  columns shifting) update 2.5 times a second and hold one pose twice the others, as Slynyrd's idles do (200, 200, 400
+  ms). Judged on this repo's showcase by one person; not rerun on the private calibration set.
 - **pixel-anim-check** `jump`: the step ratio is now read against the loop's usual step, the mean of its moving
   steps with the two biggest left out, since a pose out of order makes two big steps. Before, a loop of 6 moving
   steps or fewer could never fire, and one of 8 only at 12 times its other steps. A declared jump's launch and
@@ -89,6 +93,36 @@ All notable changes to this project are listed here. The format follows
 - Docs: corrected numbers in `MOTION.md` (a chain's 1-3 frames are 10-30° of a 36-frame loop; 0.17 at A = 0.58;
   the strike against the median anticipation step) and in the docstrings of `tick`, `frozen`, `split`,
   `ink_lines` and `spine`; `tick`'s SKILL.md row says which lift peaks its body check lets through.
+- **pixel-anim-check** `choppy` lets a move whose every pose change is big (8 %+ of the figure, a new drawing of the
+  stride) update 5.2 times a second: Slynyrd's walks hold a pose 100-280 ms (25 and 50, 8 × 140 ms; 50's six poses 200,
+  180, 180 ms, measured from the GIFs), and four clean walks of the selftest at 120-200 ms a pose failed before. The
+  private set rejected four walk drawings held 6 frames (5 a second), so the margin is narrow (5.0 to 5.4). A move
+  stepping one part over a still body keeps 10.
+- **pixel-anim-check** a declared action may hold two keys (the wind-up and the follow-through), each up to 13
+  frames at 30 fps, the second at least twice the other holds' median; `jump` forgives a whole-figure 1-px step
+  sideways in a declared action (the overshoot: the rest pose a pixel back for a frame). Slynyrd 56's sword, spear
+  and hammer (100-300 ms holds, 20 fps) faulted `jump`, `uneven` and `choppy`; they are now clean of faults. Their
+  `counter`, `strike`, `recover`, `stage` and `piston` warnings stay: the strike checks ask for the multi-pose
+  pattern, and pixel-anim-check's SKILL.md says why they show.
+- **pixel-anim-check** `uneven` and `lurch` judge an idle again unless it breathes: an idle whose body stands while
+  its head and tail step at 1 and 3 frames in turn is `uneven` (it passed after the idle was let off). The five
+  checks relaxed for the showcase each state in their docstring what they no longer catch, and the selftest's
+  `relaxed_bounds` holds both sides: a head pasted in place while the body moves (`frozen`), an idle moving its
+  whole body 2 times a second (`choppy`), a body lifted off its feet's row (`hop`), a walk bobbing 2 px with every
+  part on one frame (`lag`, a warning) are still caught.
+- **pixel-animate** attributions: every rule credited to the blog says whether its number is in the post's text or
+  measured from its GIF, and the claims neither shows are marked unverified (24's float, 25's tail root and wing,
+  37's bat, 60's head, 8's plume); a tail root lagging a pose and damped, and a plume falling late, are this repo's
+  preference. The rule "the body moves on every pose, never a small part alone" and the seam rule are credited to
+  this repo's showcase (one person's judgment), the blog doing otherwise in places (55's hair, 33's leaves, 39's
+  still idle). The steps that staged a move part after part (3.8's idle layers, SKILL.md's heads and ears, the
+  `hitch` advice) are rewritten to carry the part with the body.
+- **pixel-animate** MOTION.md gains Slynyrd's attack pattern beside the multi-pose one (one held anticipation
+  frame, a 1-3 frame smear, the follow-through held, one recovery frame, the overshoot) with the sword, spear and
+  hammer timings and when to use which; no anticipation on a jump the player controls (60); quadruped footfall
+  (25, 64) beside the existing order; a walk's four poses (50, 60); the wave rule (33); the blog's idle options
+  (8, 36, 39: "an idle never stops dead" is this repo's choice); effect timings (36, 45, 48); noise (58), linked
+  from `shimmer`. These thresholds were not rerun on the private 39-creature set; rerun it before a release.
 
 ## [0.1.0] - 2026-11-21
 
