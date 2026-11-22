@@ -15,7 +15,8 @@ A pose is a dict (every offset in whole game px, y down):
     nape        (dx, dy) of the crest against the head (it follows the head a pose late)
     jaw         the lower mandible opened about its hinge (a drawn key, JAW): 0 shut, 1 or 2 px at the tip
     tail        (root, middle, tip): each link's dy against the body; a link takes its parent's place and adds its own
-    feet        (dx, dy) of the feet against the body (they hang a pose behind it), or None: tucked out of sight
+    feet        (dx, dy) of the feet against the body; drawn up into it (dy < 0) they tuck behind the belly (tuck), a
+                few pixels a pose (TUCK in animate.py); None leaves them out
     fx          the effects drawn round the bird: a list of (name, step) (see effects())
     hit_pose    the contact pose, whose bill tip the hit's sparks keep flying from (else the pose itself)
 
@@ -129,13 +130,21 @@ def nape_pixels(dx, dy):
     return out
 
 
+def tuck(foot, body, at):
+    """A foot drawn up into the body (dy < 0) goes behind the belly: its pixels inside the body layer are left out,
+    so the feet tuck up row by row and come out the same way, never vanishing in one frame. At rest (dy >= 0) the
+    foot is drawn whole over the body, as the drawing has it."""
+    return foot if at[1] >= 0 else {q: ch for q, ch in foot.items() if q not in body}
+
+
 def place(p):
     """The pose's parts at their places, before the whole-bird turn: [(group, pixels)]."""
     hx, hy = p["head"]
     nx, ny = p["nape"]
     fdx, fdy = FAR_SET.get(p["far"], (0, 0))
     body = C.layer_pixels("body")
-    feet = [] if p["feet"] is None else [(name, C.layer_pixels(name, *p["feet"])) for name in ("foot_far", "foot_near")]
+    feet = [] if p["feet"] is None else [(name, tuck(C.layer_pixels(name, *p["feet"]), body, p["feet"]))
+                                         for name in ("foot_far", "foot_near")]
     return [("wing_far", C.wing_pixels(p["far"], far=True, dx=fdx, dy=fdy)),
             ("tail", tail_pixels(p["tail"])),
             ("body", body), ("neck", neck_pixels(hx, hy))] + feet + [

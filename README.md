@@ -62,7 +62,7 @@ eye, open outlines, feet off the ground, pops, shimmer, choppy timing, 1-px tick
 a contact sheet and a GIF for a look by eye. Claude uses it whenever an animation is made or changed, and before one
 is shown.
 
-![pixel-anim-check on the wolf's walk: with the eye painted over on frames 6-7 it prints two eye faults and exits 1; the walk as drawn prints 0 faults and exits 0](docs/img/check.png)
+![pixel-anim-check on the wolf's walk: with the eye painted over on frame 6 it prints an eye fault and exits 1; the walk as drawn prints 0 faults and exits 0](docs/img/check.png)
 
 ## Docs
 

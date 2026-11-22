@@ -31,6 +31,30 @@ All notable changes to this project are listed here. The format follows
 
 ### Changed
 
+- **Showcase** re-timed for smooth motion. The idles were a ripple of 1-px steps, one part a pose after another (the
+  trunk, then the neck, then the muzzle, then the ears), so they read as clicks. Each idle is now one breath of 8
+  poses held 3 frames over the rise and the top and 2 on the drop (Pixelblog 52), the trunk, neck and head moving as
+  one piece and the follow-through going to a free tip (the tail). The wolf walks on ones, its planted paws moving a
+  pixel a frame with the road. The bird's feet tuck behind the belly a stage a pose instead of vanishing, and its far
+  wing leads the upstroke, so the two wings are never hidden at once. The lizard's far legs are its near legs a
+  value step darker, standing just behind them, instead of two legs drawn between them. In the attacks the wolf's
+  neck no longer bends row by row when the head is carried off (its ruff slid over the shoulder as a light stripe):
+  it moves whole with the head over its own fur at rest, the near foreleg's bare pixels kept over it, and the
+  wound-up head sinks with the body; the lizard's held key no longer settles its back alone under a still neck.
+- **pixel-animate** method: a new MOTION.md 3.0, measured on Slynyrd's Pixelblog (all 91 posts read, the animated
+  GIFs split frame by frame): the body's mass moves on every pose and no small part steps alone; further from the
+  body, more pixels a pose; parts joined by a seam move as one piece at 1-px steps, the lag going to a free tip;
+  ease by timing (slow over the top, quick on the drop) and by step size; a planted foot moves with the ground every
+  frame; hold lengths and frame counts as measured. SKILL.md's default rules say the same; 3.3 and 3.10 no longer
+  ask for a part to move while the body holds; 3.5 keeps the two wings from thinning at once and tucks feet in
+  stages. Sources in REFERENCES.md.
+- **pixel-anim-check** rules that forced the clicking: `frozen` reads the frames as drawn (a head carried whole on
+  the body's rise moves); `hop` counts a whole-body shift only when air opens above the contact (legs stretching
+  under a risen trunk are a breath); `uneven` and `lurch` no longer judge the idle (its breath is eased on purpose);
+  `lag`'s "no follow-through" warning asks for it only where the body steps 1.5 px or more; `choppy` lets an idle
+  whose every pose moves the whole body (the top of 80 %+ of its columns shifting) update 2.5 times a second and hold
+  one pose twice the others, as Slynyrd's idles do (200, 200, 400 ms). Judged on this repo's
+  showcase by one person; not rerun on the private calibration set.
 - **pixel-anim-check** `jump`: the step ratio is now read against the loop's usual step, the mean of its moving
   steps with the two biggest left out, since a pose out of order makes two big steps. Before, a loop of 6 moving
   steps or fewer could never fire, and one of 8 only at 12 times its other steps. A declared jump's launch and

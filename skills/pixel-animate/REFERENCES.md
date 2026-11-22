@@ -71,6 +71,39 @@ were fitted on larger, textured creatures (the calibration set above), where slo
 rate, so they stay stricter on purpose. What those sources teach is spacing: one large strike step and eased steps
 elsewhere, at a uniform frame time (Broadleaf's attack and Sandy Gordon's attacks hold every frame alike).
 
+## Smooth motion at sprite scale (3.0)
+
+Raymond Schlitter's Pixelblog (Slynyrd), all 91 posts read, its animated GIFs split frame by frame and measured
+(frame counts, each frame's time, each region's offset per frame). The numbers in 3.0 come from these:
+- 8, Intro to Animation (idles, runs of 8, 6 and 4 frames on one loop length):
+  https://www.slynyrd.com/blog/2018/8/19/pixelblog-8-intro-to-animation
+- 9, Melee Attacks: https://www.slynyrd.com/blog/2018/9/8/pixelblog-9-melee-attacks
+- 24, Items (a float eased by step size: 0, -1, -3, -5, -6, -5, -3, -1 at 80 ms):
+  https://www.slynyrd.com/blog/2019/12/21/pixelblog-24-items
+- 25, Motion Cycles (a human and a dog walk, a bird's flap; the dog's tail a pose late and damped):
+  https://www.slynyrd.com/blog/2020/1/23/pixelblog-25-motion-cycles
+- 33, Wind Effects (hair and cloth waves): https://www.slynyrd.com/blog/2021/7/16/pixelblog-33-wind-effects
+- 37, Castlevania study (a bat's wing pose held 160 ms while it moves every 40 ms):
+  https://www.slynyrd.com/blog/2022/3/19/pixelblog-37-classic-castlevania-study
+- 38, Metroid study (the hips in one column): https://www.slynyrd.com/blog/2022/5/24/pixelblog-38-metroid-study
+- 47, Tiny Pixels: https://www.slynyrd.com/blog/2023/11/26/pixelblog-47-tiny-pixels
+- 50, Human Walk Cycle (the head 0, 0, -2, -1; dropping frames on one loop length):
+  https://www.slynyrd.com/blog/2024/5/24/pixelblog-50-human-walk-cycle
+- 52, Idle Fighting Stance (8 poses, 100 ms up and over, 50 ms down; torso and head 1 px a step, limbs 2, fists
+  2-4): https://www.slynyrd.com/blog/2024/9/26/pixelblog-52-idle-fighting-stance
+- 53, Punches and Kicks (interior "sub-pixel" detail): https://www.slynyrd.com/blog/2024/11/25/pixelblog-53-punches-and-kicks
+- 55, Top Down Character Animation (an idle of 200, 200, 400 ms; a run bob of 1, 2, 0):
+  https://www.slynyrd.com/blog/2025/3/24/pixelblog-55-top-down-character-animation
+- 56, Top Down Attacks: https://www.slynyrd.com/blog/2025/5/23/pixelblog-56-top-down-character-attack-animation
+- 59, Tiny Sci-Fi (a run of 100, 150, 100 ms): https://www.slynyrd.com/blog/2025/11/28/pixelblog-59-tiny-sci-fi-pixels
+- 60, Side View Run 'N Gun (the head two poses at each level while the limbs change every pose):
+  https://www.slynyrd.com/blog/2026/1/26/side-view-run-n-gun
+- 64, Ninja Platformer (a gorilla 6 × 200 ms, a spider tank 6 × 100 ms):
+  https://www.slynyrd.com/blog/2026/9/25/pixelblog-64-ninja-platformer
+The blog never teaches how to join cut parts without a seam, nor shifting a shape by a fraction of a pixel: it
+redraws limbs whole each pose. The seam rule in 3.0 comes from this repo's showcase (the wolf's neck, the lizard's
+torso), judged by one person.
+
 ## Stillness and the moving hold (3.3, 3.8)
 
 - Animation Mentor, "Why all animators need to master the moving hold" (*summary only*):

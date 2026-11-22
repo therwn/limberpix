@@ -463,6 +463,18 @@ def _labels(n, **kw):
     return [walker_frame(k / n, "move", labels=True, **kw) for k in range(n)]
 
 
+BREATH = [0, 1, 1, 1, 0, -1, -1, -1]                     # the Pixelblog 52 idle: up a pixel, held over the top,
+BREATH_HOLDS = [3, 3, 3, 3, 2, 2, 2, 2]                  # down a pixel, slow over the top and quick on the drop
+
+
+def breathing(labels=False):
+    """The walker's idle as one 8-pose breath, three times: the body, neck and head rise and fall whole (the head
+    riding the body), the legs stretching and bending under it with the feet planted, the tail wagging a step a pose
+    on the poses the body holds, so every pose moves something."""
+    return [walker_frame(P / 8, "idle", rise=up, nods=False, labels=labels)
+            for _ in range(3) for P, (up, hold) in enumerate(zip(BREATH, BREATH_HOLDS)) for _ in range(hold)]
+
+
 def later_quiet(walker, flier):
     """The clean cases the later checks must leave alone (no fault, no warning of theirs)."""
     ok = True
@@ -485,6 +497,14 @@ def later_quiet(walker, flier):
         ("walker with a patch, read as a sheet", {a: _with_patch(v) for a, v in walker.items()},
          dict(ws, sheets={"idle", "move"})),
         ("flier read as a sheet", flier, dict(fs, sheets={"idle", "move"})),
+        ("walker breathing whole on 200 ms poses (Pixelblog 55's hold)",
+         dict(walker, idle=[walker_frame(P / 4, "idle", rise=r, nods=False) for P, r in enumerate((0, 1, 0, -1))
+                            for _ in range(6)]), ws),
+        ("walker breathing whole on 200, 200, 400 ms poses (Pixelblog 55's rhythm)",
+         dict(walker, idle=[walker_frame(P / 6, "idle", rise=r, nods=False) for P, (r, h) in
+                            enumerate(((0, 6), (1, 6), (0, 12), (-1, 6), (0, 6), (1, 12))) for _ in range(h)]), ws),
+        ("walker breathing the Pixelblog way (head riding the body, eased holds)", dict(walker, idle=breathing()),
+         dict(ws, parts={"idle": breathing(labels=True)}, squash={LEG_L})),   # the legs stretch on purpose
     ]
     for label, loops, kw in quiet:
         warns = []
@@ -759,9 +779,11 @@ def later_cases():
         L["move"] = L["move"][:15]
     cases.append(("gait", "walker", odd))
 
-    def rigid_head(L):                                    # the head rides the body on its own frame: no lag
-        L["move"] = [walker_frame(k / 16, "move", nods=False) for k in range(16)]
-        return {"parts": {"move": _labels(16, nods=False)}, "squash": {LEG_L}}
+    def rigid_head(L):                                    # the body bobs 2 px a step and the head rides it on its
+        rise = [2 if abs(math.sin(2 * math.pi * k / 16)) < 0.5 else 0 for k in range(16)]   # own frame: no lag
+        L["move"] = [walker_frame(k / 16, "move", nods=False, rise=rise[k]) for k in range(16)]   # (at 1 px it is
+        return {"parts": {"move": [walker_frame(k / 16, "move", nods=False, rise=rise[k], labels=True)   # right)
+                                   for k in range(16)]}, "squash": {LEG_L}}
     cases.append(("lag", "walker", rigid_head))
 
     def shrunk(L):                                        # the body part loses a row on one frame

@@ -4,9 +4,10 @@
                                  # beast_art_8x.png, plus in check/ the part strips, the drawing at 1x and its palette
     python animate.py --poses    # also prints each loop's pose per clock tick and flags a tick equal to the one before
 
-All three loops play at 30 fps on one clock: a new pose every 2 frames (15/s), so switching loops never stalls; only
-the attack's strike runs on ones. Every move is whole pixels and nothing is redrawn: each part is the drawing's own
-pixels, placed by beast_rig.py (the legs, the neck and the tail bent row by row between their joints, the trunk
+The loops play at 30 fps. The move runs on ones (a new pose every frame, so a planted paw keeps pace with a road
+scrolling a pixel a frame); the idle's poses are held 3 frames over the rise and the top and 2 on the drop; the
+attack's on twos, its strike on ones. Every move is whole pixels and nothing is redrawn: each part is the drawing's
+own pixels, placed by beast_rig.py (the legs, the neck and the tail bent row by row between their joints, the trunk
 moved whole or stretched in whole-pixel column steps, the ears laid back by sliding their rows, a forepaw and the
 jaw turned whole about their joints by three shears, which keep every pixel); the only pixels added are the open
 mouth's dark inside, the far leg's shadow in a pocket of air two crossing legs close, and the outline, drawn last
@@ -14,41 +15,37 @@ where a pose opens an edge (the lit line where the air is above or to the left, 
 
 Two rules hold in every loop. The torso is one piece: the trunk is one layer, and every pose change moves it whole
 (the paws stay where they are and the legs take the move) or, in the strike alone, stretches it; it is never tilted
-by a lone pixel, so its topline and its belly line never show a step. The head is carried on the neck as a chain on
-the body's beat: the trunk takes a rise or a fall first, a pose later the neck and the back of the head (the head
-turned a little, nose down on a rise and nose up on a fall: beast_rig.py's poll), a pose later the muzzle and the
-eye, and a pose after it the ears; so the head's pixel spreads over two poses and never steps as one block, and
-each of its steps comes with the neck's, the tail's or the ears'.
+by a lone pixel, so its topline and its belly line never show a step. In the idle and the move the trunk, the neck,
+the head and the ears are one piece too: at 1-px steps a head moved a pixel off its body opens a seam at the neck,
+and a chain that takes a rise a pose at a time (the trunk, then the neck, then the muzzle, then the ears) reads as
+four clicks, not one motion. The follow-through goes to the tail, a free end, and never pulls its tip more than a
+pixel off the rump (further, the tail's rows stretch).
 
-  idle    72 frames (36 poses), three breaths of 12 poses (0.8 s). Each breath: the trunk rises a pixel whole, then
-          the neck and the back of the head, then the muzzle and the eye, then the ears, each a pose apart; it
-          holds two poses, then falls the same way. The tail's links take each rise and fall a pose apart, root
-          first, and between them the tail swings out and back as a chain (the links a pose apart, the tip
-          furthest), so something changes on every pose and nothing moves all at once. The first breath carries
-          the near ear's flick; the second is the accent: the ears prick a pixel over the rise and the jaw parts a
-          pixel (a scenting breath, a fang shown), then shuts as the head comes down; the third carries the far
-          ear's flick, and the eye glances back as the loop closes. Poses 11 and 23 are the drawing exactly. The
-          paws never leave their pixels.
-  move    32 frames (16 poses, one stride) over a road scrolling ROAD_SPEED game px a frame. A lateral-sequence
-          walk: near hind, near fore, far hind, far fore, a quarter stride (4 poses) apart. A planted paw goes back
-          exactly 2 px a pose (ROAD_SPEED x 2 frames) for 10 poses, never stopping or catching up; while it is
-          planted its hock stays a set step behind it (behind at contact and passing, opening as the leg pushes
-          off), so the hind leg keeps its drawn angle instead of leaning as one straight column. A swinging paw
-          lifts and reaches forward on an eased path over 6 poses: a hind paw 4 px, the hock flexing back; a
-          forepaw 3 px, the elbow drawing back and the paw turned back about the wrist (40, 65, then 90 degrees,
-          its sole facing back, under the forearm's end), then opening (60, 15) and snapping forward flat. The far
-          legs lift and fold less (the far forepaw about half). The trunk rises a whole pixel, all of it at once,
-          as a hind leg passes under it, twice a stride (each level held 8 frames); the neck and the back of the
-          head take it a pose later, the muzzle a pose after them and the ears a pose after the muzzle; the tail
-          sways once a step and rides a pose behind the trunk. A leg pixel the row bends leave sticking out alone
-          is trimmed, so each leg reads as a drawn line, and where a swinging leg crosses the far one and closes a
-          pocket of air between them, the pocket takes the far leg's shadow, so no hole shows through the legs.
-  attack  39 frames, a lunge and a bite, timed 5:1:7 (anticipation : strike : recovery, in poses).
-          Anticipation (5 poses, 13 frames): the head dips and the ears start back; the trunk sinks 2 px and rocks
+  idle    60 frames: one breath of 8 poses three times (0.67 s each), the Pixelblog 52 idle. The trunk, with the
+          neck, the head and the ears, rises a pixel, holds over the top, comes back, sinks a pixel below rest and
+          holds, the legs stretching and bending under it with the paws planted; the poses are held 3 frames over
+          the rise and the top and 2 on the drop, slow at the top and quick going down. The tail's tip trails the
+          rump by a pose and swings a pixel out over the bottom of the breath, so every pose moves the body or the
+          tip. Pose 0 is the drawing exactly.
+  move    32 frames (one stride, on ones) over a road scrolling ROAD_SPEED game px a frame. A lateral-sequence
+          walk: near hind, near fore, far hind, far fore, a quarter stride (8 frames) apart. A planted paw goes back
+          exactly 1 px a frame (ROAD_SPEED) for 20 frames, never stopping or catching up, so it stays on its pixel
+          of road; while it is planted its hock stays a set step behind it (behind at contact and passing, opening
+          as the leg pushes off), so the hind leg keeps its drawn angle. A swinging paw lifts and reaches forward
+          on an eased path over 12 frames (keys every 2 frames, the frame between at the mid place): a hind paw
+          4 px, the hock flexing back; a forepaw 3 px, the elbow drawing back and the paw turned back about the
+          wrist (40, 65, then 90 degrees, its sole facing back, under the forearm's end; a turn held 2 frames),
+          then opening (60, 15) and snapping forward flat. The far legs lift and fold less. The trunk, the neck, the
+          head and the ears rise a whole pixel together as a hind leg passes under them, twice a stride (each level
+          held 8 frames); the tail sways once a step, its wave stepping on twos.
+  attack  40 frames, a lunge and a bite, timed 5:1:7 (anticipation : strike : recovery, in poses).
+          Anticipation (5 poses, 14 frames): the head dips and the ears start back; the trunk sinks 2 px and rocks
           back, the elbows fold back; the head draws back and the ears lie flat; the trunk goes back again,
-          crouched low on the folded hind legs (the elbows bent, the tail tucked); wound up 3 frames, the trunk
-          sinking a pixel more (4 px down and 3 back). The head and the trunk take turns, the head a pose ahead, so
-          each step is a pixel or two against the strike's seven.
+          crouched low on the folded hind legs (the elbows bent, the tail tucked); wound up 4 frames, the trunk
+          sinking a pixel more (4 px down and 3 back) and the head with it. The head and the trunk take turns, the
+          head a pose ahead, so each step is a pixel or two against the strike's seven. Wherever the head is
+          carried off its rest place the neck goes with it whole, over its own fur at rest (beast_rig.neck_fur), so
+          no seam or stripe opens at the shoulder.
           Strike (2 frames on ones): the trunk lunges 5 px on one line from the planted hind paws, stretched a
           pixel, the forepaws lift with the push (to come down braced), the jaw opens, the head is dragged a beat
           behind, the ears dragged back and the tail left behind (its tip stays where it was, 6 px behind the
@@ -96,9 +93,8 @@ import beast_rig as R  # noqa: E402
 import creature as C  # noqa: E402
 
 KEY = C.KEY
-HOLD = 2                                   # one clock: every pose is held 2 frames
-ROAD_SPEED = 1.0                           # game px a frame the road scrolls under the move (2 px a pose)
-IDLE_POSES, MOVE_POSES = 36, 16
+HOLD = 2                                   # the attack's poses are held 2 frames unless the table says otherwise
+ROAD_SPEED = 1.0                           # game px a frame the road scrolls under the move
 STAND = R.stand
 
 
@@ -110,51 +106,38 @@ def sway(t, period, amps, lag, phase=0.0):
 
 
 # ---- idle ------------------------------------------------------------------------------------------------------------
-# Three breaths a loop, each a chain on the body's beat: the trunk rises a pixel whole (the paws stay; the legs take
-# it), a pose later the neck and the back of the head (the head turned a little, nose down), a pose later the muzzle
-# and the eye, a pose later the ears; the fall goes the same way. The tail's links take each rise and fall a pose
-# apart, root first, and between them it swings out and back as a chain. So every pose changes something, and every
-# step of the head comes with the neck's, the tail's or the ears'.
-BEAT = 12                                  # poses a breath: up 6, down 6
-CHAIN = (1, 2, 3)                          # poses the neck and poll, the muzzle and the ears lag the trunk
-TAIL_LAG = (0, 1, 2, 3)                    # poses each tail link takes the trunk's height after the rump
-SWAY_AT = (3, 4, 5)                        # poses (into a breath) the tail's links swing out, a pose apart, root
-SWAY_BACK = 6                              # first; they swing back in 6 poses later
-FLICK = {4: 1, 5: 2, 6: 1}                 # the near ear's flick, on the first breath
-SCENT = range(16, 20)                      # the second breath: the jaw parted a pixel (a scenting breath, a fang
-PRICK = range(16, 22)                      # shown), the ears pricked a pixel over it
-FLICK_FAR = {28: 1, 29: 2, 30: 1}          # the far ear's flick, on the third
-LOOK = (34, 35)                            # a glance back as the loop closes
-
-
-def level(P):
-    """The trunk's height on the breath: a pixel up for the first half of each beat."""
-    return -1 if P % BEAT < BEAT // 2 else 0
-
-
-def tail_sway(P):
-    """Each link's own swing out (px, its parent's added), one link a pose after the one before."""
-    return [0] + [-1 if (P - at) % BEAT < SWAY_BACK else 0 for at in SWAY_AT]
+# One breath of 8 poses, timed slow over the rise and the top (3 frames a pose, 0.1 s) and quick on the drop (2
+# frames): the Pixelblog 52 idle. Every pose moves the body's mass or the tail's tip, never a lone small part. The
+# trunk, the neck, the head and the ears are one piece: they rise and fall together, so no seam opens at the neck
+# and no ear hops on its own; the legs take the move, stretching and bending under it with the paws planted. The lag
+# is the tail's: its tip trails the rump by a pose, never more than a pixel off it (a tail pulled further stretches),
+# and swings a pixel out over the bottom of the breath. Three breaths a loop.
+TORSO = [0, 1, 1, 1, 0, -1, -1, -1]                      # the trunk's height per pose, up positive: a pixel above
+IDLE_HOLDS = [3, 3, 3, 3, 2, 2, 2, 2]                    # rest and a pixel below; frames each pose is held
+TIP_OUT = range(3, 7)                                    # poses the tail's tip swings a pixel back (out)
+BREATHS = 3
 
 
 def idle_pose(P):
-    P %= IDLE_POSES
-    trunk = level(P)
-    neck, muzzle, ears = (level(P - k) for k in CHAIN)
-    ears -= int(P in PRICK)
-    heights = [level(P - k) for k in TAIL_LAG]
-    tail = [(dx, h - (heights[i - 1] if i else trunk)) for i, (dx, h) in enumerate(zip(tail_sway(P), heights))]
-    return STAND(body=(0, trunk, trunk, 0), neck=(0, neck - trunk), head=(0, muzzle - trunk), poll=neck - muzzle,
-                 ears=(0, ears - muzzle), flick=FLICK.get(P, 0), flick_far=FLICK_FAR.get(P, 0),
-                 look=int(P in LOOK), jaw=int(P in SCENT), tail=tail)
+    P %= len(TORSO)
+    trunk = -TORSO[P]
+    tip = TORSO[P] - TORSO[P - 1] if P else 0               # a pose behind the rump, 1 px at most; caught up on
+                                                             # pose 0, which is the drawing exactly
+    return STAND(body=(0, trunk, trunk, 0), tail=[(0, 0), (0, 0), (0, 0), (-int(P in TIP_OUT), tip)])
 
 
 # ---- move ------------------------------------------------------------------------------------------------------------
-PLANT = 10                                                # poses a paw stays planted, going back 2 px each
-STEP = int(ROAD_SPEED * HOLD)                             # 2 px a pose
-SWING_X = [-8, -5, -1, 3, 7, 9]                           # the swinging paw's eased path forward
-SWING_LIFT = {("hind", True): [1, 3, 4, 4, 2, 1], ("hind", False): [1, 2, 3, 3, 2, 1],   # near legs lift higher
-              ("front", True): [1, 2, 3, 3, 2, 1], ("front", False): [1, 1, 2, 2, 1, 1]}  # than far ones
+# On ones: a new pose every frame. Drawn in place over a road scrolling ROAD_SPEED px a frame, a planted paw goes
+# back exactly that much every frame, so it stays on its pixel of road; held two frames it would lag the road a
+# pixel and then catch up, and the feet would judder against it. The trunk, the neck, the head and the ears rise and
+# fall together, one piece, twice a stride; the tail sways as a chain on its own wave.
+MOVE_FRAMES = 32
+PLANT, SWING = 20, 12                                     # frames a paw stays planted, then swings forward
+STEP = int(ROAD_SPEED)                                    # 1 px a frame
+SWING_X = [-8, -5, -1, 3, 7, 9, 9]                        # the swinging paw's eased path forward, a key every
+SWING_LIFT = {("hind", True): [1, 3, 4, 4, 2, 1, 1], ("hind", False): [1, 2, 3, 3, 2, 1, 1],   # 2 frames, the
+              ("front", True): [1, 2, 3, 3, 2, 1, 1], ("front", False): [1, 1, 2, 2, 1, 1, 1]}  # frame between
+                                                          # taking the mid place; the near legs lift higher
 HOCK = {True: [(-1, 0), (-2, -1), (-1, -1), (0, 0), (0, 0), (0, 0)],  # the hock flexes back as the hind paw lifts
         False: [(-1, 0), (-1, 0), (-1, -1), (0, 0), (0, 0), (0, 0)]}
 HOCK_PLANTED = [-1, -1, -1, -1, -1, 0, 0, 0, 1, 1]       # the hock against the planted paw: behind it, then opening
@@ -162,41 +145,41 @@ ELBOW = {True: [(0, 0), (-1, 0), (-2, 0), (-1, 0), (-1, 0), (0, 0)],   # the elb
          False: [(0, 0), (-1, 0), (-1, 0), (0, 0), (0, 0), (0, 0)]}     # forearm angled forward as the paw reaches)
 FOLD = {True: [40, 65, 90, 60, 15, 0], False: [20, 35, 45, 25, 0, 0]}   # the forepaw folds back at the wrist
                                                                       # (degrees), then snaps forward
-LEG_OFFSET = {"near_hind": 0, "near_front": 4, "far_hind": 8, "far_front": 12}   # lateral sequence
-HIP_UP = {3, 4, 5, 6}                                     # poses (mod 8) with the trunk a pixel up
-MOVE_TAIL = dict(period=8, amps=[0, 1.05, 1.1, 1.2], lag=1, phase=-1.0)
-TAIL_RIDE = [0, 1, 1, 1]                                  # poses each tail link rides behind the hips
+LEG_OFFSET = {"near_hind": 0, "near_front": 8, "far_hind": 16, "far_front": 24}   # lateral sequence
+HIPS_UP = range(6, 14)                                    # frames (mod 16) with the trunk a pixel up
+MOVE_TAIL = dict(period=8, amps=[0, 1.05, 1.1, 1.2], lag=1, phase=-1.0)   # read every 2 frames: the tail's
+                                                                             # wave steps on twos
 HOCK_T = (R.HOCK_Y - R.HIP_Y) / (R.HPAW_Y - R.HIP_Y)
 
 
-def hips(P):
-    return -1 if P % 8 in HIP_UP else 0
-
-
-def leg_at(leg, P):
+def leg_at(leg, t):
     near = leg.startswith("near")
-    k = (P - LEG_OFFSET[leg]) % MOVE_POSES
+    k = (t - LEG_OFFSET[leg]) % MOVE_FRAMES
     if k < PLANT:
-        foot = PLANT // 2 * STEP - 1 - STEP * k
+        foot = PLANT // 2 * STEP - 1 - STEP * k              # 9 .. -10, back 1 px a frame
         if leg.endswith("hind"):                      # the hock kept a set step behind the paw, not on the
-            return (foot, 0, foot + HOCK_PLANTED[k] - R.rnd(foot * HOCK_T), 0, 0)   # line from the hip
+            return (foot, 0, foot + HOCK_PLANTED[k // 2] - R.rnd(foot * HOCK_T), 0, 0)   # line from the hip
         return (foot, 0, 0, 0, 0)
-    s = k - PLANT
+    s = k - PLANT                                             # the swing: 12 frames forward
+    i, half = s // 2, s % 2
+    lifts = SWING_LIFT[(leg.split("_")[1], near)]
+    x = R.rnd(SWING_X[i] + (SWING_X[i + 1] - SWING_X[i]) * half / 2)
+    lift = max(1, R.rnd(lifts[i] + (lifts[i + 1] - lifts[i]) * half / 2))
     if leg.endswith("hind"):
-        j, fold = HOCK[near][s], 0
+        j, fold = HOCK[near][s // 2], 0
     else:
-        j, fold = ELBOW[near][s], FOLD[near][s]
-    return (SWING_X[s], SWING_LIFT[(leg.split('_')[1], near)][s], j[0], j[1], fold)
+        j, fold = ELBOW[near][s // 2], FOLD[near][s // 2]   # the paw's turn steps on twos: a turn held 2 frames
+    return (x, lift, j[0], j[1], fold)
 
 
-def move_pose(P):
-    trunk = hips(P)                                          # the trunk rises whole, one piece
-    neck, muzzle, ears = (hips(P - k) for k in CHAIN)        # the neck and poll, the muzzle, the ears a pose apart
-    rides = [hips(P - k) for k in TAIL_RIDE]                 # each link's height: the root on the hips, the rest a
-    tail = [(R.rnd(v), rides[i] - (rides[i - 1] if i else trunk))   # pose behind them
-            for i, v in enumerate(sway(P, **MOVE_TAIL))]
-    return STAND(body=(0, trunk, trunk, 0), neck=(0, neck - trunk), head=(0, muzzle - trunk), poll=neck - muzzle,
-                 ears=(0, ears - muzzle), tail=tail, legs={leg: leg_at(leg, P) for leg in LEG_OFFSET})
+def hips(t):
+    return -1 if t % 16 in HIPS_UP else 0
+
+
+def move_pose(t):
+    trunk = hips(t)                                          # the trunk, neck, head and ears rise whole, one piece
+    tail = [(R.rnd(v), 0) for v in sway(t // 2, **MOVE_TAIL)]
+    return STAND(body=(0, trunk, trunk, 0), tail=tail, legs={leg: leg_at(leg, t) for leg in LEG_OFFSET})
 
 
 # ---- attack ----------------------------------------------------------------------------------------------------------
@@ -272,7 +255,7 @@ ATTACK = [(2, dict()),
           (2, dict(body=(-1, 2, 2, 0), head=(0, 1), ears=(0, 1), pin=3, tail=TUCK, legs=legs((-1, 0), (-2, 0)))),
           (2, dict(body=(-1, 2, 2, 0), head=(-1, 1), ears=(0, 1), pin=5, tail=TUCK, legs=legs((-1, 0), (-2, 0)))),
           (2, dict(body=(-3, 3, 3, 0), head=(-1, 1), ears=(0, 1), pin=5, tail=TUCK, legs=legs((-3, 1), (-3, 0)))),
-          (3, dict(body=(-3, 4, 4, 0), head=(-1, 0), ears=(0, 1), pin=5, tail=TUCK,            # wound up (held)
+          (4, dict(body=(-3, 4, 4, 0), head=(-1, 1), ears=(0, 1), pin=5, tail=TUCK,            # wound up (held)
                    legs=legs((-3, 1), (-3, 1)))),
           # strike, on ones: the trunk lunges first, stretched, the forepaws lifting to reach, the head dragged a beat
           # behind with the jaw opening; then the rump catches up, the head and neck shoot the last pixels forward,
@@ -326,8 +309,8 @@ def attack_poses():
 # ---- frames, strips --------------------------------------------------------------------------------------------------
 def loops():
     """{loop: [(rendered pose, frames held)]} for every loop."""
-    return {"idle": [(R.render(idle_pose(P)), HOLD) for P in range(IDLE_POSES)],
-            "move": [(R.render(move_pose(P)), HOLD) for P in range(MOVE_POSES)],
+    return {"idle": [(R.render(idle_pose(P)), IDLE_HOLDS[P]) for _ in range(BREATHS) for P in range(len(TORSO))],
+            "move": [(R.render(move_pose(t)), 1) for t in range(MOVE_FRAMES)],
             "attack": [(R.render(p), n) for n, p in attack_poses()]}
 
 
@@ -373,7 +356,7 @@ def drawing(box):
 
 def print_poses():
     """The check before rendering: each tick's pose, and no tick equal to the one before (a lost update)."""
-    for name, n, fn in (("idle", IDLE_POSES, idle_pose), ("move", MOVE_POSES, move_pose)):
+    for name, n, fn in (("idle", len(TORSO), idle_pose), ("move", MOVE_FRAMES, move_pose)):
         frames = [R.render(fn(t)) for t in range(n)]
         print(f"{name}:")
         for t in range(n):

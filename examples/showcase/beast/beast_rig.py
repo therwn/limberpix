@@ -287,6 +287,22 @@ def place_ear(key, at, flick=0, pin=0):
 
 
 # ---- the frame -------------------------------------------------------------------------------------------------------
+def neck_fur(front):
+    """The neck at rest on the shoulders with its outline turned to fur: each outline pixel takes the first fur pixel
+    right of it in its row. Laid under the neck when the neck is carried off its place, it fills what the move uncovers
+    with the neck's own fur, while the moved neck alone draws the line along its back, a single line that moves with
+    it. The neck moves whole: bent row by row, its ruff's light tufts slid back over the dark shoulder as a stripe;
+    over the shoulder's own front (the drawing hides it under the neck and paints it light), a stripe showed too;
+    and with the rest neck's outline kept, its line and the moved one stood side by side as a thick one."""
+    px = bend(BASE["K"], NECK_TOP, NECK_LOW, front, front)
+    out = {}
+    for (x, y), ch in px.items():
+        if ch in OUTLINE:
+            ch = next((px[(xx, y)] for xx in range(x + 1, x + 12) if px.get((xx, y), "o") not in OUTLINE), ch)
+        out[(x, y)] = ch
+    return out
+
+
 def layers(pose):
     """[(pixels, part, near?)] back to front for one pose."""
     body = pose["body"]
@@ -307,7 +323,15 @@ def layers(pose):
     out.append((place_body(body), "body", True))
     out += segs("4")
     nk = pose.get("neck") or pose["head"]
-    out.append((bend(BASE["K"], NECK_TOP, NECK_LOW, (front[0] + nk[0], front[1] + nk[1]), front), "neck", True))
+    rest_neck = bend(BASE["K"], NECK_TOP, NECK_LOW, front, front)
+    if nk != (0, 0):                       # carried off the shoulders: the neck moves whole with the head, over its
+        out.append((neck_fur(front), "neck", True))   # own fur at rest, which fills what it uncovers; the near
+        out.append(({(x + front[0] + nk[0], y + front[1] + nk[1]): ch for (x, y), ch in BASE["K"].items()}, "neck",
+                     True))                # foreleg's pixels the neck leaves bare at rest are laid over it again, so
+        out += [({q: ch for q, ch in seg.items() if q not in rest_neck}, part, near)   # a neck dipped onto the
+                for seg, part, near in segs("4")]                                       # shoulder never eats them
+    else:
+        out.append((rest_neck, "neck", True))
     out += segs("3")
     far, far_strip = place_ear("F", ea, pose["flick_far"], pose["pin"])
     near, near_strip = place_ear("N", ea, pose["flick"], pose["pin"])

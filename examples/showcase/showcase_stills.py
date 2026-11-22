@@ -47,7 +47,8 @@ def heading(im, title, sub, M=48):
 
 
 # ---- check.png ----------------------------------------------------------------------------------------------------
-LOST = (6, 7)                                             # the beast's move frames whose eye is painted over
+LOST = (6,)                                               # the beast's move frame whose eye is painted over (the
+                                                          # walk is on ones: a frame is a pose)
 GLINT = "#b3631f"                                         # the eye's lower half, painted over with it
 
 
@@ -96,7 +97,7 @@ def check_png(path, S=5):
     broken = dict(L, move=[lose_eye(f, c["eye"], GLINT) if k in LOST else f for k, f in enumerate(L["move"])])
     sp = ms.spec(key)
     runs = {"broken": (broken, pac.check(broken, sp)), "fixed": (L, pac.check(L, sp))}
-    if runs["fixed"][1] or [ln.split(":")[0] for ln in runs["broken"][1]] != ["eye", "eye"]:
+    if runs["fixed"][1] or [ln.split(":")[0] for ln in runs["broken"][1]] != ["eye"] * len(LOST):
         sys.exit(f"check: unexpected faults {runs['broken'][1]} / {runs['fixed'][1]}")
     alpha = np.any([ms.rgba(f)[..., 3] > 0 for f in L["move"]], 0)
     ys, xs = np.nonzero(alpha)
@@ -106,10 +107,10 @@ def check_png(path, S=5):
     fw, fh = bx1 - bx0, by1 - by0
     pad = 3
     tw, th = (fw + 2 * pad) * S, (fh + 2 * pad) * S
-    shown = [p for p in poses(L["move"]) if 4 <= p[0] <= 9]      # the lost pose and its neighbours
+    shown = [p for p in poses(L["move"]) if LOST[0] - 1 <= p[0] <= LOST[-1] + 1]   # the lost pose and its neighbours
     gap, M = 24, 48
     W = M * 2 + len(shown) * tw + (len(shown) - 1) * gap
-    heights = {"broken": 3, "fixed": 1}
+    heights = {"broken": 1 + len(LOST), "fixed": 1}
     H = TOP + sum(60 + th + 52 + terminal([[("x", TEXT)]] * heights[r], 10).height + 40 for r in runs) + 8
     im = card(W, H)
     heading(im, "pixel-anim-check", "The walk with the eye painted over on one pose, and as drawn.")
@@ -122,7 +123,8 @@ def check_png(path, S=5):
         pw = pixfont.width(pill, 3) + 32
         d.rounded_rectangle((M, y, M + pw, y + 38), 19, fill=col)
         put(im, M + pw / 2, y + 19, pill, BG, 3, centre=True)
-        put(im, M + pw + 20, y + 19 - CAP * 3 // 2, f"eye lost on frames {LOST[0]}-{LOST[1]}" if bad else
+        lost = f"frame {LOST[0]}" if len(LOST) == 1 else f"frames {LOST[0]}-{LOST[-1]}"
+        put(im, M + pw + 20, y + 19 - CAP * 3 // 2, f"eye lost on {lost}" if bad else
             "every pose as drawn", TEXT, 3)
         y += 60
         x = M
@@ -142,7 +144,8 @@ def check_png(path, S=5):
                 ex, ey = x + (pad + eye_at[0] + 0.5) * S, y + (pad + eye_at[1] + 0.5) * S
                 r = 4.0 * S
                 d.ellipse((ex - r, ey - r, ex + r, ey + r), outline=col, width=4)
-            put(im, x + tw / 2, y + th + 28, f"frames {k0}-{k1}", col if k0 in LOST else MUTED, 3, centre=True)
+            label = f"frame {k0}" if k0 == k1 else f"frames {k0}-{k1}"
+            put(im, x + tw / 2, y + th + 28, label, col if k0 in LOST else MUTED, 3, centre=True)
             x += tw + gap
         y += th + 52
         ok = GREEN if not faults else RED

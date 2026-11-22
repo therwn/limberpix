@@ -17,10 +17,9 @@ one-turn curl lit on its outer top-left edge; its ochre underside stripe starts 
 fades out. The legs crouch: each thigh or upper arm leaves the body with shaded mass and bends at a clear knee (forward)
 or elbow (back), a short shin or forearm runs down to the foot, and each foot grips with two mitten pads, a back pair
 and a front pair. A dark crease on the body marks the back of the near upper arm, and a shadow notch the point of its
-elbow. The far legs stand a full value step darker, inked all round with no lit rim, each bent like its near partner at
-a gentler angle (the far hind's knee hidden under the belly and its shin raking back, the far front's elbow just below
-the belly and its forearm raking forward), their small two-pad feet in the gaps between the near feet with a pixel of
-air on each side (the far hind foot ahead of the near hind, the far front foot just behind the near front). Side view,
+elbow. The far legs are the near legs a full value step darker, inked all round with no lit rim, each standing 3 px
+ahead of its near twin and turned the same way (FAR_SHIFT), so at rest only a dark edge of each shows past it and the
+lizard reads as two legs a side; the walk carries them out from behind. Side view,
 facing right; 21 colours in hue-shifted ramps (greens from deep blue-teal to pale yellow, teals for the bands, ochres
 from plum-brown to ochre), the lit outline (a dark green) on the top-left contours and the near-black ink on the shadow
 side and at contacts.
@@ -95,54 +94,6 @@ TONGUE = "tuv"            # the tongue's own colours (and "m", the mouth): effec
 EFFECTS = TONGUE + "m"
 
 LAYERS = {
-    "far_hind_thigh": (28, 25, [
-        ".oooo.......",
-        "o3333o......",
-        "o33322oo....",
-        ".o3322222o..",
-        "..o3322222o.",
-        "...o332222o.",
-        "....o332222o",
-        ".....o32222o",
-        "......o3222o",
-        ".......oooo.",
-    ]),
-    "far_hind_shin": (32, 32, [
-        "...o32o",
-        "...o32o",
-        "...o32o",
-        "..o32o.",
-        "..o32o.",
-        ".o32o..",
-        ".o32o..",
-        "o32o2o.",
-        "o3oo2o.",
-        "ooo.oo.",
-    ]),
-    "far_front_arm": (38, 25, [
-        ".....oooo.",
-        "....o3332o",
-        "...o33322o",
-        "...o3322o.",
-        "..o3322o..",
-        "..o322o...",
-        ".o3322o...",
-        ".o322o....",
-        "o322o.....",
-        ".ooo......",
-    ]),
-    "far_front_hand": (38, 32, [
-        "o32o....",
-        "o32o....",
-        ".o32o...",
-        "..o32o..",
-        "..o32o..",
-        "...o32o.",
-        "...o32o.",
-        "..o32o2o",
-        "..o3oo2o",
-        "..ooo.oo",
-    ]),
     "tail": (1, 16, [
         "...................65..",
         "...............O6777653",
@@ -342,6 +293,17 @@ LAYERS = {
         "......oooo...ooo",
     ]),
 }
+# The far legs are the near legs a value step darker (their lit ink turned to the shadow ink, so they are inked all
+# round), set FAR_SHIFT px ahead of them: in a side view a far leg stands just behind its near twin, the same shape
+# turned the same way, and shows only where the walk carries it out from behind. Drawn on their own between the
+# near legs, as they once were, the two far legs read as two more near ones: a lizard of four legs a side.
+FAR_SHIFT = 3
+FAR_TONE = {"7": "6", "6": "5", "5": "4", "4": "3", "3": "2", "2": "1", "O": "o"}
+for _far, _near in (("far_hind_thigh", "near_hind_thigh"), ("far_hind_shin", "near_hind_shin"),
+                    ("far_front_arm", "near_front_arm"), ("far_front_hand", "near_front_hand")):
+    _x, _y, _rows = LAYERS[_near]
+    LAYERS[_far] = (_x + FAR_SHIFT, _y, ["".join(FAR_TONE.get(ch, ch) for ch in row) for row in _rows])
+
 ORDER = ["far_hind_thigh", "far_hind_shin", "far_front_arm", "far_front_hand", "tail", "body", "neck", "mouth",
          "tongue", "jaw", "head", "turret", "pupil",
          "near_hind_thigh", "near_hind_shin", "near_front_arm", "near_front_hand"]
@@ -363,10 +325,10 @@ RIG = {
     # each leg: the hip or shoulder (it stays on the body), the knee or elbow (where its two layers meet), the
     # ankle or wrist, and the back and front pads' tips (their soles on the row above the ground ink)
     "near_hind": [(23, 26), (32, 32), (25, 37), (21, 40), (30, 40)],
-    "far_hind": [(30, 26), (36, 33), (34, 38), (33, 40), (36, 40)],
-    "far_front": [(45, 26), (39, 33), (42, 38), (41, 40), (44, 40)],
     "near_front": [(47, 26), (43, 32), (51, 37), (47, 40), (56, 40)],
 }
+for _leg in ("hind", "front"):                    # the far legs' points: the near ones', FAR_SHIFT ahead
+    RIG[f"far_{_leg}"] = [(x + FAR_SHIFT, y) for x, y in RIG[f"near_{_leg}"]]
 
 
 def layer_pixels(part, dx=0, dy=0):

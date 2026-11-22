@@ -11,47 +11,42 @@ by lizard_rig.py. The legs are posed by two-bone inverse kinematics and turned, 
 bent leg keeps its closed outline. The only pixels added are outline where a pose opens an edge (lit ink on the lit
 side), the open mouth and the hit spark.
 
-Two rules hold in every loop. The torso is one piece: it moves whole, and the breath lifts or lowers the whole back
-at once (every column together), so its topline and belly line never show a step. The head is carried on the neck
-as a chain: the torso first, the neck with it or a pose later, then the head a band a pose from the bottom up (the
-jaw and the low face, the eye's band, the casque last), so a 1-px rise or fall spreads over poses like a small turn
-and never moves the head as one block after a long hold.
+Two rules hold in every loop. The torso is one piece: it moves whole (in the idle's breath too, the legs taking the
+move), so its topline and belly line never show a step and no seam opens where the neck lies over it. The head rides
+the neck and the neck the back on the same pose: at 1-px steps a head whose bands take a rise a pose apart (the jaw,
+the eye band, the casque) reads as clicks, not one motion. The follow-through goes to the tail's coil, a free end.
 
-  idle    64 frames (32 poses). The breath runs twice a loop (16 poses): the back rises a pixel along its whole
-          length, the neck a pose later, then the head's low band, its eye band and the casque, a pose apart; it
-          holds, then falls in the same order. The tail's coil loosens and curls back in on the same beat, mostly
-          in the poses the head's chain holds: the left side, the bottom, then the inner whorl move out from the
-          coil's centre a pose apart, root first (the whorl moving whole, so its shape holds), and back in the
-          same order. Once a loop the turret looks about (its rings and lit cap turn inside its rim, the pupil
-          leading a pixel further: back, up, ahead, down, forward, ahead; the pupil never steps more than a
-          pixel, each place held 4 frames or more) and the throat's pouch swells (1, 2, 2, 1 px). So something
-          changes on every pose, and the head's steps come with the torso's, the neck's or the tail's. Pose 28 is
-          the drawing exactly. The feet never move.
+The far legs are the near ones a value step darker, set 3 px ahead of them (creature.FAR_SHIFT): at rest each stands
+behind its near twin, and the walk carries it out from behind half a stride later, so the lizard reads as four legs,
+two a side, not four in a row.
+
+  idle    60 frames: one breath of 8 poses three times, the Pixelblog 52 idle, held 3 frames over the rise and the top
+          and 2 on the drop. The whole torso rises a pixel, holds, comes back and sinks a pixel below rest, the neck
+          and the head with it and the legs stretching and bending under it, the feet planted; the coil loosens after
+          the rise and curls back in after the fall, a link a pose from the root (the whorl moving whole, so its shape
+          holds), so every pose moves the back or a link of the coil. Once a loop the turret looks about (its rings
+          and lit cap turn inside its rim, the pupil leading a pixel further; the pupil never steps more than a pixel)
+          and the throat's pouch swells (1, 2, 2, 1 px). Pose 0 is the drawing exactly. The feet never move.
   move    32 frames (16 poses, one stride) over a road scrolling ROAD_SPEED game px a frame. A lateral-sequence
           walk with lateral couplets: the near hind, the near front 2 poses later, then the far hind and the far
-          front half a stride after them. So the two far legs never hide behind the near ones at the same time,
-          and never meet under the belly at the same time. A planted foot goes back exactly 1 px a pose
-          (ROAD_SPEED x 2 frames) for 10 poses, never stopping or catching up; a swinging foot lifts and reaches
-          forward on an eased path over 6 poses, the leg folding at the knee or elbow as the foot rises. The far
-          feet lift less; the far front's stride sits a pixel ahead of its drawn place, so it crosses the far hind
-          less, and the near front's a pixel behind, so its arm never hides the throat. The torso rises a whole
-          pixel twice a stride (the second rise held a pose longer, so the two steps are not mirror twins), whole,
-          with the neck and the jaw on it; the head's eye band takes the rise a pose late and the casque a pose
-          after it; the tail takes it link by link, the tip two poses late; the pupil glances back.
-  attack  34 frames, a tongue strike. Anticipation (7 small poses, one part moving at a time, none changing over
-          about 30 % of the figure): the turret locks forward on the prey and the tail's curl swings back; the
-          head draws back, then the body rocks back a pixel under it; the head lowers to aim, then the body
-          follows; the head draws back and down again, then the throat swells, loaded: the head 3 px back and
-          2 px down (an arc), the body 2 px back over its planted feet, the coil 4 px back and down, root first,
-          each swing of the tail on a head pose. Strike (2 frames on ones): the body lunges home and the head
-          5 px forward, the mandible turns down about its hinge (behind and below the eye) as one solid piece, the
-          open mouth solid dark red from the hinge to the lip, and the tongue shoots out stretched (a 1-frame
-          smear), then straight to full reach with a flash at the club. Held key (7 frames, a moving hold): sparks
-          fly from the club, the back settles a pixel along its whole length and the head follows a pose later,
-          the tail whips up and forward past rest. Recovery (5 poses, steps growing, then shrinking): the tongue
-          reels in over three poses and the jaw closes over four; the back rises while the jaw is still closing,
-          the head comes home a pose behind it, and the turret rolls once as it settles. The feet never leave
-          their pixels.
+          front half a stride after them. A planted foot goes back exactly 1 px a pose (ROAD_SPEED x 2 frames) for
+          10 poses, never stopping or catching up; a swinging foot lifts and reaches forward on an eased path over
+          6 poses, the leg folding at the knee or elbow as the foot rises. The far feet lift less. The torso rises a
+          whole pixel twice a stride (the second rise held a pose longer, so the two steps are not mirror twins),
+          whole, with the neck and the head on it; the tail's coil takes it a pose late; the pupil glances back.
+  attack  34 frames, a tongue strike. Anticipation (7 small poses, one part moving at a time, none changing over about
+          30 % of the figure): the turret locks forward on the prey and the tail's curl swings back; the head draws
+          back, then the body rocks back a pixel under it; the head lowers to aim, then the body follows; the head
+          draws back and down again, then the throat swells, loaded: the head 3 px back and 2 px down (an arc), the
+          body 2 px back over its planted feet, the coil 4 px back and down, root first, each swing of the tail on a
+          head pose. Strike (2 frames on ones): the body lunges home and the head 5 px forward, the mandible turns
+          down about its hinge (behind and below the eye) as one solid piece, the open mouth solid dark red from the
+          hinge to the lip, and the tongue shoots out stretched (a 1-frame smear), then straight to full reach with a
+          flash at the club. Held key (7 frames, a moving hold): sparks fly from the club and the tail whips up and
+          forward past rest, the body held (a back settling alone would split the torso from the neck over it; settled
+          whole, it was a recovery step half the strike's). Recovery (5 poses, steps growing, then shrinking): the
+          tongue reels in over three poses and the jaw closes over four; the head comes home a pixel a pose, and the
+          turret rolls once as it settles. The feet never leave their pixels.
 
 ROAD_SPEED = 0.5 game px a frame (1 px a pose): show the move over a ground scrolling that fast.
 
@@ -83,7 +78,7 @@ import lizard_rig as R  # noqa: E402
 KEY = C.KEY
 HOLD = 2                                  # one clock: every pose is held 2 frames
 ROAD_SPEED = 0.5                          # game px a frame the road scrolls under the move (1 px a pose)
-IDLE_POSES, MOVE_POSES = 32, 16
+MOVE_POSES = 16
 TAIL_LINKS = len(R.SPINE) - 1
 STILL = {leg: (0, 0, 0) for leg in R.LEGS}
 
@@ -108,45 +103,43 @@ def chain(level, t, lags):
 
 
 # ---- idle -----------------------------------------------------------------------------------------------------------
-BEAT = 16                                                   # the breath, twice a loop
-BREATH = [1] * 8 + [0] * 8                                  # the back up a pixel along its whole length, then down
-IDLE_LAGS = (1, 2, 3, 4)                                    # the neck, the head's low band, its eye band, the casque
-# The coil loosening and curling back in on the breath's beat, mostly while the head's chain holds: the left side
-# (link 4), the bottom (5, 6) and the inner whorl (7-9, moving whole, so its shape holds) each a pixel away from the
-# coil's centre, a pose apart, root first, and back in the same order. Neighbours never differ by more than a pixel
-# a side, so the seams stay closed; links 0-3 (the root and the top of the curl) stay.
-COIL_OUT = {4: (-1, 0), 5: (-1, 1), 6: (0, 1), 7: (1, 0), 8: (1, 0), 9: (1, 0)}
-COIL_LAG = {4: 0, 5: 1, 6: 2, 7: 3, 8: 3, 9: 3}
-COIL = [1] * 8 + [0] * 8                                    # out, then in
-COIL_AT = 13                                                # the pose the first link starts out on
-
-
-def coil(t):
-    lv = {i: COIL[(t - COIL_AT - COIL_LAG[i]) % BEAT] for i in COIL_OUT}
-    return tail_of({i: (dx * lv[i], dy * lv[i]) for i, (dx, dy) in COIL_OUT.items()})
-
-
-THROAT = [0] * 20 + [1, 2, 2, 1] + [0] * 8                  # the gular pouch swells once
+# One breath of 8 poses, three a loop, timed slow over the rise and the top (3 frames a pose) and quick on the drop (2
+# frames): the Pixelblog 52 idle. The whole torso rises a pixel and sinks a pixel below rest, the legs stretching and
+# bending under it with the feet planted, and the neck and the head go with it on the same pose: one piece, so no seam
+# opens where the neck lies over the torso's front (a back lifted alone over a still belly, with the neck and head
+# carried whole, split the torso there) and the head never steps on its own. The follow-through is the tail's, a free
+# end: its coil loosens after the back rises and curls back in after it falls, a link a pose, root first, so every
+# pose moves the back or a link of the coil. Once a loop the turret looks about and the throat's pouch swells.
+BREATH = [0, 1, 1, 1, 0, -1, -1, -1]                        # the torso's height per pose: up 1, rest, down 1
+IDLE_HOLDS = [3, 3, 3, 3, 2, 2, 2, 2]                       # frames each pose is held
+BREATHS = 3
+COIL_OUT = {4: (-1, 0), 5: (-1, 1), 6: (0, 1), 7: (1, 0), 8: (1, 0), 9: (1, 0)}   # each coiled link a pixel out,
+COIL_LAG = {4: 1, 5: 2, 6: 3, 7: 4, 8: 4, 9: 4}            # poses behind the back: root first, the whorl whole
+IDLE_N = len(BREATH) * BREATHS                              # 24 poses
+THROAT = [0] * 14 + [1, 2, 2, 1] + [0] * 6                  # the gular pouch swells once
 #            roll       pupil: the turret's shading turns, the pupil leading a pixel further; a pixel a step at most
-LOOK = {0: ((0, 0), (0, 0)), 3: ((-1, 0), (-1, 0)), 5: ((-1, 0), (-2, 0)), 9: ((-1, -1), (-1, -1)),
-        11: ((0, -1), (0, -1)), 14: ((0, 0), (0, 0)), 19: ((0, 1), (0, 1)), 24: ((1, 0), (1, 0)),
-        26: ((0, 0), (0, 0))}
-# (pose 28 is the drawing exactly: the breath out, the head settled, the coil in, the eye ahead, the pouch flat)
+LOOK = {0: ((0, 0), (0, 0)), 2: ((-1, 0), (-1, 0)), 4: ((-1, 0), (-2, 0)), 7: ((-1, -1), (-1, -1)),
+        8: ((0, -1), (0, -1)), 10: ((0, 0), (0, 0)), 14: ((0, 1), (0, 1)), 18: ((1, 0), (1, 0)),
+        20: ((0, 0), (0, 0))}
+# (pose 0 is the drawing exactly: the back at rest, the coil in, the eye ahead, the pouch flat)
 
 
 def _at(table, t):
     return table[max(k for k in table if k <= t)]
 
 
-def idle_level(t):
-    return -BREATH[t % BEAT]
+def coil(t):
+    """The coil loosening on the breath as a wave from its root: each link a pixel out while the back was up its lag
+    poses ago, so neighbours never differ by more than a pixel and the seams stay closed."""
+    out = {i: BREATH[(t - COIL_LAG[i]) % len(BREATH)] > 0 for i in COIL_OUT}
+    return tail_of({i: (dx * out[i], dy * out[i]) for i, (dx, dy) in COIL_OUT.items()})
 
 
 def idle_pose(t):
-    neck, lift = chain(idle_level, t, IDLE_LAGS)
+    t %= IDLE_N
+    b = BREATH[t % len(BREATH)]
     roll, pupil = _at(LOOK, t)
-    return rest(breath=BREATH[t % BEAT], neck=(0, neck), lift=lift, roll=roll, pupil=pupil, throat=THROAT[t],
-                tail=coil(t))
+    return rest(body=(0, -b), neck=(0, -b), head=(0, -b), roll=roll, pupil=pupil, throat=THROAT[t], tail=coil(t))
 
 
 # ---- move -----------------------------------------------------------------------------------------------------------
@@ -158,8 +151,9 @@ SWING_LIFT = {True: [1, 2, 3, 3, 2, 1], False: [1, 1, 2, 2, 1, 1]}     # near fe
 LEG_OFFSET = {"near_hind": 0, "near_front": 2, "far_hind": 8, "far_front": 10}
 LEG_SHIFT = {"far_front": 1, "near_front": -1}       # px a stride sits ahead of (or behind) the foot's drawn place
 BOB = [0, 0, 0, 0, -1, -1, -1, 0, 0, 0, 0, -1, -1, -1, -1, -1]        # up a whole pixel twice a stride
-MOVE_LAGS = (0, 0, 1, 2)       # the neck and the jaw ride the shoulders; the eye's band a pose late, the casque 2
-TAIL_DELAY = [0, 0, 1, 1, 1, 2, 2, 2, 2, 2]           # poses each link takes the body's rise after the rump
+MOVE_LAGS = (0, 0, 0, 0)       # the neck and the whole head ride the shoulders: no band steps on its own
+TAIL_DELAY = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]           # poses each link takes the body's rise after the rump: the
+                                                      # coil a pose late, a pixel off it at most
 MOVE_PUPIL = [(0, 0)] * 6 + [(-1, 0)] * 6 + [(0, 0)] * 4     # a glance back during the second step
 
 
@@ -229,11 +223,11 @@ ATTACK = [(2, dict()),
           # strike: a smear ...
           (1, dict(LOCK, head=(2, 0), neck=(1, 0), jaw=4, tongue=(102, 0), spark=1, tail=FLICK[0])),   # contact
           (2, dict(LOCK, head=(2, 0), neck=(1, 0), jaw=4, tongue=(102, 0), spark=2, tail=FLICK[1])),   # held key:
-          (2, dict(LOCK, head=(2, 0), neck=(1, 0), breath=-1, jaw=4, tongue=(102, 0), tail=FLICK[2])),  # it settles,
-          (2, dict(LOCK, head=(2, 1), neck=(1, 0), breath=-1, jaw=4, tongue=(102, 0), tail=FLICK[3])),  # the head too
-          (2, dict(LOCK, head=(2, 1), neck=(1, 0), breath=-1, jaw=3, tongue=(88, 0), tail=FLICK[4])),   # reel in,
-          (2, dict(head=(2, 1), neck=(1, 0), jaw=2, tongue=(76, 0), tail=FLICK[5])),       # the back rises,
-          (2, dict(head=(1, 0), neck=(0, 0), jaw=1)),                                      # the head a pose behind,
+          (2, dict(LOCK, head=(2, 0), neck=(1, 0), jaw=4, tongue=(102, 0), tail=FLICK[2])),  # the tail whips on
+          (2, dict(LOCK, head=(2, 0), neck=(1, 0), jaw=4, tongue=(102, 0), tail=FLICK[3])),  # through the hold,
+          (2, dict(LOCK, head=(2, 0), neck=(1, 0), jaw=3, tongue=(88, 0), tail=FLICK[4])),   # reel in,
+          (2, dict(head=(2, 0), neck=(1, 0), jaw=2, tongue=(76, 0), tail=FLICK[5])),         # the turret unlocks,
+          (2, dict(head=(1, 0), neck=(0, 0), jaw=1)),                                        # the head comes back,
           (2, dict(jaw=0)),                                                                # home, the jaw shut
           (2, dict(roll=(0, -1)))]
 
@@ -245,7 +239,7 @@ def attack_poses():
 # ---- frames, strips -------------------------------------------------------------------------------------------------
 def loops():
     """{loop: [(rendered pose, frames held)]} for every loop."""
-    return {"idle": [(R.render(idle_pose(P)), HOLD) for P in range(IDLE_POSES)],
+    return {"idle": [(R.render(idle_pose(P)), IDLE_HOLDS[P % len(BREATH)]) for P in range(IDLE_N)],
             "move": [(R.render(move_pose(P)), HOLD) for P in range(MOVE_POSES)],
             "attack": [(R.render(p), n) for n, p in attack_poses()]}
 
@@ -278,7 +272,7 @@ def strip(poses, box, parts=False):
 
 def print_poses():
     """The check before rendering: each tick's pose, and no tick equal to the one before (a lost update)."""
-    for name, poses in (("idle", [idle_pose(t) for t in range(IDLE_POSES)]),
+    for name, poses in (("idle", [idle_pose(t) for t in range(IDLE_N)]),
                         ("move", [move_pose(t) for t in range(MOVE_POSES)]),
                         ("attack", [p for _, p in attack_poses()])):
         frames = [R.render(p) for p in poses]

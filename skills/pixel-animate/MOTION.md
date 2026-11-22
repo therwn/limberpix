@@ -2,6 +2,51 @@
 
 Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are in [REFERENCES.md](REFERENCES.md).
 
+### 3.0 Smooth motion at sprite scale: the body moves on every pose
+
+At sprite scale a part moves in whole-pixel steps, and each step is seen as a step. Motion reads smooth when a step
+is the whole figure moving; it reads as clicking when the figure holds and one small part steps alone, and as a
+shiver when parts step one after another a pose apart (the trunk, then the neck, then the muzzle, then the ears).
+Measured on Slynyrd's animations (REFERENCES.md) and on this repo's showcase, judged by one person:
+- **The body's mass moves on every pose of a cycle.** Slynyrd 52's idle moves the torso 0, -1, -2, -1, 0, +1, +2, +1
+  (up negative) over 8 poses, the head and arms with it; his walks and dog cycles (25, 50, 64) change the whole figure
+  every pose. A pose that moves only an ear, a blink or a tail tip while the body holds is a click.
+- **Further from the body, more pixels a pose.** Torso and head 1 px a step, shoulders and elbows 2, fists 2-4
+  (Slynyrd 52); a bird's wing travels about 12 px while its body moves 2 (25).
+- **A part may lag only while the body moves.** The head holds a pose at the bob's turn while the torso moves under
+  it (52, 50, 60); it never steps on its own a pose after the body has stopped. A free tip is the exception: a
+  tail's end or a plume may finish the body's move a pose late (8: the plume still up as the body drops, then
+  falling). What clicks is a small part stepping on a beat of its own (an ear flick, a muzzle step) on a still body.
+- **Parts joined by a seam move together at 1-px steps.** A cut layer moved a pixel off the layer it joins shows
+  the cut: a head off its neck, a neck off the chest it overlaps, a back lifted alone over a still belly while the
+  neck over it rides the head (the torso splits). Move overlapping layers as one piece, and give the lag to a free
+  tip, a tail's end, a hanging foot, never more than a pixel off its parent a pose (further, a hanging tail's rows
+  stretch). Slynyrd redraws limbs whole every pose and moves only the head, or a whole item, as a rigid block.
+- **Ease with timing and with step size.** Slow over the top, quick on the drop: 52 holds the rise and the top 100
+  ms a pose and the drop 50 ms (here 3 frames and 2). A bob is an uneven triangle, one big step and smaller ones
+  (the head 0, -2, +1, +1 in 50's walk; a run's 1, 2, 0 in 55). An item's float steps 1 px at the turns and 2 in the
+  middle (24).
+- **Hold lengths.** Slynyrd's idles hold 100-400 ms a pose (52: 100 and 50; 55: 200, 200, 400), walks 100-140 ms,
+  runs 50-100 ms, heavy creatures longer (64: a gorilla 6 × 200 ms, a spider tank 6 × 100 ms). Long holds read
+  smooth only because every pose moves the whole figure: an idle so drawn may hold a pose up to 400 ms, and
+  pixel-anim-check's `choppy` then asks for 2.5 updates a second instead of 10. Where only parts move over a still
+  body, keep the usual hold at 2-3 frames (3.2). Walks and runs keep the 10-a-second floor in the check; his 100-140 ms
+  walks are under it and untested here.
+- **Frame counts.** Idles 4-8 poses, walks 8 (6 as an economy, 4 the keys alone), runs 6; tiny sprites 3-4, the
+  neutral pose reused (0, 1, 0, 2). Dropping frames, keep the loop's length (8 × 80 = 6 × 120 = 4 × 160 ms) and drop
+  the in-betweens first (8).
+- **A planted foot moves with the ground on every frame.** Over a road scrolling a pixel a frame, draw the walk on
+  ones: a foot held two frames falls a pixel behind the road and catches up, and the feet judder against it. Keep
+  the sprite's travel apart from its drawing rate: a bat's wing pose may hold 160 ms while the sprite moves 2 px
+  every 40 ms (37), and translation steps stay even (23).
+- **Anchor the centre of gravity.** The hips hold one pixel column every frame (38), the feet hold the ground row
+  in a run (55, 60).
+- **"Sub-pixel" here is interior detail.** Fold lines, shading edges and hair locks move inside a still outline
+  and sell a turn or a twist (52, 53); a shape is never shifted by a fraction. Keep shading simple where it moves,
+  or it flickers (33, 58).
+- Build the motion on a flat-colour dummy first (legs, arms, head, then the bob; a quadruped one leg pair at a
+  time), and add texture only when it reads (25, 50, 55); section 6 of SKILL.md's part strip is that dummy.
+
 ### 3.1 Whole pixels and sub-pixel motion
 
 - **Whole pixels:**
@@ -36,8 +81,9 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
   - Continuous motion (a sway, a beat, a bob) gets a new picture at **15/s: hold 2**. This is the target.
   - **Hold 3 (10/s)** is the floor, and only for a uniform whole-body beat (a big, slow animal).
   - **The tempo is what fails: a usual hold of 4 or more** (under 10 updates a second at 30 fps) reads as a low
-    frame rate, whatever the step size. Six small idle poses held 6 frames each read as a dropped frame rate, even
-    at 6-13 % of the figure a step.
+    frame rate when parts move over a still body, whatever the step size. Six small idle poses held 6 frames each
+    read as a dropped frame rate, even at 6-13 % of the figure a step. An idle whose every pose moves the whole
+    body is the exception: up to 12 frames a pose (3.0).
   - The mean update rate (moves × fps / frames) is ≥ 10/s.
   - Holds of 3 read as smooth enough; holds of 4 read as a dropped rate.
   - **One longer hold belongs only where the motion stops:** at a sway's turn (below), in an idle's rest (3.3), on
@@ -77,7 +123,8 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
   - and it is ≤ 3× the median hold.
 - After a still run of 10 frames or more, the first step is **under 25 % of the figure**. A bigger change eases in:
   its first and last steps are ≤ 60 % of its peak step, and the holds around it run 3, 2, 2, 3.
-- A good model: one drawing, with a blink, a glow and a breath spread over the loop.
+- A good model: a breath moving the whole body on every pose (3.0), a blink or a glow riding a pose on which the
+  body moves too; a blink alone on a still body is a click.
 - **An accent and a rest** is a second idle shape: a quick event (a rise of 1-2 px with a mouth or an ear opening,
   held a few poses, then a fall) and then a quiet stretch of up to 40 % of the loop. The quiet stretch is still a
   moving hold, carried by a breath, a blink or the tail, and the accent eases in and out as above.
@@ -135,8 +182,15 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
 - **The far wing never vanishes:**
   - it may be hidden (|s| < 0.35) only *while crossing* edge-on, for ≤ 5 frames, never at a turn;
   - otherwise it keeps ≥ 25-30 % of its rest-visible pixels, and at least 3 game px;
-  - on the downstroke its tip shows below the belly.
+  - on the downstroke its tip shows below the belly;
+  - the two wings are never thin at once: the far wing trails the near one on the downstroke and leads it on the
+    upstroke, so while the near wing crosses edge-on the far one already shows over the back. Trailing on both
+    strokes, the showcase's bird showed no wing for a pose as the near one rose edge-on (`vanish` caught it once its
+    head stopped jittering).
   - Source: Tuts+ flying bird ("a little should still show").
+- **Feet tuck in stages, never in one frame.** Drawn up and back behind the belly, a foot loses a few rows a pose
+  (the showcase's bird: 35, 24, 15, 8, 3 of 61 px still showing) and comes out the same way; a foot switched off
+  pops. In level flight they stay tucked, a toe's tip showing.
 - **Beat period by size** (move loops; stylised): owl or drake 18-36 frames, with a glide; shrike, magpie or bat
   12-18; wren or lark 8-12; insects 2-4 frames a beat on twos (1-2 drawings: the flutter of 3.6, not a bird's
   stroke), the body steady. An idle may beat once a loop. Sources:
@@ -254,17 +308,22 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
 
 ### 3.10 Chains and overlap
 
-- Nothing starts or stops together: body, then head, then ears; root, then tail, then tip.
+- Overlap rides on a moving body (3.0): a link lags its parent only while the parent moves, and never steps alone
+  a pose after the body has stopped. At 1-px steps a chain of parts each taking a rise a pose apart (body, neck,
+  muzzle, ears) reads as a shiver, not as overlap.
 - In a chain each link lags its parent by **1-3 frames** (10-30° of phase in a 36-frame loop), the amplitude
   growing toward the tip. Lag 0 moves the chain as a board; a lag over a quarter loop detaches it. A tail catches
-  up in about 0.3 s.
-- **One pose of lag is enough** at sprite scale, and it may be one-sided: hair, a plume or ears come down a pose
-  late and rise with the body.
-- **On a walk the head lags the body's bob by one pose.** With a 1-px bob the head takes the whole pixel, late:
-  a fraction of a pixel cannot be drawn, and the eye would tick. In an idle a lagging head still keeps the eye's
-  dwell (3.4).
-- **Paired appendages** (two antennae, two ears) alternate about half a loop apart and keep moving while the body
-  holds.
+  up in about 0.3 s. This is for links that move several pixels (a tail's swing, a wing); a 1-px rise is carried
+  by the parts joined by seams together, and only a free tip lags it.
+- **One pose of lag is enough** at sprite scale, and it may be one-sided: hair, a plume or a free tail tip comes
+  down a pose late and rises with the body (Slynyrd 8: the plume still up as the body drops). A dog's tail base
+  takes the hip's 0, +1, +2, +1 as 0, +1, +1, 0: a pose late and damped (Slynyrd 25).
+- **The head on a bob.** Where the head is joined without a seam (redrawn each pose, or a neck drawn under it at
+  both places), it may hold a pose at the bob's turn while the body moves under it (Slynyrd 50: 0, 0, -2, -1). A
+  head cut from its neck rides the body: a pixel off, it opens the cut. Either way it never takes the rise alone a
+  pose after the body, or the eye ticks (3.4).
+- **Paired appendages** (two antennae, two ears) alternate about half a loop apart, stepping on the poses the body
+  moves on; an ear flicking alone while the body holds reads as a hop off the head.
 - **Thin tips drag** 1-2 px against the travel on a contact or impact frame.
 - **Drive every link from one wave** with a fixed phase offset per link, not keyed link by link. A tail's amplitude
   grows toward the tip; cloth may keep an even amplitude and lag more (about a fifth of its cycle per link).

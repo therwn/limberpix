@@ -11,33 +11,29 @@ Every loop runs on one clock at 30 fps: a new pose every 2 frames (15/s), so the
 Two rules run through every loop. The torso is one piece: the body layer is never cut, it moves whole by whole
 pixels (and turns whole in the dive), and the neck that joins it to the head bends rather than steps (its rows under
 the head ride the head, the rows below ride the body, drawn at both places so no gap or step shows: bird_rig.py,
-NECK_STEP). The head is carried on the neck as a chain on the body's beat (head_chain): the body and the neck take a
-rise or a fall first, the back of the head and the eye a pose later, the bill and the crest a pose after that. The
-bill's lag is a small turn, not a step: for that pose the head wears a nod key (bird_heads.py: 3 nose down after a
-rise, -3 nose up after a fall), turned about the neck, so the head's one pixel spreads over two poses and over its
-pixels, and the head never steps alone as a rigid block.
+NECK_STEP). In the idle and the move the head, the bill and the crest ride the body on its own pose (head_chain): at
+1-px steps a body, a head, a bill and a crest that take a rise a pose apart read as four clicks, not one motion. The
+follow-through goes to the tail, a free end: its tip takes the body's height a pose late, a pixel off it at most.
+
+The wings never vanish together: on the downstroke the far wing trails the near one; on the upstroke it leads, so
+while the near wing crosses edge-on (level) the far one already shows over the back. The feet tuck up and back
+behind the belly a stage a pose (TUCK: 35, 24, 15, 8, 3 of their 61 px still showing; bird_rig.tuck) and come out
+the same way, never in one frame.
 
   idle    72 frames (36 poses): a hover, three slow beats of 12 poses (the move's are 8): the wings dwell two poses at
           the top and two at the bottom and ease through half_up on the way down (five steps down, four up), and
-          the body rises a whole pixel on the downstroke (5 poses up, 7 down). The far wing trails the near one on
-          the way down, crossing edge-on for a single pose while the near wing is already past it, and meets it at
-          the bottom, so its tip shows under the breast; it trails again on the way up. The head, the bill and the
-          crest follow each rise and fall as the chain above; the tail is a chain whose links take the body's
-          height one pose after another, the tip furthest, and as the downstroke starts its tip presses down a
-          pixel; the hanging feet follow a pose behind the body. Beat 1 is plain. Beat 2 is the accent: the whole
-          bird rises a pixel for 6 poses on top of the beat, and at its top the bill opens and shuts as a solid
-          mandible about its hinge, a straight wedge to its tip (a call), the crest thrown back after it. Beat 3 is
-          the rest: the head turns down to look at the water (the nods 3, then 6) and reaches forward a pixel on its
-          neck, holds the look while the body rises under it, then turns back up into the beat; the crest follows
-          the turn a pixel a pose.
-  move    32 frames (16 poses): level flight. Two quicker beats of 8 poses, four steps down and four up; the far
-          wing trails the near one, crossing edge-on for a single pose each way, and reaches the bottom with it.
-          The body rises a pixel on the downstroke; the head takes it a pose later and reaches forward a pixel (a
-          nod), the bill and the crest a pose after the head; the tail steers as a chain, its links a pose apart
-          and the tip swinging furthest. Unlike the hover it leans into its flight: the head rides a pixel lower and
-          the tail a pixel higher, and the feet are tucked away out of sight. Drawn in place, to be shown over a
-          road scrolling at ROAD_SPEED.
-  attack  56 frames (28 poses): from the hover's top, a dive strike, 5 : 2 : 2 : 18 poses (anticipation, strike,
+          the body rises a whole pixel on the downstroke (5 poses up, 7 down), the head, the bill, the crest and the
+          hanging feet with it; the tail's tip takes each rise and fall a pose late and presses down a pixel as the
+          downstroke starts. Beat 1 is plain. Beat 2 is the accent: the whole bird rises a pixel for 6 poses on top
+          of the beat, and at its top the bill opens and shuts as a solid mandible about its hinge (a call). Beat 3
+          is the rest: the head turns down to look at the water (the nods 3, then 6) and reaches forward a pixel on
+          its neck, holds the look while the body rises under it, then turns back up into the beat.
+  move    32 frames (16 poses): level flight. Two quicker beats of 8 poses, four steps down and four up, the far wing
+          trailing on the way down and leading on the way up. The body rises a pixel on the downstroke, the head and
+          the crest with it; the tail's tip trails a pose. It leans into its flight: the head rides a pixel lower
+          and the tail a pixel higher, and the feet are tucked (FLIGHT: a toe's tip showing under the belly). Drawn
+          in place, to be shown over a road scrolling at ROAD_SPEED.
+  attack  54 frames (27 poses): from the hover's top, a dive strike, 5 : 2 : 2 : 17 poses (anticipation, strike,
           held key, follow-through and recovery). The body never turns while the wings are open, and the head is
           never turned at run time: it is the drawing's own head or one of its drawn keys (the nods, and the dive's
           keys from 10 to 45 degrees nose down), carried whole to where the body's turn takes the neck and never
@@ -48,7 +44,7 @@ pixels, and the head never steps alone as a rigid block.
           one, change to the cocked key (higher, swept back); the last pose holds the body while the head and the
           crest settle on the mark.
           Strike (6-7) on an arc: first forward over the top (9 px on, level), the wings swept back (the sweep key,
-          the feathers still drawn), the feet tucked away, the body turned 20 degrees and the head on its 22 key;
+          the feathers still drawn), the feet half tucked, the body turned 20 degrees and the head on its 22 key;
           then the drop (4 px on, 16 down) along the bill's line, the wings folded, body and head in line at 45
           degrees. Speed lines run behind it along the body's line, back from a gap behind its trailing edge; on
           contact a flash at the bill's tip.
@@ -59,12 +55,13 @@ pixels, and the head never steps alone as a rigid block.
           1, 1, 2 px back against 0, 1, 1, 2, 2, 2, 1, 2 px up), and levels out in turns of 5 or 6 degrees (45, 40,
           35, 30, 24, 18, 12, 6, 0); the head turns with it every pose, one pose behind the body (45, 45, 40, 34,
           28, 22, 16, 10, 6, then 3 for the recovery's first two poses), so the bill tip travels 1-4 px a pose
-          on an even, easing path with no hold and no snap; the tail trails the turn, and the feet come out as it
-          levels.
-          Recovery (18-27): one beat. The wings open through the sweep key (an in-between: the feathers unfold back
+          on an even, easing path with no hold and no snap; the tail trails the turn, and the feet come out a stage a
+          pose as it levels.
+          Recovery (18-26): one beat. The wings open through the sweep key (an in-between: the feathers unfold back
           to front instead of jumping from folded to half_up), the near wing first and the far one a pose later,
           and beat down, lifting it a pixel over its hover mark (the overshoot, held through the downstroke); the
-          upstroke lets it settle back. The head, the tail and the feet ride the body's height as the chain above.
+          upstroke lets it settle back, the far wing leading it up, and its last pose leads into the first. The head
+          and the feet ride the body; the tail's tip trails it a pose.
           pixel-anim-check's `recover` asks every step after the strike to change at most half as much of the
           figure as the strike does: the follow-through turns in small steps and the unfolding moves the bird a
           pixel at a time, so the largest step after the strike is 73 % of the figure against the strike's 162 %.
@@ -123,14 +120,11 @@ NOD = {1: 3, -1: -3}                       # the bill a pixel below its place (t
 
 
 def head_chain(lift, t):
-    """The head carried on the neck after the body's height lift(t) (pixel-animate 3.3, 3.8, 3.10): the neck bends
-    with the body at once (bird_rig.neck_pixels), the back of the head and the eye take the rise or fall a pose late,
-    and the bill and the crest a pose after them. The bill's lag is a turn, not a step: for that pose the head wears
-    a nod key (bird_heads: 3 nose down after a rise, -3 nose up after a fall), so the head's one pixel spreads over
-    two poses and over its pixels, the back first, the bill last. Returns (head dy against the body, nod key, the
-    crest's dy against the head)."""
-    body, head, bill = lift(t), lift(t - 1), lift(t - 2)
-    return head - body, NOD.get(bill - head, 0), bill - head
+    """The head on the neck after the body's height: carried whole, on the body's own pose. At 1-px steps a head, a
+    bill and a crest that each take the rise a pose apart read as three separate clicks, not one motion, so the body,
+    the neck, the head, the bill and the crest rise and fall together; the lag goes to the tail's free tip (chain).
+    Returns (head dy against the body, nod key, the crest's dy against the head), kept for the callers: (0, 0, 0)."""
+    return 0, 0, 0
 
 
 def crest(key, dx, dy):
@@ -141,13 +135,16 @@ def crest(key, dx, dy):
     return dx - kx, dy - ky
 
 
-def chain(lift_at, t, amp=(1.0, 1.0, 1.0)):
-    """The tail's links (root, middle, tip) as dy against their parents: link i takes the body's height of i + 1
-    poses ago, times amp[i] (a tip swinging further than the root), against the body's height now."""
-    now = lift_at(t)
-    absolute = [round(amp[i] * lift_at(t - 1 - i)) for i in range(3)]
-    rel = [a - now for a in absolute]
-    return rel[0], rel[1] - rel[0], rel[2] - rel[1]
+def chain(lift_at, t, amp=None):
+    """The tail's links (root, middle, tip) as dy against their parents: the root and the middle ride the body, the
+    tip takes the body's height a pose late, a pixel at most off it (a tail pulled further stretches its rows)."""
+    lag = lift_at(t - 1) - lift_at(t)
+    return 0, 0, max(-1, min(1, lag))
+
+
+TUCK = [(0, -1), (-1, -2), (-1, -3), (-2, -4), (-3, -5)]   # the feet drawn up and back behind the belly, a stage a
+HIDDEN = (-4, -6)                          # pose: 35, 24, 15, 8 and 3 of their 61 px still showing; then none
+FLIGHT = TUCK[-1]                          # in flight they stay tucked, a toe's tip showing
 
 
 # ---- idle: a hover ------------------------------------------------------------------------------------------
@@ -156,8 +153,8 @@ def chain(lift_at, t, amp=(1.0, 1.0, 1.0)):
 # near one on the way down (passing edge-on for a single pose, while the near wing is past it) and catches it at the
 # bottom, so its tip shows under the breast for the whole low half; it trails again on the way up.
 IDLE_STROKE = [("up", "up"), ("half_up", "up"), ("half_up", "half_up"), ("level", "half_up"), ("half_down", "half_up"),
-               ("down", "level"), ("down", "down"), ("half_down", "down"), ("level", "half_down"),
-               ("half_up", "level"), ("up", "half_up"), ("up", "up")]
+               ("down", "level"), ("down", "down"), ("half_down", "level"), ("level", "half_up"),
+               ("half_up", "up"), ("up", "up"), ("up", "up")]
 IDLE_UP = {4, 5, 6, 7, 8}                  # the beat's poses with the body a pixel up: it rises on the downstroke
 IDLE_POSES = 36                            # three beats: a plain one, the accent, the rest
 DRIFT = {t: -1 for t in range(13, 19)}     # the accent: the whole bird rises a pixel for 6 poses (on top of the beat)
@@ -195,9 +192,8 @@ def idle_pose(t):
     key = idle_key(t)
     reach, (cx, cy) = LOOK.get(t, (0, 0, (0, 0)))[1:]
     jaw = CALL.get(t, 0)
-    return P(s=near, far=far, y=lift, hkey=key, head=(reach, dy), jaw=jaw,
-             nape=crest(key, cx - reach + THROW.get(t, 0), cy + lag),
-             tail=press(chain(idle_lift, t, (1.0, 1.0, 1.5)), k), feet=(0, idle_lift(t - 1) - lift))
+    return P(s=near, far=far, y=lift, hkey=key, head=(reach, dy), jaw=jaw, nape=(0, 0),
+             tail=press(chain(idle_lift, t), k), feet=(0, 0))
 
 
 def press(links, k):
@@ -208,8 +204,8 @@ def press(links, k):
 # ---- move: level flight -------------------------------------------------------------------------------------
 # (near wing, far wing) per pose: an even beat of 8, four steps down and four up; the far wing trails the near one,
 # crossing edge-on for a single pose each way, and reaches the bottom with it so its tip shows under the breast.
-MOVE_STROKE = [("up", "half_up"), ("half_up", "up"), ("level", "half_up"), ("half_down", "level"), ("down", "down"),
-               ("half_down", "down"), ("level", "half_down"), ("half_up", "level")]
+MOVE_STROKE = [("up", "up"), ("half_up", "up"), ("level", "half_up"), ("half_down", "level"), ("down", "down"),
+               ("half_down", "level"), ("level", "half_up"), ("half_up", "up")]
 MOVE_UP = {2, 3, 4}
 MOVE_POSES = 16
 PITCH = 1                                  # in flight it leans forward: the head a pixel lower, the tail a pixel
@@ -225,12 +221,8 @@ def move_pose(t):
     k = t % len(MOVE_STROKE)
     near, far = MOVE_STROKE[k]
     lift = move_lift(t)
-    dy, key, lag = head_chain(move_lift, t)
-    push = -move_lift(t - 1)                       # the head reaches forward a pixel as it rises, back as it falls,
-    late = -move_lift(t - 2)                       # and the crest follows it a pose late
-    root, mid, tip = chain(move_lift, t, (1.0, 1.5, 2.0))
-    return P(s=near, far=far, y=lift, hkey=key, head=(push, dy + PITCH), nape=crest(key, late - push, lag),
-             tail=(root - PITCH, mid, tip), feet=None)
+    root, mid, tip = chain(move_lift, t)           # the head rides the body; the tail's tip trails it a pose
+    return P(s=near, far=far, y=lift, head=(0, PITCH), tail=(root - PITCH, mid, tip), feet=FLIGHT)
 
 
 # ---- attack: a dive strike ----------------------------------------------------------------------------------
@@ -256,23 +248,23 @@ ATTACK = [
     # strike, two poses on an arc: first forward over the top, wings swept back and the feet tucked away, the head
     # pitching down (key 22); then the drop along the bill's line, wings folded, head and body in line (key 45);
     # speed lines behind it, a flash at the bill's tip on contact
-    ("sweep", "sweep", 9, -4, 20, 22, (0, 0), (-1, 0), (0, 0, 0), None, (("streak", 0),)),
-    ("fold", "fold", 13, 12, 45, 45, (1, 0), (0, 0), (0, 0, -1), None, (("streak", 0), ("hit", 0))),
+    ("sweep", "sweep", 9, -4, 20, 22, (0, 0), (-1, 0), (0, 0, 0), TUCK[3], (("streak", 0),)),
+    ("fold", "fold", 13, 12, 45, 45, (1, 0), (0, 0), (0, 0, -1), HIDDEN, (("streak", 0), ("hit", 0))),
     # the held key, the thrust: a moving hold (the body sinks a pixel, the head follows a pose later, sparks)
-    ("fold", "fold", 13, 13, 45, 45, (1, 0), (0, 0), (0, 0, -1), None, (("streak", 1), ("hit", 1))),
-    ("fold", "fold", 13, 13, 45, 45, (1, 1), (0, 0), (0, 0, 0), None, (("hit", 2),)),
+    ("fold", "fold", 13, 13, 45, 45, (1, 0), (0, 0), (0, 0, -1), HIDDEN, (("streak", 1), ("hit", 1))),
+    ("fold", "fold", 13, 13, 45, 45, (1, 1), (0, 0), (0, 0, 0), HIDDEN, (("hit", 2),)),
     # follow-through: still folded, it recoils on an arc, back first and then up, levelling out in turns of 5-7
     # degrees that shrink at the end; the head turns with it a pose behind (a key every 4-6 degrees: 45, 40, 34,
     # 28, 22, 16, 10, 6), never more than 6 degrees off it; the tail trails the turn, and the feet come out as it
     # levels
-    ("fold", "fold", 12, 13, 40, 45, (1, 0), (0, 0), (0, 1, 0), None, ()),
-    ("fold", "fold", 11, 12, 35, 40, (1, 1), (0, 0), (0, 1, 1), None, ()),
-    ("fold", "fold", 10, 11, 30, 34, (0, 0), (0, 0), (0, 1, 1), None, ()),
-    ("fold", "fold", 8, 9, 24, 28, (0, 0), (0, 0), (0, 0, 1), None, ()),
-    ("fold", "fold", 6, 7, 18, 22, (0, 0), (0, 0), (0, 0, 1), None, ()),
-    ("fold", "fold", 5, 5, 12, 16, (0, 0), (0, 0), (0, 0, 0), None, ()),
-    ("fold", "fold", 4, 4, 6, 10, (0, 0), (0, 0), (0, 0, 0), None, ()),
-    ("fold", "fold", 2, 2, 0, 6, (0, 0), (0, 0), (0, 0, 0), (-1, 1), ()),
+    ("fold", "fold", 12, 13, 40, 45, (1, 0), (0, 0), (0, 1, 0), HIDDEN, ()),
+    ("fold", "fold", 11, 12, 35, 40, (1, 1), (0, 0), (0, 1, 1), HIDDEN, ()),
+    ("fold", "fold", 10, 11, 30, 34, (0, 0), (0, 0), (0, 1, 1), TUCK[4], ()),
+    ("fold", "fold", 8, 9, 24, 28, (0, 0), (0, 0), (0, 0, 1), TUCK[3], ()),
+    ("fold", "fold", 6, 7, 18, 22, (0, 0), (0, 0), (0, 0, 1), TUCK[2], ()),
+    ("fold", "fold", 5, 5, 12, 16, (0, 0), (0, 0), (0, 0, 0), TUCK[1], ()),
+    ("fold", "fold", 4, 4, 6, 10, (0, 0), (0, 0), (0, 0, 0), TUCK[0], ()),
+    ("fold", "fold", 2, 2, 0, 6, (0, 0), (0, 0), (0, 0, 0), (0, 0), ()),
     # recovery, one beat: the wings open through the swept key (an in-between, the feathers unfolding back to
     # front) and beat down, lifting it a pixel over its hover mark (the overshoot, on the downstroke); the upstroke
     # lets it settle back onto the mark; the head, the tail and the feet ride the body's height as a chain (the
@@ -283,10 +275,9 @@ ATTACK = [
     ("half_down", "half_up", 0, -1, 0, 0, CHAIN, (0, 0), CHAIN, CHAIN, ()),
     ("down", "level", 0, -1, 0, 0, CHAIN, (0, 0), CHAIN, CHAIN, ()),
     ("down", "down", 0, -1, 0, 0, CHAIN, (0, 0), CHAIN, CHAIN, ()),
-    ("half_down", "down", 0, -1, 0, 0, CHAIN, (0, 0), CHAIN, CHAIN, ()),
-    ("level", "half_down", 0, -1, 0, 0, CHAIN, (0, 0), CHAIN, CHAIN, ()),
-    ("half_up", "level", 0, 0, 0, 0, CHAIN, (0, 0), CHAIN, CHAIN, ()),
-    ("up", "half_up", 0, 0, 0, 0, CHAIN, (0, 0), CHAIN, CHAIN, ()),
+    ("half_down", "level", 0, -1, 0, 0, CHAIN, (0, 0), CHAIN, CHAIN, ()),
+    ("level", "half_up", 0, -1, 0, 0, CHAIN, (0, 0), CHAIN, CHAIN, ()),
+    ("half_up", "up", 0, 0, 0, 0, CHAIN, (0, 0), CHAIN, CHAIN, ()),   # the next pose is the first: the rest
 ]
 ATTACK_FRAMES = len(ATTACK) * HOLD
 
@@ -310,7 +301,7 @@ def attack_pose(t, hit=True):
     if tail == CHAIN:
         tail = chain(attack_lift, t)
     if feet == CHAIN:
-        feet = (0, attack_lift(t - 1) - y)
+        feet = (0, 0)
     p = P(s=s, far=far, x=x, y=y, rot=rot, pivot=DIVE_PIVOT, hkey=hkey, head=head, nape=nape, tail=tail,
           feet=feet, fx=fx)
     if hit and any(name == "hit" for name, _ in fx):

@@ -69,20 +69,25 @@ Faults (each a line "kind: ..."):
            frames and 3 times a loop at the least (texture crawling), a drawing held on twos or threes read too; a
            stroke's turning poses, tones too alike to tell apart (FAINT), and a tone stepping monotonically along a
            moving edge (a sub-pixel in-between) are not counted
-  frozen   the head (round the eye) hardly moves against the body in the idle or the move: a mask on a living body
+  frozen   the head (round the eye) hardly changes in the idle or the move, read as drawn: a mask on a living body
+           (a head carried whole on the body's rise and fall moves)
   stiff    a walker's body never rises or falls in the move (the top of its middle third holds to under STIFF px):
            legs stepping under a board
   choppy   a loop updating fewer than CHOPPY_RATE times a second, or one update dropped (a hold twice the usual
            of 3+ frames): read as a dropped frame rate (--fps: the rate the game plays it at). A rest (a hold of a
-           third of the loop) is left out and the rest of the loop judged
+           third of the loop) is left out and the rest of the loop judged. An idle moving its whole body on every
+           pose may update 2.5 times a second and hold one pose twice the others
   uneven   the holds between a loop's moves jump in turn (1 frame, then 3, then 1): the motion stutters though
-           the rate is the same (an idle's one long rest, and ease lengthening the holds at a turn, are on purpose)
+           the rate is the same (ease lengthening the holds at a turn is on purpose; the idle is not judged: its
+           breath is eased, slow over the top and quick on the drop)
   lurch    a held loop whose moves alternate big and small (a whole-body bob after a leg's small step, frames held
-           between): a hitch each beat; with something moving on every frame the bob reads as a gait
+           between): a hitch each beat; with something moving on every frame the bob reads as a gait (not in the
+           idle, where a whole-body step between a free tip's small steps is the breath)
   snap     an idle stops dead (a third of a second or more) and then changes a quarter of the figure in one step
   tick     a whole-pixel level is left and regained within a few frames: the eye's row in the idle, or a flier's
            whole-body height in its idle or move (a lift peaking just over half a pixel)
-  hop      a grounded body (any idle but a flier's; every loop of a --legless body) lifts off its contact row
+  hop      a grounded body (any idle but a flier's; every loop of a --legless body) lifts off its contact row, air
+           opening above the contact (legs stretching to keep a risen trunk on its feet is a breath)
   vanish   a big piece switches off while the rest of the figure is nearly still, and stays gone (a far wing hidden
            at the turn of its stroke)
   shallow  a flier's idle moves only the upper half of the figure, where its move beats the whole wing
@@ -140,6 +145,8 @@ except ImportError as e:                                  # python -I does not s
 JUMP, STILL, SHIMMER, FROZEN, FAINT, STIFF = 3.6, 0.015, 0.03, 0.12, 10, 0.5
 MOVE_MIN, CADENCE_STEP, LURCH = 0.02, 0.08, 3.0          # uneven and lurch (unchanged)
 CHOPPY_RATE, MOVE_EPS = 10.0, 0.002                      # choppy: updates a second; a move is over MOVE_EPS of A
+BODY_TOPS = 0.8                                          # a pose change moving the body: this share of the columns'
+CHOPPY_BODY_IDLE = 2.5                                   # tops moves; then an idle may update this slowly a second
 SNAP_STEP, SNAP_STILL = 0.25, 0.02                       # snap: the step out of a dead stop; what counts as still
 TICK_DUTY = 0.18                                         # tick: the shortest excursion against its share of the loop
 HOP_LIFT, HOP_SHARE, HOP_STEP = 0.5, 0.6, 0.3            # hop: contact kept; rigid share of a big step; big step
@@ -597,6 +604,22 @@ def _shimmer(a, frames, spec):
     return []
 
 
+def _body_moves(figs):
+    """Does every change from one distinct pose to the next move the body: the top of BODY_TOPS of the columns both
+    poses fill shifting? A body rising or swaying moves its topline along its whole length; a head nodding or a tail
+    wagging over a still body moves only its own columns. False with fewer than 2 poses."""
+    runs = _same_runs(figs)
+    P = [figs[k] > 0 for k, _ in runs]
+    if len(P) < 2:
+        return False
+    for i in range(len(P)):
+        a, b = P[i - 1], P[i]
+        cols = a.any(0) & b.any(0)
+        if not cols.any() or (np.argmax(a, 0)[cols] != np.argmax(b, 0)[cols]).sum() < BODY_TOPS * cols.sum():
+            return False
+    return True
+
+
 def cadence(loops, spec):
     """How the motion is spread over the frames: choppy on the creature alone (effects and shadow removed, A0);
     uneven and lurch exactly as before (effects removed, a flier's shadow kept).
@@ -612,6 +635,15 @@ def cadence(loops, spec):
     A declared action (--action) may hold one key (a wind-up or a contact) up to ACTION_KEY frames at 30 fps: that
     single longest hold is left out, and the rest of the frames must still update at CHOPPY_RATE with no dropped
     update. Every other hold keeps the rules: the proven limits govern idles, moves and an action's other frames.
+    An idle in which every change of pose moves the body (_body_moves: the top of BODY_TOPS of the columns shifts, as
+    a body rising or swaying does) may update more slowly, CHOPPY_BODY_IDLE a second (a pose held up to 0.4 s), and
+    may hold one pose twice the others (not a dropped update: eased on purpose). Slynyrd's idles hold 100-400 ms a
+    pose (Pixelblog 52: 100 and 50; 55: 200, 200, 400, which he found less robotic than even holds), every pose moving
+    the whole figure; the faulty idles of the private set stepped one part over a still body. His walks hold 100-140
+    ms (25, 50, 60), under 10 updates a second; walks keep the CHOPPY_RATE floor here, untested below it. Measured:
+    changes that move the body move 0.90-1.00 of the columns' tops (the walker breathing whole, the showcase's wolf
+    and lizard), the selftest's faulty idles (one part stepping every 6 frames, an update dropped) at most 0.59;
+    BODY_TOPS 0.8 lies between. Not rerun on the private 39-creature set.
     Leaving the rest out, rather than the whole loop, was measured on this repo only: the selftest holds (a dead stop
     is still snap's; the declared bite and leap stay clean), the 13 clean loops give no fault, and an idle stepped
     every 6 frames after a 12-frame rest, or four walk drawings with the last held 14 frames more, are caught (they
@@ -622,7 +654,11 @@ def cadence(loops, spec):
     2 frames or more and by twice (one long rest, at least twice the next longest, is an idle's pause and is left
     out). lurch: the median ratio of one move to the next over LURCH (a whole-body bob after a small leg step: a hitch
     on each beat). uneven and lurch only where the moves are big enough to see (over CADENCE_STEP of the figure), and
-    on a cycle of moves (four or more; six for lurch): one gesture in an idle is drawn on purpose."""
+    on a cycle of moves (four or more; six for lurch): one gesture in an idle is drawn on purpose. Neither judges the
+    idle: a breath of whole-pixel steps is eased on purpose, slow over the top and quick on the drop (Pixelblog 52),
+    so its holds differ, and its body's one-pixel steps fall between small ones of the free tips (a tail's) that
+    follow it. Left out after one person judged the showcase's wolf idle so drawn smooth, on this repo only; not
+    rerun on the private 39-creature set. Walks and actions keep both rules."""
     out = []
     for a, frames in loops.items():
         n = len(frames)
@@ -643,9 +679,11 @@ def cadence(loops, spec):
             if not rests and max(hs) <= key:              # an action's one held key (up to ACTION_KEY frames)
                 js.remove(max(hs))
                 jn = n - max(hs)
+            body = a == spec.idle and _body_moves(figs)   # an idle moving its body on every pose: longer
+            floor = CHOPPY_BODY_IDLE if body else CHOPPY_RATE   # holds read smooth
             if len(js) >= 3:
                 rate, med = len(js) * spec.fps / jn, statistics.median(js)
-                if rate < CHOPPY_RATE:
+                if rate < floor:
                     most = int(spec.fps // CHOPPY_RATE)           # the longest hold that keeps CHOPPY_RATE
                     how = (f"at {spec.fps:g} fps hold each pose {most} frame{'s' if most > 1 else ''} at most"
                            if most >= 1 else f"at {spec.fps:g} fps even a new pose every frame is too few: play it "
@@ -654,10 +692,12 @@ def cadence(loops, spec):
                                f"held long read as a dropped frame rate: a new pose at least every "
                                f"{1 / CHOPPY_RATE:g} s ({how}); spread the parts on one clock with staggered "
                                f"phases, or draw in-betweens")
-                elif med >= 3 and max(js) >= 2 * med:
+                elif med >= 3 and max(js) >= 2 * med and not body:
                     out.append(f"choppy: {a} drops an update: a hold of {max(js)} frames among holds of {med:g} "
                                f"(holds {hs}): two ticks running gave one pose; stagger the parts' phases so "
                                f"something changes on every tick")
+        if a == spec.idle:                                # an idle's breath is eased on purpose: not judged here
+            continue
         figs, _ = _arrays(frames, Spec(ink=spec.ink, effects=spec.effects, lum=spec.lum))   # as before: effects
         area = _area(figs)                                # alone removed (the shadow kept) for uneven and lurch
         steps = [_nd(figs[k], figs[(k + 1) % n]) for k in range(n)]
@@ -849,7 +889,12 @@ def hop(loops, spec):
     stays while everything above it rises. G = the loop's lowest drawn row; C_k = the columns whose lowest drawn
     cell lies on G; lift = min|C_k| / median|C_k|. For each step changing at least HOP_STEP of the figure,
     share = 1 - min over dy in +-1, +-2 of diff(shift(F_k, dy), F_k+1) / diff(F_k, F_k+1): how much of the step a
-    rigid vertical shift explains. Fault when lift < HOP_LIFT or share >= HOP_SHARE.
+    rigid vertical shift explains, counted only for a step that opens (or closes) air right above the contact on
+    half the contact's columns or more: the body leaving its feet. A body rising whole over planted feet whose legs
+    stretch to keep it joined (a breath) shifts rigidly too, but it stays on its feet. Fault when lift < HOP_LIFT or
+    share >= HOP_SHARE. The air test was added on this repo's showcase only (the wolf's breath, its legs stretching
+    under a trunk risen whole, judged right by one person; the selftest's body lifted off its feet's row still
+    fails); not rerun on the private 39-creature set.
     Scope: the idle of any non-flier, and every loop of a legless body (gait False). A legged walk rises on purpose
     (rigid shares 0.14-0.35), a legged action may jump, and a flier is off the ground anyway."""
     if spec.flier:
@@ -870,10 +915,15 @@ def hop(loops, spec):
             C.append(int((low == G).sum()))
         lift = min(C) / max(1.0, statistics.median(C))
         share = 0.0
+
+        def gaps(f):                                      # contact columns with air right above the contact
+            if G < 1:
+                return 0
+            return int(((f[G] > 0) & (f[G - 1] == 0)).sum())
         for k in range(n):
             p, q = figs[k], figs[(k + 1) % n]
             c = _nd(p, q)
-            if c and c >= HOP_STEP * area:
+            if c and c >= HOP_STEP * area and abs(gaps(q) - gaps(p)) >= 0.5 * max(1, min(C[k], C[(k + 1) % n])):
                 share = max(share, 1 - min(_nd(_sh(p, dy), q) for dy in (-2, -1, 1, 2)) / c)
         if lift < HOP_LIFT or share >= HOP_SHARE:
             why = (f"its contact on row {G} shrinks to {lift:.0%} of the usual" if lift < HOP_LIFT
@@ -1144,9 +1194,13 @@ def eye_jumps(loops, spec, warns):
 
 def frozen(loops, spec):
     """The head, a box round the eye reaching 0.12 of the figure's width to each side of it (about a quarter of the
-    width across, 3 px each side at least; _head), in the idle and the move with the bob aligned away: under FROZEN
-    of its pixels ever change, it is a mask on a living body. The eye is the piece _eye_piece reads, so its colour
-    used elsewhere on the body does not move the box."""
+    width across, 3 px each side at least; _head), in the idle and the move: under FROZEN of its pixels ever change,
+    it is a mask on a living body, staying put while the body moves. The frames are read as drawn, not with the bob
+    aligned away: a head carried whole on the body's rise and fall moves, and at 1-px steps carrying it whole is the
+    right way (moved against the body by a pixel, a head that is cut from its neck opens a seam there). Changed from
+    the bob-aligned reading on this repo's showcase only (the wolf's idle and walk, head and trunk one piece, were
+    judged smooth by one person); not rerun on the private 39-creature set. The eye is the piece _eye_piece reads, so
+    its colour used elsewhere on the body does not move the box."""
     got = _head(loops, spec)
     if got is None:
         return []
@@ -1155,7 +1209,7 @@ def frozen(loops, spec):
     for a in (spec.idle, spec.move):
         if a not in loops:
             continue
-        fr = _aligned(loops[a])
+        fr = loops[a]                                     # as drawn: a head riding the body's bob is alive
         h, w = len(fr[0]), len(fr[0][0])
         box = [(x, y) for y in range(max(0, int(ey - hr)), min(h, int(ey + hr) + 1))
                for x in range(max(0, int(ex - hr)), min(w, int(ex + hr) + 1))]
@@ -1684,7 +1738,11 @@ def parts(loops, spec, warns):
     volume  a part of VOLUME_MIN+ px whose area leaves its median by over max(VOLUME, VOLUME_PX) (parts in --squash,
             such as wings, left out);
     lag     in the idle and the move, the parts riding the body (off the ground, with its wave count) all move on
-            the body's own frame (no follow-through), or one trails it by over a quarter of the loop."""
+            the body's own frame (no follow-through) while the body steps 1.5 px or more in a frame, or one trails it
+            by over a quarter of the loop. At 1-px steps a part joined to the body by a seam (a neck, a tail's root)
+            rides it: a pixel's lag opens the seam, so the follow-through goes to a free tip, too small to move a
+            part's centre. The step limit was added on this repo's showcase only (the wolf, judged smooth by one
+            person); not rerun on the private 39-creature set."""
     for a, labels in spec.parts.items():
         if a not in loops or len(labels) != len(loops[a]):
             continue
@@ -1706,7 +1764,9 @@ def parts(loops, spec, warns):
         if not got or not got[1]:
             continue
         lags = got[1]
-        if all(v == 0 for v in lags.values()):
+        body = _part_tracks(labels)[got[0]]
+        steps = [abs(body[k][2] - body[k - 1][2]) for k in range(n)]
+        if all(v == 0 for v in lags.values()) and max(steps) >= 1.5:   # 1-px steps: riding the body is right
             warns.append(f"warn: lag: {a} every part riding the body moves on its frame ({', '.join(lags)}): let the "
                          f"head, ears or tail follow a pose late (one pose is enough at sprite scale)")
         elif any(abs(v) > n / 4 for v in lags.values()):
