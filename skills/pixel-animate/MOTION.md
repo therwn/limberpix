@@ -35,10 +35,15 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
 - **The rate:**
   - Continuous motion (a sway, a beat, a bob) gets a new picture at **15/s: hold 2**. This is the target.
   - **Hold 3 (10/s)** is the floor, and only for a uniform whole-body beat (a big, slow animal).
-  - **Hold 4 or more inside a cycle is a fault, whatever the step size.** Six small idle poses held 6 frames each
-    read as a dropped frame rate, even at 6-13 % of the figure a step.
+  - **The tempo is what fails: a usual hold of 4 or more** (under 10 updates a second at 30 fps) reads as a low
+    frame rate, whatever the step size. Six small idle poses held 6 frames each read as a dropped frame rate, even
+    at 6-13 % of the figure a step.
   - The mean update rate (moves × fps / frames) is ≥ 10/s.
   - Holds of 3 read as smooth enough; holds of 4 read as a dropped rate.
+  - **One longer hold belongs only where the motion stops:** at a sway's turn (below), in an idle's rest (3.3), on
+    an action's held key (3.13). In the middle of a running motion it is a lost update (below): the check sees it
+    only when the usual hold is 3+ (`choppy`) or at the loop's seam (`seam`), not as one 4-frame hold among twos, so
+    check the pose list for two identical ticks outside a turn.
   - Sources: Williams' twos (secondhand, animationpodcast and AWN); Wave Motion Cannon (threes and fours read
     jerky).
 - **Turns:** at a sway's turn, and only there, a hold may double a 1-2 frame base, up to 4. Ease with smaller
@@ -122,7 +127,8 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
   glide idle, ±30-45° in a beat. Squeezing such a wing vertically moves only its top edge.
 - **The whole wing moves:**
   - tip travel ≥ 30 % of the wing's length, and the root half moves too;
-  - at least 4 distinct wing drawings a beat, ideally 6-8, never 2;
+  - for birds and bats, at least 4 distinct wing drawings a beat, ideally 6-8, never 2 (insects follow 3.6: a
+    flutter about the shoulder, or ghost copies in one frame);
   - the downstroke is broader and as long as or longer than the upstroke.
   - Sources: PixelJoint bat thread ("the whole wing flaps"); Slynyrd 25 (8-frame flap); Taylor & Francis flight
     chapter (3 in-betweens up, 5 down).
@@ -132,7 +138,8 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
   - on the downstroke its tip shows below the belly.
   - Source: Tuts+ flying bird ("a little should still show").
 - **Beat period by size** (move loops; stylised): owl or drake 18-36 frames, with a glide; shrike, magpie or bat
-  12-18; wren or lark 8-12; insects 2-4 a beat on twos, the body steady. An idle may beat once a loop. Sources:
+  12-18; wren or lark 8-12; insects 2-4 frames a beat on twos (1-2 drawings: the flutter of 3.6, not a bird's
+  stroke), the body steady. An idle may beat once a loop. Sources:
   Pennycuick 1990; Jensen, Dyre & Hecksher 2024 (bigger, broader wings beat slower).
 - **Optional, for big wings:** cut the lower feather mass as its own part, turned a beat after the wing (1.5°
   steps, held 2 frames).
@@ -185,8 +192,11 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
 - **Planted feet do not slide.** A planted foot stays on one world pixel until it lifts.
   - In a walk drawn in place over a scrolling ground, every planted foot moves back the same amount each pose,
     never stopping, stepping forward or catching up.
-  - That amount is the ground's scroll speed in game px per frame: the stride divided by the frames the foot is
-    planted. Match it to the game's real scroll speed (an easing scroll changes it, so match the steady pace).
+  - That amount is the ground's scroll speed in game px per frame: the distance the foot goes back while planted
+    divided by the frames it is planted, which equals the stride's length (a full cycle, two steps) divided by the
+    loop's frames. A 32-frame walk whose paw goes back 20 px over 20 planted frames scrolls 1 px a frame, and its
+    stride is 32 px (`examples/showcase/beast`). Match it to the game's real scroll speed (an easing scroll
+    changes it, so match the steady pace).
   - Drive a planted foot's x by a backward ramp, not a sine: a sine swings it forward again before it lifts.
   - Look at the move over a scrolling ground line before showing it; a skating foot hides on a still background.
 - **Footfall** (choose per creature): a quadruped is two bipeds with a small time offset, the head following the
@@ -264,8 +274,12 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
 
 ### 3.11 Seams
 
-- The last-to-first step is ≤ 1.5× the median step.
-- No duplicated closing frame: a repeated final pose doubles a hold.
+- In a continuous loop (a walk, a wing beat), the last-to-first step is about the size of the others: the clean
+  walks and beats here close at 0.78-1.32× their median moving step, while a 16-frame walk cut at 13 frames reads
+  1.64 and at 11 frames 2.11, so stay under about 1.5. An idle may close on an accent (the showcase's beast and
+  lizard close at 3.47 and 3.21× theirs) and is not held to it. pixel-anim-check prints the move's ratio as a
+  read-out (the closing step).
+- No duplicated closing frame: a repeated final pose doubles a hold (`seam` warns).
 - Sources: Schödl et al., Video Textures (transition cost); llamagen's sprite-sheet frame audit.
 
 ### 3.12 Idle, amplitude, light, effects

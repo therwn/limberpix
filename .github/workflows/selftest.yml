@@ -60,6 +60,9 @@ jobs:
       - name: creature_map selftest
         run: python -I $PYW skills/pixel-animate/creature_map_selftest.py
 
+      - name: shrink selftest
+        run: python -I $PYW skills/pixel-animate/shrink_selftest.py
+
       - name: Examples match the selftests' creatures
         run: python -I examples/make_examples.py --verify
 

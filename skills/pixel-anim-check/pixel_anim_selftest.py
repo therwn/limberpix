@@ -223,6 +223,14 @@ def run(verbose=False):
                 f[y][x] = "#f0d8b0" if (k + x) % 2 else "#6a4a3a"
     cases.append(("shimmer", "walker", crawl))
 
+    def crawl_held(hold):                                 # the same crawl on a drawing held 2 or 3 frames: A, A, B, B
+        def fn(L):
+            crawl(L)
+            L["idle"] = _on(L["idle"], hold)
+        return fn
+    cases.append(("shimmer", "walker", crawl_held(2)))
+    cases.append(("shimmer", "walker", crawl_held(3)))
+
     def speckle(L):                                       # texture redrawn at random
         rnd = random.Random(11)
         A = L["idle"]
@@ -264,6 +272,16 @@ def run(verbose=False):
     def stepped(L):                                       # the idle stepped one pose every 6 frames: small steps,
         L["idle"] = [walker_frame((k // 6 * 6) / 24, "idle") for k in range(24)]   # 5 updates a second
     cases.append(("choppy", "walker", stepped))
+
+    def stepped_rest(L):                                  # the same, after a 12-frame rest: the rest is left out,
+        L["idle"] = [walker_frame(0, "idle") for _ in range(12)] + [walker_frame((k // 6 * 6) / 24, "idle")
+                                                                    for k in range(24)]   # the steps still judged
+    cases.append(("choppy", "walker", stepped_rest))
+
+    def few_then_rest(L):                                 # four walk drawings, the last held 14 frames more
+        few_drawings(L)
+        L["move"] += [copy.deepcopy(L["move"][-1]) for _ in range(14)]
+    cases.append(("choppy", "walker", few_then_rest))
 
     def dropped(L):                                       # 12 poses on threes, one skipped: one hold of 6 frames
         poses = [walker_frame(p / 12, "idle") for p in range(12)]
@@ -359,6 +377,7 @@ def run(verbose=False):
     ok &= crawler_quiet()
     ok &= jump_short(walker)
     ok &= thinned(walker, flier)
+    ok &= eye_cases(walker)
     cases += later_cases()
     for kind, who, fn in cases:
         L = copy.deepcopy(walker if who == "walker" else flier)
@@ -381,7 +400,7 @@ def run(verbose=False):
 # ---- the later checks: helpers, the clean cases that must stay quiet, the broken ones that must be caught --------
 LATER = {"jump", "skate", "gait", "boil", "strike", "counter", "recover", "stage", "piston", "gravity", "squash",
          "lag", "volume", "blend", "orphans", "speck", "doubles", "drift", "swap", "mark", "palette", "choppy",
-         "uneven", "split", "hitch"}
+         "uneven", "split", "hitch", "seam"}
 GEM, PATCH, DARK = "#5ad1e0", "#3a6ea5", "#2a1a20"
 
 
@@ -556,7 +575,7 @@ def jump_short(walker):
     ok &= not f
     broken = copy.deepcopy(walker)
     broken["move"][8] = [[None] * 4 + r[:-4] for r in broken["move"][8]]
-    f = [x for x in pac.check(broken, spec) if x.startswith("jump:")]
+    f = pac.check(broken, spec)                           # two faults, both jump (the eye moves 4 px: no eye jump)
     two = len(f) == 2 and "against a usual" in f[0] and "knocked 4 px" in f[1]
     print("jump     on walker the broken example still gives two jump lines" + ("" if two else f": NO ({f})"))
     return ok and two
@@ -565,8 +584,9 @@ def jump_short(walker):
 def thinned(walker, flier):
     """Clean loops thinned as pixel-animate advises (every 2nd frame at 15 fps, every 3rd at 10) must stay clean: on
     12 frames a sixth of the loop is 2 flips, which a two-step walk's legs make on their own, so shimmer counts a
-    pixel only from 3. The eye tick's dwell is a time (0.1 s, 0.13 s): at 15 fps a level of 2 frames is enough, 1
-    is not; the same 2 frames at 30 fps are a tick."""
+    pixel only from 3. With every frame held 2 or 3 times they give no shimmer (choppy rightly fires on the slower
+    rate, so only shimmer is read there). The eye tick's dwell is a time (0.1 s, 0.13 s): at 15 fps a level of 2
+    frames is enough, 1 is not; the same 2 frames at 30 fps are a tick."""
     ok = True
     ws, fs = dict(eye=EYE), dict(eye=EYE, flier=True, shadow={SHADOW})
     for step, fps in ((2, 15), (3, 10)):
@@ -576,6 +596,31 @@ def thinned(walker, flier):
                   + ("" if not f else ": NO, FALSE ALARM: " + "; ".join(x[:110] for x in f[:2])))
             ok &= not f
     still = [walker_frame(p / 12, "idle", nods=False) for p in range(12)]
+    for hold in (2, 3):                                   # every frame held: choppy is right to fire, shimmer not
+        for name, loops, kw in (("walker", walker, ws), ("flier", flier, fs)):
+            f = [x for x in pac.check({a: _on(v, hold) for a, v in loops.items()}, pac.Spec(**kw))
+                 if x.startswith("shimmer:")]
+            print(f"clean {name} with every frame held {hold} gives no shimmer"
+                  + ("" if not f else ": NO, FALSE ALARM: " + f[0][:110]))
+            ok &= not f
+    rest = walker_frame(0, "idle")                        # a rest, then an accent on twos; a rest and one blink
+    blink = copy.deepcopy(rest)
+    for x in (26, 27, 28):
+        blink[6][x] = "#8a6448"
+    for label, idle in (("a 14-frame rest, then 5 poses on twos",
+                         [rest] * 14 + [walker_frame(p / 12, "idle") for p in range(1, 6) for _ in range(2)]),
+                        ("a rest and one blink", [rest] * 20 + [blink] * 2 + [rest] * 2)):
+        f = [x for x in pac.check(dict(walker, idle=copy.deepcopy(idle)), pac.Spec(eye=EYE))
+             if x.startswith("choppy:")]
+        print(f"clean idle, {label}, is not choppy" + ("" if not f else ": NO, FALSE ALARM: " + f[0][:110]))
+        ok &= not f
+    warns = []                                            # a run across the seam among holds of 1-4: not judged
+    pac.seam({"idle": flier["idle"]}, pac.Spec(eye=EYE, flier=True, shadow={SHADOW}), warns)
+    runs = pac._same_runs(flier["idle"])
+    crosses = any(k0 + ln > len(flier["idle"]) for k0, ln in runs)
+    print("clean flier idle, a 4-frame run across its seam, gives no seam warning"
+          + ("" if not warns and crosses else f": NO ({warns}, crosses {crosses})"))
+    ok &= not warns and crosses
     for up, fps, want in ((2, 15, False), (1, 15, True), (2, 30, True)):
         idle = copy.deepcopy(still)
         for f in idle[5:5 + up]:                          # the eye a row up for `up` frames
@@ -586,6 +631,44 @@ def thinned(walker, flier):
               + ("" if bool(got) == want else ": NO, WRONG"))
         ok &= bool(got) == want
     return ok
+
+
+def _flank_eye(L):
+    """Every frame with one pixel of the eye colour on the flank (column 12, 4 px under the back): the eye is still
+    the piece at the head, and the checks must not take the colour's mean for its place."""
+    for frames in L.values():
+        for f in frames:
+            y = next(y for y in range(len(f)) if f[y][12] in (FUR, BELLY))
+            f[y + 4][12] = EYE
+    return L
+
+
+def eye_cases(walker):
+    """One eye finder: the clean walker with its eye colour also on the flank passes (read as the mean of every
+    pixel of that colour, the head's box slid onto the body and frozen fired). The eye leaving the head's box in one
+    frame is an eye fault: a walk frame mirrored (21 px), and the eye painted out for 3 frames while its colour
+    shows on the flank (the track jumps there; the plain "no eye" test sees the colour and is silent). The note
+    names the piece read as the eye. The broken example's 4-px knock stays two jump faults."""
+    ok, spec = True, pac.Spec(eye=EYE)
+    f = pac.check(_flank_eye(copy.deepcopy(walker)), spec)
+    print("clean walker with its eye colour on the flank passes" + ("" if not f else ": NO, FALSE ALARM: " + f[0]))
+    ok &= not f
+    mirrored = copy.deepcopy(walker)
+    mirrored["move"][8] = [list(reversed(r)) for r in mirrored["move"][8]]
+    lost = _flank_eye(copy.deepcopy(walker))
+    for k in (5, 6, 7):
+        for r in lost["move"][k]:
+            for x, v in enumerate(r):
+                if v == EYE and x > 20:
+                    r[x] = FUR
+    for label, loops in (("a walk frame mirrored", mirrored), ("the eye lost, its colour on the flank", lost)):
+        f = pac.check(loops, spec)
+        hit = [x for x in f if x.startswith("eye: move[") and "the eye jumps" in x]
+        print(f"eye      on walker caught: {label}" + ("" if hit else f": NO ({f[:2]})"))
+        ok &= bool(hit)
+    notes = pac._eye_pieces(_flank_eye(copy.deepcopy(walker)), spec)
+    print("cli      a note names the piece read as the eye" + ("" if len(notes) == 2 else f": NO ({notes})"))
+    return ok and len(notes) == 2
 
 
 def later_cases():
@@ -604,6 +687,20 @@ def later_cases():
         for k in (18, 19, 20):
             L["move"][k] = _sx(L["move"][k], 2)
     cases.append(("jump", "walker", held_pop3))
+
+    def lifted_whole(L):                                  # the walk's bob applied to the whole frame, feet and all:
+        L["move"] = [pac._shifted(walker_frame(k / 16, "move", bob=False),   # the lowest row goes 20, 19, 20
+                                  -1 if abs(math.sin(2 * math.pi * k / 16)) < 0.5 else 0) for k in range(16)]
+    cases.append(("ground", "walker", lifted_whole))
+
+    def seam_ones(L):                                     # the walk's first frame copied to its end (17 frames)
+        L["move"] = L["move"] + [copy.deepcopy(L["move"][0])]
+    cases.append(("seam", "walker", seam_ones))
+
+    def seam_twos(L):                                     # on twos, its first pose copied to the end: held 4, not 2
+        L["move"] = _on(L["move"], 2)
+        L["move"] += copy.deepcopy(L["move"][:2])
+    cases.append(("seam", "walker", seam_twos))
 
     def foot_forward(L):                                  # one planted foot nudged a pixel forward on one frame
         L["move"][1] = walker_frame(1 / 16, "move", nudge=1)
@@ -794,13 +891,13 @@ def cli(walker):
         os.mkdir(mixed)
         code, text = run_main(["--loop", "idle=" + mixed])
         case("an empty frame folder is a usage error", code == 2 and "no frames" in text, text)
-        Image.new("RGB", (8, 8)).save(os.path.join(mixed, "00.png"))
-        Image.new("RGB", (9, 8)).save(os.path.join(mixed, "01.png"))
+        Image.new("RGBA", (8, 8)).save(os.path.join(mixed, "00.png"))   # transparent: an opaque loop is refused
+        Image.new("RGBA", (9, 8)).save(os.path.join(mixed, "01.png"))
         code, text = run_main(["--loop", "idle=" + mixed, "--out", os.path.join(tmp, "mixed-out")])
         case("unequal frame sizes are reported by the CLI",
              code == 1 and "size:" in text and "(8, 8)" in text and "(9, 8)" in text, text)
         pair = os.path.join(tmp, "pair.png")
-        Image.new("RGB", (16, 8)).save(pair)
+        Image.new("RGBA", (16, 8)).save(pair)
         code, text = run_main(["--loop", "idle=" + pair, "--parts", "idle=" + mixed])
         case("a size mismatch after the first part frame is refused", code == 2 and "--parts" in text, text)
         # a GIF whose held poses are merged into longer images: read at its own timing, every hold kept
@@ -869,6 +966,19 @@ def cli(walker):
         case("--action for a loop not given is a usage error", code == 2, (code, text[-200:]))
         code, text = run_main(base + ["--frame", "34", "--parts", "move=" + os.path.join(tmp, "ref.png")])
         case("--parts whose frames do not match the loop refused", code == 2, (code, text[-200:]))
+        keyed = os.path.join(tmp, "keyed.png")             # the idle strip on a flat magenta ground, no alpha
+        with Image.open(os.path.join(tmp, "idle.png")) as im:
+            ground = Image.new("RGBA", im.size, (255, 0, 255, 255))
+            Image.alpha_composite(ground, im.convert("RGBA")).convert("RGB").save(keyed)
+        one = ["--loop", "move=" + os.path.join(tmp, "move.png"), "--frame", "34", "--eye", "#ffcc33", "--out",
+               os.path.join(tmp, "out")]
+        code, text = run_main(["--loop", "idle=" + keyed] + one)
+        case("a strip with no transparency is refused", code == 2 and "--key" in text and "keyed.png" in text,
+             (code, text[-200:]))
+        code, keyed_text = run_main(["--loop", "idle=" + keyed, "--key", "FF00FF"] + one)
+        plain = run_main(base + ["--frame", "34", "--eye", "#ffcc33"])
+        case("--key reads it as the strip with alpha", (code, keyed_text.split("sheets:")[0])
+             == (plain[0], plain[1].split("sheets:")[0]), (code, keyed_text[:300]))
         code, text = run_main(base + ["--frame", "34", "--move", "walk"])
         case("--move naming a loop not given is a usage error", code == 2 and "no loop named 'walk'" in text,
              (code, text[-200:]))

@@ -6,6 +6,29 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **pixel-animate** `shrink.py`: brings a frame posed at the reference's resolution down to game size, the step the
+  skill named but did not specify. A game pixel is drawn on coverage, the contour is read apart so a thin line stays
+  whole and one pixel wide, and the fill is voted after every reference pixel is snapped to the palette; a cell is
+  never averaged. `--colours N` makes the rest frame's palette, which every other frame then takes. With
+  `shrink_selftest.py`, a CI step, and the measurements and sources in the skill's `REFERENCES.md`. Documented in
+  `docs/usage.md` and the README.
+- **pixel-animate** section 2 now opens with the choice of way: a drawing already at game size is posed at that
+  size (whole-pixel places, limbs bent row by row between joints, the body moved whole or stretched in column steps,
+  turns by three shears, the outline drawn last), as `examples/showcase/` does; a large painted reference is posed
+  at its own resolution and shrunk.
+- **pixel-anim-check** `seam` warning: the pose at a loop's seam held longer than every other, all alike (the first
+  pose repeated at the end). A read-out gives the move's closing step against its median moving step.
+- **pixel-anim-check** `--key #rrggbb`: the background colour of a strip with no transparency, read as air in the
+  loops, `--parts`, `--ref` and `--palette`. Without it, a loop with no transparent pixel in any frame is a usage
+  error (exit 2).
+- **pixel-anim-check** `eye` also faults the eye jumping out of its head's box in one frame in the idle or the move
+  (a warning elsewhere): a mirrored or misplaced cell, or the eye lost while its colour shows elsewhere. A `note:`
+  names the piece read as the eye when the first frame shows the colour in several.
+- **pixel-anim-check** `ground` warns when a legged walker's lowest drawn row moves in the move (a whole-figure
+  lift; a run leaves the ground on purpose, so it is not a fault).
+
 ### Changed
 
 - **pixel-anim-check** `jump`: the step ratio is now read against the loop's usual step, the mean of its moving
@@ -24,6 +47,21 @@ All notable changes to this project are listed here. The format follows
   part, or an eye that is not two numbers or null is a usage error (exit 2) naming the part, not a traceback.
 - The three scripts name the fix when numpy or Pillow cannot be imported (`python -I` does not see a
   `pip install --user`); the SKILL.md files, the README and `docs/usage.md` explain it.
+- **pixel-anim-check** `shimmer` reads each pixel's runs of one tone: a tone shown 0.1 s at most and gone back
+  counts, so a texture crawling on drawings held on twos or threes is caught (it was not). The stroke-turn exception
+  is read on the distinct poses.
+- **pixel-anim-check** `choppy` leaves a rest (a hold of a third of the loop) out and judges the rest of the loop;
+  before, any rest excused the whole loop.
+- **pixel-anim-check** one eye finder for every check (`frozen`, `reshape` and the action checks took the mean of
+  every pixel of the eye colour): the colour used elsewhere no longer moves the head's box.
+- Thresholds added or changed in this release were measured on this repo's loops only, not on the private
+  calibration set: rerun them there before release.
+- Docs: `MOTION.md` gives the road's speed as the planted foot's travel over its planted frames (the stride over
+  the loop's frames); the hold rule is about the tempo (a usual hold of 4+), with one longer hold only where the
+  motion stops; the bird and bat wing-drawing rule is set apart from insects; the closing-step rule is for
+  continuous loops, with the measured range. pixel-anim-check's SKILL.md and `docs/usage.md` say what the check
+  does not see (a texture redrawn at random on twos, one 4-frame hold among twos, a walk pose out of order, a bob
+  drawn upside down).
 - Docs: corrected numbers in `MOTION.md` (a chain's 1-3 frames are 10-30° of a 36-frame loop; 0.17 at A = 0.58;
   the strike against the median anticipation step) and in the docstrings of `tick`, `frozen`, `split`,
   `ink_lines` and `spine`; `tick`'s SKILL.md row says which lift peaks its body check lets through.

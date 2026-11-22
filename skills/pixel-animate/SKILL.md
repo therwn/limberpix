@@ -153,8 +153,32 @@ python -I ${CLAUDE_SKILL_DIR}/creature_map.py --selftest
 
 ## 2. The rig: the reference cut into parts
 
-Work at the reference's own resolution and bring every frame down at the end. This keeps the art's detail; the
-cuts and turns are hidden by the shrink.
+Choose the way by the drawing you start from:
+- **The drawing is already at game size** (pixel art drawn at the sprite's own size): pose it at that size and never
+  shrink it. Follow the game-size rules below, then the steps, leaving out step 5.
+- **The drawing is a large painted reference:** work at the reference's own resolution and bring every frame down
+  at the end (step 5, `shrink.py`). This keeps the art's detail; the cuts and turns are hidden by the shrink.
+
+**At game size** every pixel of the drawing is a pixel of the sprite, so nothing may be resampled: a pixel turned
+or scaled a fraction comes out as a new tone, and the texture crawls. Move the drawing's own pixels instead. The
+working example is `examples/showcase/` in this repo (each creature's `*_rig.py`, and its `animate.py` docstring
+for the loops); where only `skills/` was copied, it is at https://github.com/therwn/limberpix/tree/main/examples/showcase.
+- **Place every part at whole-pixel offsets.** A fractional place needs resampling.
+- **Bend a leg, a neck or a tail row by row between its joints:** the rows at one joint move by that joint's offset,
+  the rows at the next by its own, the rows between by the mix, each row rounded to whole pixels; a row moved down
+  past the next row's place is repeated into the gap. The limb curves and keeps every drawn pixel, and a stretch
+  repeats a row instead of tearing. A lift shortens only a limb's narrow segment, so it keeps its mass.
+- **Move the body whole, or stretch it in whole-pixel column steps** (each column moved by its own whole offset, a
+  gap repeated). Never tilt it by a lone pixel: a step in its topline reads as a torso cut in bands (`split`).
+- **Turn a part about its joint with three shears** (its rows, then its columns, then its rows again, each moved
+  whole): every pixel is kept once, with no hole and no doubled pixel at any angle, and nothing is resampled. A paw
+  folding at the wrist, a jaw opening.
+- **Draw the outline last, on the posed frame.** Lay the parts back to front; fill a small pocket of air that two
+  crossing legs close with the far leg's shadow (at 1× it reads as a hole through the body); then, where a pose has
+  opened an edge, give the edge pixel the line (the lit line where the air is above or to the left, the ink
+  elsewhere); then take off a leg pixel left with air on three sides, a burr the sliding rows leave. The parts keep
+  the drawing's own outline: only an edge a pose uncovers, fill the drawing had inside, is lined anew, so the
+  silhouette stays closed whatever the pose.
 
 1. **Separate the drawing from its background** (by its colour or alpha).
 2. **Cut each part from the approved drawing using the label image.** Select every pixel with that part's label.
@@ -204,13 +228,32 @@ cuts and turns are hidden by the shrink.
    - A child gets a strip of overlap past its cut, drawn under its parent, so no gap opens when the two turn apart.
    - Where a part reveals body the drawing never showed, fill it with the body's shade up to a line, sparingly. A
      big flat patch reads as a hole.
-5. **Bring each frame down on one fixed grid at one fixed scale:**
+5. **Bring each frame down on one fixed grid at one fixed scale,** with `shrink.py`:
+   ```
+   python -I ${CLAUDE_SKILL_DIR}/shrink.py rest.png --size W,H --colours 16 --out DIR --name rest   # the rest frame, once
+   python -I ${CLAUDE_SKILL_DIR}/shrink.py pose.png --size W,H --palette DIR/rest_shrunk.png \
+          --rest DIR/rest_shrunk.png --out DIR --name pose                                            # every other frame
+   ```
    - Pin the grid to the union of all poses of every loop, sized from the farthest reach (a lunge, a breath, a wing
-     tip), so still parts land on the same pixels in every frame and no reach is cut by the cell edge.
-   - Snap the colours to the rest frame's tones; fewer tones for a busy texture. Every frame uses only the approved
-     drawing's colours plus declared glow and effect colours. A sub-pixel mid tone comes from the drawing's own ramp.
-   - Put back the eye if the shrink loses it.
-   - Draw a one-pixel outline last.
+     tip), so still parts land on the same pixels in every frame and no reach is cut by the cell edge. Crop every
+     frame to that one box before shrinking it; `--size` is the box's size in game px.
+   - Each game pixel reads its own cell of reference pixels:
+     - it is drawn when 0.42 of the cell is figure (`--cover`; about 0.3 for a creature with a narrow wing or a
+       thin tail joint, which would otherwise break);
+     - the contour, the reference's near-black line, is read apart from the fill: a cell is line when the contour
+       fills 0.45 of it, or 0.12 of it and it is the line's crest across the line. A line thinner than a cell
+       stays whole and one pixel wide. Left in the vote, it loses to the fill and the outlines break;
+     - the fill is voted: every other reference pixel is snapped to the palette first, and the cell takes the
+       commonest colour. Never average the cell and snap the average: the average is a tone the cell does not
+       hold, and it changes with every small move. On painted references averaging left over twice the lone
+       pixels and changed about twice as many pixels under a fifth-of-a-cell move (REFERENCES.md).
+   - Snap the colours to the rest frame's tones: shrink the rest frame once with `--colours` (10-12 tones for a busy
+     texture, 16-18 for a plain one) and give its result to every other frame as `--palette` and `--rest`, one
+     palette for every loop. Every frame uses only the approved drawing's colours plus declared glow and effect
+     colours. A sub-pixel mid tone comes from the drawing's own ramp.
+   - Put back the eye and the small marks the shrink loses, at their place in the reference, moved with their part.
+   - Drop a pixel left with no neighbour: a turned part's edge leaves them.
+   - Draw a one-pixel outline last, on every frame.
 6. **Render a part strip beside every loop:** the same frames with each part filled in one flat colour
    (body_parts' label image gives the map). Read and approve the motion on it at 1× before the textured frames:
    paths, lags, foot contacts and near and far swings show there first, with no texture in the way. Give it to
@@ -229,9 +272,11 @@ The numbers are for loops played at 30 fps; scale the frame counts with the game
 - **No column waves.** Columns moved up and down read as hatching, scanlines sliding through the art.
 - **A tail moves as a chain; the head and ears move.** A stiff tail reads as a board, a still head as a mask.
 - **A walker's body rises on each step.** Legs stepping under a body that never moves read as a board on wheels.
-- **Never hold a frame 4 or more times inside a cycle, and never let an idle stop dead.** Long holds read as a
-  dropped frame rate, and a dead stop as a frozen statue. This governs idles, moves and an action's in-between
-  frames; an action's one held key follows 3.13.
+- **Keep the usual hold under 4 frames, and never let an idle stop dead.** A tempo of 4+ frame holds (under 10
+  updates a second at 30 fps) reads as a dropped frame rate, and a dead stop as a frozen statue. One longer hold
+  belongs only where the motion stops: a sway's turn (a 1-2 frame base doubled, 4 at most), an idle's rest (3.3),
+  an action's held key (3.13). In a running motion it is a lost update, which the check misses among twos: the pose
+  list of section 5 catches it.
 - **Keep the creature's look exactly: do not redraw it.** A redrawn creature reads as a different one.
 
 The thresholds in the motion guide say how to keep motion dense and smooth *inside* those limits. No source gives a pixel
@@ -272,7 +317,8 @@ reshapes.
 - **Scale and anchor:** generated cells drift (a height swing of ±8 % is common). Normalise each cell's scale to the
   approved drawing. Anchor walkers by the feet and fliers by the body centre.
 - **One palette:** map the whole sheet to one palette in one pass; quantising each cell alone makes the colours
-  flicker. Clear the key colour's fringe before quantising, or it turns to specks. Then remove orphan pixels and
+  flicker. Clear the key colour's fringe before quantising, or it turns to specks. pixel-anim-check's `--key` reads
+  only that exact colour as air, so the fringe must be gone before it too. Then remove orphan pixels and
   close the outlines.
 - **Room:** give a generated cell 1.3-1.8× the figure's longest side, anchored opposite the action (at the feet for
   a jump, behind the creature for an attack). Pad interpolation keys to one size yourself. A reach cut by the cell

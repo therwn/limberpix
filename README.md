@@ -52,7 +52,8 @@ before I put it in the game".
 **[pixel-animate](skills/pixel-animate/SKILL.md)** is a written method, not a generator: cut the approved drawing
 into parts, pose them at full size, shrink every frame on one fixed grid, with the motion rules that read in pixels
 (whole-pixel steps, holds, wings, legs, tails, heads). Claude uses it to make or remake a sprite animation, or when
-one looks stiff, broken or unlike its drawing. `body_parts.py` cuts the drawing into parts.
+one looks stiff, broken or unlike its drawing. `body_parts.py` cuts the drawing into parts, and `shrink.py` brings a
+frame posed on a large painted reference down to game size (a drawing already at game size is posed as it is).
 
 ![body_parts.py on the wolf's drawing: rough bones placed by eye, and the eleven parts it cut along the drawing's own ink and colour edges, each tinted and named](docs/img/parts.png)
 

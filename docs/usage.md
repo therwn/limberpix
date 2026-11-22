@@ -18,6 +18,7 @@ Every command here runs from the repo root, and each is one line, so it pastes i
 - [pixel-animate tools](#pixel-animate-tools)
   - [body_parts.py](#body_partspy)
   - [creature_map.py](#creature_mappy)
+  - [shrink.py](#shrinkpy)
 - [Limitations](#limitations)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
@@ -124,6 +125,7 @@ cut into whole frames).
 | `--glow #hex,...` | colours shown in some frames on purpose (glow steps, glints, blink lids) |
 | `--mark #hex,...` | small defining marks (a gem, a lamp): on every frame, never jumping 2 px in one frame |
 | `--sheet LOOP` | that loop was drawn as a sheet or by AI: a part switched off for one cell is looked for |
+| `--key #rrggbb` | the background colour of strips with no transparency, read as air in the loops, `--parts`, `--ref` and `--palette`. That exact colour only: clean a key's fringe first. Without it, a loop with no transparent pixel in any frame is a usage error |
 
 Colours are `#rrggbb` in any case, the `#` optional.
 
@@ -143,8 +145,16 @@ Every frame of every loop must be the same size, with the figure kept in place r
 `size`, `empty`, `apart`, `eye`, `outline`, `ground`, `jump`, `still`, `shimmer`, `frozen`, `stiff`, `choppy`,
 `uneven`, `lurch`, `snap`, `tick`, `hop`, `vanish`, `shallow`, `reshape`, and with their options `palette` and
 `mark`. Warnings (`warn:` lines) add `skate`, `gait`, `boil`, the action checks, `split` (the torso moved as two
-bands with a 1-px step between them), `hitch` (the head or a part stepping 1 px alone after a long hold) and more;
-`--help` lists them all.
+bands with a 1-px step between them), `hitch` (the head or a part stepping 1 px alone after a long hold), `seam`
+(the first pose repeated at the loop's end), `ground` in a legged walker's move (the lowest drawn row moving: a
+whole-figure lift) and more; `--help` lists them all.
+
+The eye is found one way by every check: one piece of the eye colour, the biggest on a loop's first frame (the
+frontmost on a tie), then on each frame the piece nearest its last place. So the same colour used elsewhere (a gem,
+a glint on the flank) is not taken for the eye, and a `note:` before the faults says which piece was read when the
+first frame shows several. An `eye` fault is the eye missing on a frame, or in the idle or the move its place
+jumping out of its head's box in one frame (a cell mirrored or off its anchor, or the eye lost while its colour
+shows elsewhere); in other loops that jump is a warning.
 Each fault, with its usual cause and fix, is
 in the table in [`skills/pixel-anim-check/SKILL.md`](../skills/pixel-anim-check/SKILL.md#2-what-each-fault-means-and-the-usual-fix).
 
@@ -311,7 +321,7 @@ Without them, non-hex keys raise a `TypeError`.
 
 ## pixel-animate tools
 
-The method is [`skills/pixel-animate/SKILL.md`](../skills/pixel-animate/SKILL.md). Two scripts sit beside it.
+The method is [`skills/pixel-animate/SKILL.md`](../skills/pixel-animate/SKILL.md). Three scripts sit beside it.
 
 ### body_parts.py
 
@@ -373,6 +383,54 @@ python skills/pixel-animate/creature_map.py --selftest
 Run on the example figure, `python skills/pixel-animate/creature_map.py examples/figure.png --out out`, it reads the
 person with a staff and a cape as `serpent or worm`: a wrong plan, which is the limitation below.
 
+### shrink.py
+
+Brings one frame posed at a large reference's resolution down to game size. Use it on the painted-reference path
+(pixel-animate section 2, step 5); a drawing already at game size is posed at that size and never shrunk.
+
+```
+python skills/pixel-animate/shrink.py REF.png --size W,H --colours N [--out DIR] [--name NAME]
+python skills/pixel-animate/shrink.py REF.png --size W,H --palette REST.png --rest REST.png [--out DIR] [--name NAME]
+python skills/pixel-animate/shrink.py --selftest
+```
+
+The first line shrinks the rest frame once and makes the palette from it; the second shrinks every other frame
+against that result, so every loop shares one palette and ties fall the same way on every frame.
+
+| Option | Meaning |
+|---|---|
+| `REF.png` | one frame at the reference's resolution, cropped to the box every pose of every loop fits in (one box and one size for every frame keep still parts on the same game pixels) |
+| `--size W,H` | the game size of that box |
+| `--scale S` | in place of `--size`: S reference px to a game px (S need not be whole) |
+| `--colours N` | make the palette from REF: N - 1 tones of the fill and one for the contour (10-12 for a busy texture, 16-18 for a plain one) |
+| `--palette PATH` | the palette: every opaque colour of that image (the rest frame already shrunk, or the approved drawing at game size) |
+| `--rest PATH` | the shrunk rest frame: a tie goes to its colour at that game pixel |
+| `--cover F` | the share of a cell that must be figure for the pixel to be drawn (default 0.42; about 0.3 for a narrow wing or a thin tail joint) |
+| `--contour V` | contour pixels are those with red + green + blue under V (default 70) |
+| `--no-contour` | read the contour with the fill, not apart |
+| `--key #rrggbb` | an opaque background colour read as air (default: transparency is air) |
+| `--out DIR` / `--name NAME` | where the files go and their stem (default REF's folder and file name) |
+
+Each game pixel reads its own cell: it is drawn when `--cover` of the cell is figure; the contour is read apart from
+the fill (a cell is line when the contour fills 0.45 of it, or 0.12 of it as the line's crest across), so a line
+thinner than a cell stays whole and one pixel wide; the fill is voted, every other reference pixel snapped to the
+palette first and the cell taking the commonest colour. A cell is never averaged. A tie goes to the rest frame's
+colour there, or else to the first tied colour in the palette's order.
+
+- **Out:** `<name>_shrunk.png` (game size, palette colours only) and, with `--colours`, `<name>_palette.png` (one
+  pixel a colour, dark to light).
+- **Exit code:** 0 done, 2 a usage error (a bad option, a missing file, an image with no transparency and no
+  `--key`, a rest frame of another size).
+- **Limits:**
+  - Even at its best a small move changes a third of the pixels, so parts are still moved by whole game pixels;
+    the tool does not solve that.
+  - It takes one frame at a time: a strip cannot be cut safely when a cell is fractional.
+  - Putting back the eye and small marks, dropping a pixel left with no neighbour, and drawing the outline are not
+    its job (pixel-animate's step 5 does them after it).
+  - Its numbers were measured by one person, and one person looked at the pictures (sources and measurements in
+    [`skills/pixel-animate/REFERENCES.md`](../skills/pixel-animate/REFERENCES.md)).
+  - It was run on Python 3.11 only (numpy 1.24 with Pillow 10.0, and numpy 2.4 with Pillow 13); CI runs it on 3.8.
+
 ## Limitations
 
 - **The thresholds are fitted, not derived.** `choppy`, `snap`, `tick`, `hop`, `vanish`, `shallow` and `reshape` were
@@ -385,6 +443,22 @@ person with a staff and a cape as `serpent or worm`: a wrong plan, which is the 
   `tick`, and `mark` faults a jump of 2 px in one frame. At another rate the same count is another length of time
   (3 frames are 0.1 s at 30 fps and 0.25 s at 12), so on a 12 or 15 fps loop read their reports, and their silence,
   with that in mind.
+- **A texture redrawn at random on twos or threes is not caught.** `shimmer` reads each pixel's runs of one tone, so
+  a texture alternating between two tones is caught on ones, twos and threes; one redrawn at random changes half or
+  a third as often on twos or threes, and a pixel's flips stay under the count. Look for it in the GIF.
+- **One 4-frame hold among twos is not caught.** A lost update in the middle of a motion is seen only where the
+  usual hold is 3 or more (`choppy`) or at the loop's seam (`seam`). Check the rig's pose list for two identical
+  ticks outside a turn (pixel-animate, section 5). No general test was written: the measure tried (how far the
+  motion carries through a hold) read an accepted flier idle's turns as more faulty than broken loops.
+- **A walk pose out of order is not caught.** Every walk step already changes about a third of the figure, so a
+  misplaced pose does not stand out (`jump` reads 1.3-1.5 against 3.6). The test tried, how much moving a pose to
+  another place in the loop lowers its total change, gained up to 0.62 of the figure on a clean bird (its wing
+  passes the same drawings down and up) and 0.16-0.59 on broken walks: no line between them. Read the contact
+  sheet.
+- **A bob drawn upside down (the body up while the legs are spread) is not caught.** The measure tried, how the
+  lower band's width follows the body's top row, read +0.71 on the clean walker, +1.0 on the clean lizard, -0.75
+  on the walker turned upside down, but -0.33 on the clean beast: a four-legged lateral walk's leg band does not
+  follow the step. Read the `legs widest ... body lowest ...` read-out (pixel-anim-check SKILL.md, section 3).
 - **The check does not judge taste.** It cannot see likeness, appeal or whether an attack reads. That is why the skill
   ends with a look by eye.
 - **`creature_map.py` is a first look only.** It reads the silhouette, and a silhouette cannot tell a bow from an arm
@@ -406,6 +480,7 @@ person with a staff and a cape as `serpent or worm`: a wrong plan, which is the 
 | A `size` fault | The checker stops before rendering previews. Give every frame the same canvas and keep the figure anchored when cropping all loops to one union box. |
 | A frame folder plays out of order | Files are read in name order. Zero-pad the numbers: `f00.png`, `f01.png`, ... |
 | A GIF's holds look longer than its images | Each image is held for its stored duration at `--fps`. Give a strip or a folder to judge one image per frame. |
+| Exit 2, `has no transparent pixel in any frame` | The strip has a flat background and no alpha, so the whole frame would read as the figure (a run gives an `outline` fault on every frame). Export it with a transparent background, or name the background with `--key #rrggbb`. `--key` removes that exact colour only: an anti-aliased fringe round the figure must be cleaned first. |
 | An effect (a spark, a thrown coin) reported as `apart` | Name its colours with `--effects`, or allow small pieces with `--allow LOOP=N`. |
 | `eye` faults in a loop where a glow recolours the eye | Pass `--glows-eye LOOP`. |
 | `TypeError` from the module | Your pixels are not `"#rrggbb"` keys. Pass `lum` and `rgb` to `Spec` (see [From code](#from-code)). |

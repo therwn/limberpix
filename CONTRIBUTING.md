@@ -30,6 +30,7 @@ python -m pip install -r requirements.txt
 python skills/pixel-anim-check/pixel_anim_selftest.py
 python skills/pixel-animate/body_parts_selftest.py
 python skills/pixel-animate/creature_map_selftest.py
+python skills/pixel-animate/shrink_selftest.py
 python examples/make_examples.py --verify
 ```
 

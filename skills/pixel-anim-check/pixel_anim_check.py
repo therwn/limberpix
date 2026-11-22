@@ -42,14 +42,22 @@ optional. Options:
   --glow #hex,...     colours shown in some frames on purpose (glow steps, glints, blink lids)
   --mark #hex,...     small defining marks (a gem, a lamp): on every frame, never jumping 2 px in one frame
   --sheet LOOP        that loop was drawn as a sheet or by AI: a part switched off for a cell is looked for (swap)
+  --key #rrggbb       the background colour of strips with no transparency: read as air in the loops, --parts,
+                      --ref and --palette (that exact colour only: clean a key's fringe first). Without it, a loop
+                      with no transparent pixel in any frame is refused (exit 2)
 Exit code: 0 no fault, 1 one fault or more, 2 a usage error (a bad option, a missing file, a strip that does not cut).
 Frame numbers in the output are 0-based: move[3] is the move's fourth frame; "frame k" in a jump or a snap is the
 change from frame k to the next.
 Faults (each a line "kind: ..."):
   size     frames differ in size            empty    a frame with nothing drawn
-  apart    a piece apart from the figure    eye      the eye missing on a frame
+  apart    a piece apart from the figure
+  eye      the eye missing on a frame, or (in the idle or the move; a warning elsewhere) the eye leaving its head's
+           box in one frame: a cell mirrored or off its anchor, or the eye lost while its colour shows elsewhere.
+           The eye is one piece of its colour, the biggest on the first frame, then the nearest one
   outline  coloured edge pixels with no ink round them (an open contour)
-  ground   a walker's feet leave one ground line in a loop other than the move; a flier's shadow slides
+  ground   a walker's feet leave one ground line in a loop other than the move; a flier's shadow slides; in a
+           legged walker's move the lowest drawn row moving is a warning (a whole-figure lift; a run leaves the
+           ground on purpose)
   jump     a change between two frames over JUMP times the loop's usual step: the mean of its moving steps with
            the two biggest left out, since a pose out of order makes two (into it and out of it); a declared
            strike's own step and a declared jump's launch and landing are left out first. Under 4 usual steps the
@@ -57,15 +65,16 @@ Faults (each a line "kind: ..."):
            runs. Or one pose knocked sideways out of step against the
            distinct poses either side of it, a pose held on twos or threes included ("move[6-7] (a held pose)")
   still    the move changes under STILL of the figure a frame
-  shimmer  pixels flipping to another tone for one frame and back on a sixth of the frames, 3 times a loop at the
-           least (texture crawling); a stroke's turning
-           frames, tones too alike to tell apart (FAINT), and a tone stepping monotonically along a moving edge
-           (a sub-pixel in-between) are not counted
+  shimmer  pixels taking another tone for 0.1 s at most (3 frames at 30 fps) and going back, on a sixth of the
+           frames and 3 times a loop at the least (texture crawling), a drawing held on twos or threes read too; a
+           stroke's turning poses, tones too alike to tell apart (FAINT), and a tone stepping monotonically along a
+           moving edge (a sub-pixel in-between) are not counted
   frozen   the head (round the eye) hardly moves against the body in the idle or the move: a mask on a living body
   stiff    a walker's body never rises or falls in the move (the top of its middle third holds to under STIFF px):
            legs stepping under a board
-  choppy   a continuous loop updating fewer than CHOPPY_RATE times a second, or one update dropped (a hold twice the
-           usual of 3+ frames): read as a dropped frame rate (--fps: the rate the game plays it at)
+  choppy   a loop updating fewer than CHOPPY_RATE times a second, or one update dropped (a hold twice the usual
+           of 3+ frames): read as a dropped frame rate (--fps: the rate the game plays it at). A rest (a hold of a
+           third of the loop) is left out and the rest of the loop judged
   uneven   the holds between a loop's moves jump in turn (1 frame, then 3, then 1): the motion stutters though
            the rate is the same (an idle's one long rest, and ease lengthening the holds at a turn, are on purpose)
   lurch    a held loop whose moves alternate big and small (a whole-body bob after a leg's small step, frames held
@@ -86,6 +95,7 @@ Warnings (lines "warn: ...", not faults; look at them): the eye tick, reshape an
   boil     outline-only steps that come back (A, B, A) are a quarter of the updates, or hide a real-pose rate
            under 10/s          skate    a planted foot slides forward, or its steps swing over 2 px (the move)
   gait     the move's body does not bob twice a loop, or it has an odd number of poses
+  seam     the pose at the loop's seam held longer than every other, all alike: the first pose repeated at the end
   counter, strike, recover, stage, piston   a declared strike: no wind-up against it, a strike under 3 times the
            anticipation's step, a return to rest in one step or one big one, a contact pose keeping 90 % of the rest
            silhouette, a lead travelling on a straight line
@@ -399,7 +409,7 @@ def _shadow_pixels(f, colours):
 def check(loops, spec, warns=None):
     """loops: {name: [frame, ...]}, a frame a list of rows of colour keys or None. Returns fault lines; warns, if a
     list, receives the warning lines (looked at, not counted as faults)."""
-    faults = []
+    faults, warns = [], (warns if warns is not None else [])
     allf = [(a, i, f) for a, v in loops.items() for i, f in enumerate(v)]
     sizes = {_frame_size(f) for _, _, f in allf}
     if len(sizes) > 1:
@@ -432,10 +442,14 @@ def check(loops, spec, warns=None):
                 rest_shadow = _shadow_pixels(frames[0], spec.shadow)
                 if any(_shadow_pixels(f, spec.shadow) != rest_shadow for f in frames[1:]):
                     faults.append(f"ground: {a} the shadow moves")
-        elif a != spec.move and kind != "jump":           # a declared jump leaves the ground on purpose
+        elif kind != "jump":                              # a declared jump leaves the ground on purpose
             feet = {max(y for y, r in enumerate(f) for v in r if v is not None) for f in figs}
-            if len(feet) > 1:
+            if len(feet) > 1 and a != spec.move:
                 faults.append(f"ground: {a} the feet leave the ground line (rows {sorted(feet)})")
+            elif len(feet) > 1 and spec.gait:             # the move of a legged body: a warning only
+                warns.append(f"warn: ground: {a} the lowest drawn row moves (rows {sorted(feet)}): a lift applied "
+                             f"to the whole figure takes the feet off the ground twice a stride; raise the body, not "
+                             f"the feet. A run, a gallop or a hopping gait leaves the ground on purpose")
         steps = [_change(figs[k], figs[(k + 1) % len(figs)]) for k in range(len(figs))]
         moving = [s for s in steps if s]
         mean = sum(moving) / len(moving) if moving else 0
@@ -446,11 +460,12 @@ def check(loops, spec, warns=None):
         if a == spec.move and body and mean / body < STILL:
             faults.append(f"still: {a} changes {mean / body:.1%} of the figure a frame")
         faults += _shimmer(a, frames, spec)
-    warns = warns if warns is not None else []
-    faults = (faults + frozen(loops, spec) + stiff(loops, spec) + cadence(loops, spec) + snap(loops, spec)
-              + tick(loops, spec, warns) + hop(loops, spec) + vanish(loops, spec) + shallow(loops, spec)
+    faults = (faults + eye_jumps(loops, spec, warns) + frozen(loops, spec) + stiff(loops, spec)
+              + cadence(loops, spec) + snap(loops, spec) + tick(loops, spec, warns) + hop(loops, spec)
+              + vanish(loops, spec) + shallow(loops, spec)
               + reshape(loops, spec, warns) + palette(loops, spec) + marks(loops, spec, warns))
-    for later in (action, boil, skate, gait, parts, orphans, doubles, blend, drift, swap, split, hitch):   # warnings
+    for later in (action, boil, seam, skate, gait, parts, orphans, doubles, blend, drift, swap, split,
+                  hitch):                                 # warnings
         later(loops, spec, warns)
     return faults
 
@@ -516,22 +531,67 @@ def _raw_triples(frames, dys, x, y):
 
 
 def _shimmer(a, frames, spec):
-    """Texture crawl: pixels drawn in every (bob-aligned) frame that flip A, B, A on at least a sixth of the frames,
-    and at least 3 times a loop, over SHIMMER of those pixels. The floor of 3 is for short loops: a two-step walk
-    passes a leg over the same pixel twice a loop, and on 12 frames (a walk thinned to every 2nd frame at 15 fps) a
-    sixth is those 2 passes, the walk itself. On 18 frames or more a sixth is 3 or more and the floor changes
-    nothing. A flip at a stroke's turn, between tones too alike to see, or one that is a monotonic sub-pixel step in
-    the unaligned frames (see _flips) is not counted."""
+    """Texture crawl: pixels drawn in every (bob-aligned) frame that take a tone for 0.1 s at most (3 frames at 30
+    fps, scaled with spec.fps) and go straight back to the tone before it, on at least a sixth of the frames and at
+    least 3 times a loop, over SHIMMER of those pixels. Each pixel is read by its own runs of one tone, so a texture
+    redrawn on a drawing held 2 or 3 frames (A, A, B, B, A, A) counts as well as one on ones (A, B, A); a tone held
+    longer than 0.1 s is a pose. The floor of 3 is for short loops: a two-step walk passes a leg over the same pixel
+    twice a loop. Not counted: a flip on a pose at or beside a stroke's turn (_near_turns, read on the distinct
+    poses, since held frames make every other step zero), between tones too alike to see (FAINT), or one that steps
+    monotonically in the unaligned frames (a sub-pixel in-between on an edge that moved with the bob).
+    Measured on this repo only (by one person's look; the private 39-creature set was not rerun): the selftest's
+    cases all hold; the 13 clean loops (the showcase's nine, the walker and the flier) give no fault, nor do the
+    walker and flier thinned to 15 and 10 fps or with every frame held 2 and 3 times; a texture alternating between
+    two tones is caught on ones, twos and threes. Its limit: a texture redrawn at random is caught on ones but not on
+    twos or threes, where it changes half or a third as often and a pixel's flips stay under the floor. Reading the
+    poses alone (collapsing held frames and running the old test on them) was tried and refused: the clean bird's
+    move then fails (47 of 762 steady pixels), and a texture changing on its own clock, apart from the poses, is
+    missed."""
     dys = []
     al = _aligned(frames, dys)
-    h, w = len(al[0]), len(al[0][0])
+    n, h, w = len(al), len(al[0]), len(al[0][0])
     held = [(x, y) for y in range(h) for x in range(w) if all(f[y][x] is not None for f in al)]
-    if not held or len(al) <= 4:
+    runs = _same_runs(frames)                             # the loop's distinct poses, cyclic
+    if not held or len(runs) <= 4:
         return []
-    near = _near_turns(al)
-    need = max(3, len(al) / 6)
-    flick = sum(1 for x, y in held
-                if _flips([f[y][x] for f in al], spec.lum, near, _raw_triples(frames, dys, x, y)) >= need)
+    poses = [al[k] for k, _ in runs]
+    near = set()                                          # every frame of a pose at or beside a stroke's turn
+    for i in _near_turns(poses):
+        k0, ln = runs[i]
+        near |= {(k0 + j) % n for j in range(ln)}
+    short = math.ceil(3 * spec.fps / 30 - 1e-9)           # 0.1 s: a tone shown longer is a pose, not a flicker
+    need = max(3, n / 6)
+    hh = len(frames[0])
+
+    def flips(x, y):
+        seq = [f[y][x] for f in al]
+        if len(set(seq)) < 2:
+            return 0
+        s = next(k for k in range(n) if seq[k] != seq[k - 1])
+        R = []                                            # [first frame, length, tone], cyclic from a change
+        for j in range(n):
+            k = (s + j) % n
+            if R and R[-1][2] == seq[k]:
+                R[-1][1] += 1
+            else:
+                R.append([k, 1, seq[k]])
+        m, c = len(R), 0
+        for i, (k0, ln, v) in enumerate(R):
+            p, q = R[i - 1], R[(i + 1) % m]
+            if m < 3 or ln > short or p[2] != q[2] or abs(spec.lum(v) - spec.lum(p[2])) < FAINT:
+                continue
+            if any((k0 + j) % n in near for j in range(ln)):
+                continue
+            sy = y - dys[k0]                              # the sub-pixel in-between: monotone in the raw frames
+            if 0 <= sy < hh:
+                tr = (frames[(k0 - 1) % n][sy][x], frames[k0][sy][x], frames[(k0 + ln) % n][sy][x])
+                if all(u is not None for u in tr) and tr[0] != tr[2]:
+                    la, lb, lc = (spec.lum(u) for u in tr)
+                    if min(la, lc) <= lb <= max(la, lc):
+                        continue
+            c += 1
+        return c
+    flick = sum(1 for x, y in held if flips(x, y) >= need)
     if flick / len(held) > SHIMMER:
         return [f"shimmer: {a} {flick} of its {len(held)} steady pixels flicker back and forth"]
     return []
@@ -544,13 +604,19 @@ def cadence(loops, spec):
     choppy (A1). Perceived smoothness is set by the longest holds, not the mean (Klein et al. 2023): twos read smooth,
     threes start to read choppy, a 4-frame hold inside a cycle reads as a dropped rate. A move is a step changing over
     max(1, MOVE_EPS * A) px (A: the mean figure area); holds are the cyclic frames from one move to the next. A loop
-    with fewer than 4 moves, or with a rest (a hold of n/3 or more), is a gesture: snap judges it. Otherwise
-        rate = moves * fps / n          fault when rate < CHOPPY_RATE (10/s), however small the steps;
+    with fewer than 4 moves is a gesture. A rest (a hold of n/3 or more) is left out, frames and all, and the rest of
+    the loop is judged; under 3 holds left, it is a gesture (a rest and a blink). With n' the frames left:
+        rate = holds left * fps / n'    fault when rate < CHOPPY_RATE (10/s), however small the steps;
         dropped update                  fault when median(holds) >= 3 and some hold >= 2 * median(holds)
     (the second sees one lost update the mean rate hides: twelve poses on threes with one skipped, a 6-frame hold).
     A declared action (--action) may hold one key (a wind-up or a contact) up to ACTION_KEY frames at 30 fps: that
     single longest hold is left out, and the rest of the frames must still update at CHOPPY_RATE with no dropped
     update. Every other hold keeps the rules: the proven limits govern idles, moves and an action's other frames.
+    Leaving the rest out, rather than the whole loop, was measured on this repo only: the selftest holds (a dead stop
+    is still snap's; the declared bite and leap stay clean), the 13 clean loops give no fault, and an idle stepped
+    every 6 frames after a 12-frame rest, or four walk drawings with the last held 14 frames more, are caught (they
+    passed when a rest excused the loop). The risk: an accepted idle with a rest whose other poses are held long
+    would now fail. Not rerun on the private 39-creature set.
 
     uneven: the holds between moves (here a move is over MOVE_MIN of the figure: a blink or a glint is not) differ by
     2 frames or more and by twice (one long rest, at least twice the next longest, is an idle's pause and is left
@@ -569,12 +635,15 @@ def cadence(loops, spec):
         flags = [s > max(1.0, MOVE_EPS * area) for s in steps]
         if sum(flags) >= 4:
             hs = _holds(flags)
-            if max(hs) < n / 3:
-                js, jn = hs, n                            # an action leaves out its single longest hold (up to
-                if max(hs) <= key:                        # ACTION_KEY frames): the other frames still update
-                    js = list(hs)
-                    js.remove(max(hs))
-                    jn = n - max(hs)
+            js, jn = list(hs), n
+            rests = [h for h in hs if h >= n / 3]         # a rest is left out; what is left must still update
+            for h in rests:
+                js.remove(h)
+                jn -= h
+            if not rests and max(hs) <= key:              # an action's one held key (up to ACTION_KEY frames)
+                js.remove(max(hs))
+                jn = n - max(hs)
+            if len(js) >= 3:
                 rate, med = len(js) * spec.fps / jn, statistics.median(js)
                 if rate < CHOPPY_RATE:
                     most = int(spec.fps // CHOPPY_RATE)           # the longest hold that keeps CHOPPY_RATE
@@ -647,23 +716,32 @@ def snap(loops, spec):
     return []
 
 
+def _eye_piece(f, spec, last=None):
+    """Where the eye is on frame f, as (row, column) floats: the centroid of one 8-connected piece of the eye colour.
+    With no last place, the biggest piece (the frontmost on a tie); after that, the piece nearest the last place, so
+    the eye is followed from frame to frame and not confused with the same colour used elsewhere. None if f has no
+    pixel of the eye colour. Every check that reads the eye finds it here; a one-piece eye gives its plain
+    centroid."""
+    pcs = _blobs(np.array([[v == spec.eye for v in r] for r in f]))
+    if not pcs:
+        return None
+    cents = [(float(ys.mean()), float(xs.mean()), len(ys)) for ys, xs in pcs]
+    if last is None:
+        front = 1 if spec.facing != "left" else -1
+        c = max(cents, key=lambda t: (t[2], front * t[1]))
+    else:
+        c = min(cents, key=lambda t: (t[0] - last[0]) ** 2 + (t[1] - last[1]) ** 2)
+    return c[0], c[1]
+
+
 def _eye_rows(frames, spec):
-    """The eye's row per frame: the 8-connected piece of the eye colour (the biggest in frame 0, frontmost on a tie;
-    then the piece nearest the last frame's eye), its mean row rounded half up. None if a frame has no eye."""
+    """The eye's row per frame (followed by _eye_piece), its mean row rounded half up. None if a frame has no eye."""
     out, last = [], None
     for f in frames:
-        m = np.array([[v == spec.eye for v in r] for r in f])
-        pcs = _blobs(m)
-        if not pcs:
-            return None
-        cents = [(float(ys.mean()), float(xs.mean()), len(ys)) for ys, xs in pcs]
+        last = _eye_piece(f, spec, last)
         if last is None:
-            front = 1 if spec.facing != "left" else -1
-            c = max(cents, key=lambda t: (t[2], front * t[1]))
-        else:
-            c = min(cents, key=lambda t: (t[0] - last[0]) ** 2 + (t[1] - last[1]) ** 2)
-        last = c
-        out.append(math.floor(c[0] + 0.5))
+            return None
+        out.append(math.floor(last[0] + 0.5))
     return out
 
 
@@ -921,12 +999,13 @@ def _distinct(frames):
 def reshape(loops, spec, warns):
     """A7: the face is rigid. Aligned on itself, the head keeps its silhouette and ink lines (mouth line, jaw) unless
     a face move is drawn on purpose. AI sheets fail this first, redrawing the head in every cell.
-    1. The eye: spec.eye's centroid in the first pose, or else the frontmost ink pixel in the front third with colour
-       on 3 of its 4 sides. 2. The face window: rows eye +- r, columns from 1 px behind the eye forward (mirrored for
-       facing left), r = max(3, round(0.12 * figure width)). 3. Distinct poses only; every pixel classed air, ink or
-       colour. 4. For each pose change p -> q, q's window slid by dx, dy in [-3, 3] ([-7, 7] outside the idle, where a
-       hop may carry the head far): the fewest class mismatches / p's drawn pixels in the window. 5. Fault in the
-       idle when the mean over the pose changes > RESHAPE; a warning in other loops (an action may open its jaw).
+    1. The eye: spec.eye's piece in the first pose (_eye_piece), or else the frontmost ink pixel in the front third
+       with colour on 3 of its 4 sides. 2. The face window: rows eye +- r, columns from 1 px behind the eye forward
+       (mirrored for facing left), r = max(3, round(0.12 * figure width)). 3. Distinct poses only; every pixel classed
+       air, ink or colour. 4. For each pose change p -> q, q's window slid by dx, dy in [-3, 3] ([-7, 7] outside the
+       idle, where a hop may carry the head far): the fewest class mismatches / p's drawn pixels in the window. 5.
+       Fault in the idle when the mean over the pose changes > RESHAPE; a warning in other loops (an action may open
+       its jaw).
     The mean, not the max: one accepted change of 0.41 (wisps passing the face) sits among zeros. A rigid head that
     bobs, slides or turns 1.5 degrees keeps its class map after the best shift. Fitted margins: the faulty idles 0.16
     and 0.13, the highest accepted 0.065."""
@@ -945,9 +1024,9 @@ def reshape(loops, spec, warns):
         x0, x1 = int(xs.min()), int(xs.max())
         left = spec.facing == "left"
         eye = None
-        pts = [(x, y) for y, r in enumerate(f0) for x, v in enumerate(r) if spec.eye and v == spec.eye]
-        if pts:
-            eye = (round(sum(p[0] for p in pts) / len(pts)), round(sum(p[1] for p in pts) / len(pts)))
+        c = _eye_piece(f0, spec) if spec.eye else None
+        if c:
+            eye = (round(c[1]), round(c[0]))
         else:
             h, w = c0.shape
             span = range(max(1, x0), min(w - 1, x0 + (x1 - x0) // 3 + 1)) if left else \
@@ -1019,18 +1098,59 @@ def stiff(loops, spec):
     return []
 
 
-def frozen(loops, spec):
-    """The head, a box round the eye reaching 0.12 of the figure's width to each side of it (about a quarter of the
-    width across, 3 px each side at least), in the idle and the move with the bob aligned away: under FROZEN of its
-    pixels ever change, it is a mask on a living body."""
+def _head(loops, spec):
+    """The first frame showing the eye, the eye's place on it (_eye_piece: (row, column)) and hr, the half side of
+    the head's box round the eye: max(3, round(0.12 * the figure's width)) on that frame. None with no eye."""
     eye = spec.eye
     f0 = next((f for v in loops.values() for f in v if any(eye in r for r in f)), None) if eye else None
     if f0 is None:
-        return []
-    pts = [(x, y) for y, r in enumerate(f0) for x, v in enumerate(r) if v == eye]
-    ex, ey = sum(x for x, _ in pts) / len(pts), sum(y for _, y in pts) / len(pts)
+        return None
     xs = [x for r in f0 for x, v in enumerate(r) if v is not None and v not in spec.shadow]
-    hr = max(3, round(0.12 * (max(xs) - min(xs))))
+    return f0, _eye_piece(f0, spec), max(3, round(0.12 * (max(xs) - min(xs))))
+
+
+def eye_jumps(loops, spec, warns):
+    """The eye leaving its head's box in one frame: from one frame to the next (cyclic), the eye's place (followed
+    by _eye_piece) moves 2 * hr + 1 px or more along its row or its column, hr being frozen's half side of the head
+    box. A fault in the idle and the move; a warning elsewhere, since an attack may carry the head fast. A cell
+    mirrored or placed off its anchor does it, and so does an eye lost where its colour shows elsewhere (then the
+    track jumps to that other piece, and the plain "no eye" test, which asks only for the colour, does not fire).
+    Measured on this repo only (by one person's look; not rerun on the private 39-creature set): the 13 clean loops'
+    idles and moves jump 1-2 px a frame against limits of 7 (walker, flier) and 17-19 (showcase); the showcase's
+    attacks 3-15 px against 17-19 (they would only warn); a walk frame mirrored 21 px against 7; the broken example
+    (a frame knocked 4 px) 4 against 7, so it does not fire there."""
+    got = _head(loops, spec)
+    if got is None:
+        return []
+    lim, out = 2 * got[2] + 1, []
+    for a, frames in loops.items():
+        if a in spec.glows_eye or len(frames) < 2:
+            continue
+        tr, n, worst = _eye_track(frames, spec), len(frames), None
+        for k in range(n):
+            p, q = tr[k], tr[(k + 1) % n]
+            if p and q:
+                d = max(abs(p[0] - q[0]), abs(p[1] - q[1]))
+                if d >= lim and (worst is None or d > worst[0]):
+                    worst = (d, k)
+        if worst:
+            d, k = worst
+            line = (f"eye: {a}[{(k + 1) % n}] the eye jumps {d} px in one frame (frame {k}): a cell mirrored or "
+                    f"placed off its anchor, or the eye lost and another patch of its colour read for it")
+            (out if a in (spec.idle, spec.move) else warns).append(line if a in (spec.idle, spec.move)
+                                                                    else "warn: " + line)
+    return out
+
+
+def frozen(loops, spec):
+    """The head, a box round the eye reaching 0.12 of the figure's width to each side of it (about a quarter of the
+    width across, 3 px each side at least; _head), in the idle and the move with the bob aligned away: under FROZEN
+    of its pixels ever change, it is a mask on a living body. The eye is the piece _eye_piece reads, so its colour
+    used elsewhere on the body does not move the box."""
+    got = _head(loops, spec)
+    if got is None:
+        return []
+    f0, (ey, ex), hr = got
     out = []
     for a in (spec.idle, spec.move):
         if a not in loops:
@@ -1178,8 +1298,8 @@ def _lead(a, d):
 def _eye_at(frame, spec):
     if spec.eye is None:
         return None
-    pts = [(x, y) for y, r in enumerate(frame) for x, v in enumerate(r) if v == spec.eye]
-    return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)) if pts else None
+    c = _eye_piece(frame, spec)
+    return (c[1], c[0]) if c else None
 
 
 def _strike(frames, spec, d):
@@ -1356,6 +1476,25 @@ def _airborne(a, frames, spec):
 def _edge_band(m):
     """Cells within 1 px of the silhouette's edge (figure cells with air beside them, dilated 1)."""
     return _dilate(m & _dilate(~m, 1), 1)
+
+
+def seam(loops, spec, warns):
+    """The loop's seam: a first pose repeated at the end doubles its hold where the loop closes. The loop's distinct
+    poses (_same_runs, cyclic, starting at a change); when every run that does not cross the seam (start + length
+    within the loop) has one length h, and the run crossing it is longer than h, warn. A loop whose holds differ is
+    not judged: an idle's rest may fall on the seam. Measured on this repo only (by one person's look; not rerun on
+    the private 39-creature set): none of the 13 clean loops fires (the showcase holds every pose 2 frames and no
+    run crosses its seam; the clean flier's idle has a 4-frame run across its seam, but holds of 1-4, so it is not
+    judged); a walk with its first frame copied to its end gives a crossing run of 2 against 1, on twos 4 against 2.
+    A warning only."""
+    for a, frames in loops.items():
+        n = len(frames)
+        runs = _same_runs(frames)
+        inner = [ln for k0, ln in runs if k0 + ln <= n]
+        cross = [ln for k0, ln in runs if k0 + ln > n]
+        if len(inner) >= 3 and cross and len(set(inner)) == 1 and cross[0] > inner[0]:
+            warns.append(f"warn: seam: {a} the pose at the seam (frame 0) is held {cross[0]} frames against "
+                         f"{inner[0]} for every other: the first pose is repeated at the end; drop the last frame")
 
 
 def _boil(figs):
@@ -2026,16 +2165,10 @@ def _eye_track(frames, spec):
     """The eye's (row, column) per frame, as _eye_rows follows it; None on a frame with no eye."""
     out, last = [], None
     for f in frames:
-        pcs = _blobs(np.array([[v == spec.eye for v in r] for r in f]))
-        if not pcs:
+        c = _eye_piece(f, spec, last)
+        if c is None:
             out.append(None)
             continue
-        cents = [(float(ys.mean()), float(xs.mean()), len(ys)) for ys, xs in pcs]
-        if last is None:
-            front = 1 if spec.facing != "left" else -1
-            c = max(cents, key=lambda t: (t[2], front * t[1]))
-        else:
-            c = min(cents, key=lambda t: (t[0] - last[0]) ** 2 + (t[1] - last[1]) ** 2)
         last = c
         out.append((math.floor(c[0] + 0.5), math.floor(c[1] + 0.5)))
     return out
@@ -2132,7 +2265,9 @@ def readouts(loops, spec):
     """The later checks' numbers, printed after the tracks (what to read before trusting a warning): per loop the
     update rate against the real-pose rate (boil), the box's height, width and anchor, the rare colours; for the move
     the bob, the leg band and the planted feet's speed; the eye's lag behind the figure's top; per declared action
-    its phases and staging; with a part strip each part's area and lag."""
+    its phases and staging; with a part strip each part's area and lag; the move's closing step (last frame to
+    first, a 1-px bob forgiven) against its median moving step. That ratio is a read-out, not a warning: the clean
+    moves here give 0.78-1.32, a 16-frame walk cut at 13 frames 1.64 and at 11 frames 2.11, too narrow a margin."""
     lines = []
     for a, frames in loops.items():
         n = len(frames)
@@ -2157,6 +2292,13 @@ def readouts(loops, spec):
             if ys and len(set(ys)) > 1:
                 tops = [b[0] for b in (_box(f) for f in figs)]
                 lines.append(f"{a}: the eye trails the figure's top by {_lag(tops, ys)} frame(s) (a readout)")
+        if a == spec.move and n >= 4:                     # the seam: the step that closes the loop
+            fg = [[[None if v in spec.effects else v for v in r] for r in f] for f in frames]
+            st = [_change(fg[k], fg[(k + 1) % n]) for k in range(n)]
+            mv = [s for s in st if s]
+            if mv:
+                lines.append(f"{a}: the closing step (frame {n - 1} to 0) is {st[-1] / statistics.median(mv):.2f} "
+                             f"times the median moving step (clean walks and beats 0.78-1.32; a read-out)")
         if a == spec.move and not spec.flier and spec.gait and n >= 4:
             tops = _tops(frames, spec)
             u = np.any([f > 0 for f in figs], 0)
@@ -2347,10 +2489,20 @@ def tracks(loops, spec):
 
 
 # ---- loading ---------------------------------------------------------------------------------------------------
-def _grid(im):
+def _grid(im, key=None):
+    """An image as rows of "#rrggbb" or None (air): a pixel under half alpha is air, and so is one of the key colour
+    (a "#rrggbb", or None for none). Only that exact colour: a key's anti-aliased fringe stays and must be cleaned
+    before."""
     im = im.convert("RGBA")
-    return [["#%02x%02x%02x" % im.getpixel((x, y))[:3] if im.getpixel((x, y))[3] >= 128 else None
-             for x in range(im.width)] for y in range(im.height)]
+    out = []
+    for y in range(im.height):
+        row = []
+        for x in range(im.width):
+            p = im.getpixel((x, y))
+            v = "#%02x%02x%02x" % p[:3]
+            row.append(v if p[3] >= 128 and v != key else None)
+        out.append(row)
+    return out
 
 
 def hexcol(v):
@@ -2363,14 +2515,16 @@ def hexcol(v):
     return t
 
 
-def load(src, frame=None, frames=None, fps=None):
+def load(src, frame=None, frames=None, fps=None, key=None):
     """Frames from a strip PNG, a folder of PNGs, or a GIF. A strip is cut by frame (one frame's width) or frames (how
     many it holds); with neither its frames are square (as wide as the strip is tall). ValueError when the strip's
     width is not a whole number of frames: a wrong cut would be checked as a broken animation. A folder is read in
     file-name order (zero-pad the numbers: f00.png, f01.png, ...). For a GIF, round cumulative presentation times
-    to game-frame boundaries. Without fps or a stored duration, count one game frame per image."""
+    to game-frame boundaries. Without fps or a stored duration, count one game frame per image. key, a "#rrggbb",
+    reads that exact colour as air (a strip with a flat background instead of transparency)."""
     if os.path.isdir(src):
-        return [_grid(Image.open(os.path.join(src, n))) for n in sorted(os.listdir(src)) if n.lower().endswith(".png")]
+        return [_grid(Image.open(os.path.join(src, n)), key) for n in sorted(os.listdir(src))
+                if n.lower().endswith(".png")]
     im = Image.open(src)
     if im.format == "GIF" or getattr(im, "n_frames", 1) > 1:
         out = []
@@ -2386,10 +2540,10 @@ def load(src, frame=None, frames=None, fps=None):
                     hold = end_tick - previous_tick
                     previous_tick = end_tick
                 if hold:
-                    out.extend([_grid(im)] * hold)
+                    out.extend([_grid(im, key)] * hold)
             if not out:
                 im.seek(0)
-                out.append(_grid(im))
+                out.append(_grid(im, key))
         return out
     if frames:
         if im.width % frames:
@@ -2400,7 +2554,7 @@ def load(src, frame=None, frames=None, fps=None):
         if fw <= 0 or im.width % fw:
             raise ValueError(f"{src}: {im.width} px wide is not a whole number of {fw}-px frames"
                              + ("" if frame else " (square frames assumed): pass --frame W or --frames N"))
-    return [_grid(im.crop((k * fw, 0, (k + 1) * fw, im.height))) for k in range(im.width // fw)]
+    return [_grid(im.crop((k * fw, 0, (k + 1) * fw, im.height)), key) for k in range(im.width // fw)]
 
 
 def _wide_strip(src):
@@ -2413,7 +2567,7 @@ def _wide_strip(src):
 
 VALUED = {"--loop", "--frame", "--frames", "--eye", "--facing", "--ink", "--shadow", "--effects", "--allow",
           "--glows-eye", "--idle", "--move", "--out", "--fps", "--name", "--action", "--speed", "--parts", "--squash",
-          "--palette", "--glow", "--ref", "--mark", "--sheet"}
+          "--palette", "--glow", "--ref", "--mark", "--sheet", "--key"}
 FLAGS = {"--flier", "--legless", "--selftest", "--help", "-h"}
 
 
@@ -2459,6 +2613,21 @@ def _unnamed(loops, spec, idle_given, move_given):
         out.append(f"note: no loop is named '{spec.move}' (name the travel loop with --move NAME): {_and(skip)} "
                    f"{'is' if len(skip) == 1 else 'are'} not run, {_and(judge)} do not judge a loop as the move"
                    f"{rest}")
+    return out
+
+
+def _eye_pieces(loops, spec):
+    """A note per loop whose first frame shows the eye colour in more than one piece: which piece is read as the eye
+    (_eye_piece: the biggest, the frontmost on a tie), so a wrong pick shows before its faults are trusted."""
+    out = []
+    for a, frames in loops.items():
+        if not spec.eye or a in spec.glows_eye or not frames:
+            continue
+        n = len(_blobs(np.array([[v == spec.eye for v in r] for r in frames[0]])))
+        if n > 1:
+            y, x = _eye_piece(frames[0], spec)
+            out.append(f"note: {a}[0] shows the eye colour {spec.eye} in {n} pieces; the eye is read as the one at "
+                       f"row {y:g}, column {x:g} (the biggest, the frontmost on a tie) and followed from there")
     return out
 
 
@@ -2513,10 +2682,16 @@ def main(argv):
             raise ValueError(f"--fps must be a number, not {opt('--fps')!r}") from None
         if not math.isfinite(fps) or fps <= 0:
             raise ValueError("--fps must be finite and over 0")
-        loops = {name: load(src, frame, frames, fps) for name, (_, src) in loops.items()}
+        key = hexcol(opt("--key")) if opt("--key") else None
+        srcs = {name: src for name, (_, src) in loops.items()}
+        loops = {name: load(src, frame, frames, fps, key) for name, src in srcs.items()}
         for name, poses in loops.items():
             if not poses:
                 raise ValueError(f"no frames in loop {name!r}")
+            if key is None and all(v is not None for f in poses for r in f for v in r):
+                raise ValueError(f"loop {name!r} ({srcs[name]}) has no transparent pixel in any frame, so its "
+                                 f"background would be read as the figure: export it with a transparent background, "
+                                 f"or name the background colour with --key #rrggbb")
         actions = dict(parse_action(t, facing) for t in opt("--action", many=True))
         named = [opt(o) for o in ("--idle", "--move") if opt(o) is not None]
         for a in list(actions) + opt("--sheet", many=True) + named:
@@ -2527,7 +2702,7 @@ def main(argv):
             a, _, src = t.partition("=")
             if a not in loops or not os.path.exists(src):
                 raise ValueError(f"--parts takes LOOP=PATH for a given loop and an existing file, not {t!r}")
-            part_strips[a] = load(src, frame, frames, fps)
+            part_strips[a] = load(src, frame, frames, fps, key)
             if list(map(_frame_size, part_strips[a])) != list(map(_frame_size, loops[a])):
                 raise ValueError(f"--parts {a}: the part strip must hold the loop's frames at the loop's size")
         speed = opt("--speed")
@@ -2544,7 +2719,7 @@ def main(argv):
                 return None
             if not os.path.isfile(p):
                 raise ValueError(f"no such file: {p}")
-            return _grid(Image.open(p))
+            return _grid(Image.open(p), key)
         pal = image("--palette")
         eye = opt("--eye")
         spec = Spec(ink=cols(opt("--ink")) or None, shadow=cols(opt("--shadow")), effects=cols(opt("--effects")),
@@ -2560,7 +2735,7 @@ def main(argv):
         return 2
     if not frame and not frames and any(_wide_strip(s.split("=", 1)[1]) for s in opt("--loop", many=True)):
         print("note: strips cut into square frames (no --frame or --frames given)")
-    for line in _unnamed(loops, spec, "--idle" in got, "--move" in got):
+    for line in _unnamed(loops, spec, "--idle" in got, "--move" in got) + _eye_pieces(loops, spec):
         print(line)
     warns = []
     faults = check(loops, spec, warns)

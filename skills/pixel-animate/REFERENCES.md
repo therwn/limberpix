@@ -184,6 +184,48 @@ elsewhere, at a uniform frame time (Broadleaf's attack and Sandy Gordon's attack
 - Kyle McArthur (above) and finalbossblues, walk part 3 (above): the motion settled on flat colour blocks before
   any detail.
 
+## Bringing a frame down to game size (2, step 5)
+
+- Astropulse, K-Centroid downscale (MIT): https://github.com/Astropulse/K-Centroid-Aseprite . Its README calls it
+  "a new downsampling algorithm using k-means"; its itch.io page (https://astropulse.itch.io/k-centroid , *summary
+  only*) describes it as taking the most common colour of every tile. `shrink.py`'s voted fill is that idea with the
+  palette known beforehand.
+- Shin-Ying Yeh, PixelOE (Apache-2.0): https://github.com/KohakuBlueleaf/PixelOE . It widens the outlines of key
+  features before downscaling, so that fine details and high-contrast edges survive it, and lists Astropulse's
+  k-centroid among its downscale modes. `shrink.py` meets the same loss by reading the contour apart.
+- Gerstner, DeCarlo, Alexa, Finkelstein, Gingold and Nealen, "Pixelated Image Abstraction", NPAR 2012:
+  https://pixl.cs.princeton.edu/pubs/Gerstner_2012_PIA/index.php . Nearest-neighbour or cubic downsampling followed
+  by median-cut quantisation gives detail loss and blurriness (the teaser figure's caption).
+- Kopf, Shamir and Peers, "Content-Adaptive Image Downscaling", ACM Transactions on Graphics 32(6), SIGGRAPH Asia
+  2013: https://johanneskopf.de/publications/downscaling . Filters blind to the content either keep sharpness and
+  alias (subsampling) or smooth out fine details and edges (bicubic, Lanczos).
+
+**What `shrink.py`'s rules were measured on.** Six painted reference drawings from a private set (single creatures
+on a plain ground, 1300 to 1650 px wide; not included), each brought to its game size (25 to 54 px wide, a cell of
+24 to 36 reference px) with 18 tones. Three numbers that need no ideal answer were read: the share of the figure
+left as lone pixels (a pixel unlike all eight round it); the share that changes when the drawing is moved a fifth of
+a cell on the same grid, which should be none; and how much of the figure the darkest tone, the contour, keeps.
+
+| How a cell becomes a pixel | Lone pixels | Changed by a fifth-of-a-cell move | The contour's share |
+|---|---|---|---|
+| the cell's average | 42 % | 67 % | 5 % |
+| one sample at the cell's centre | 41 % | 65 % | 5 % |
+| 2-means of the cell's colours, the larger part, the contour read apart | 27 % | 45 % | 26 % |
+| `shrink.py`: the contour read apart, the fill voted | 18 % | 34 % | 25 % |
+| the same vote, no contour rule | 18 % | 32 % | 9 % |
+
+On each of the six, `shrink.py` was lowest on the first two numbers, the 2-means next, the average and the single
+sample highest. The third row is the pipeline the private set's sprites were made with;
+`shrink.py`'s coverage and contour thresholds (0.42, 70, 0.45, 0.12) are that pipeline's. Looked at by eye on three
+of the six: the contour rule keeps the outlines the plain vote loses, and the voted fill kept a tail flame and an
+eye that the 2-means lost. One person's measurements and look; nobody else judged the pictures. Even the best row
+changes a third of the pixels under a small move, which is why the default rules move parts by whole game pixels.
+
+The crest rule (which of two cells a thin line straddles is the line) was fixed on built cases, not on the
+drawings: on the six it changed 2 to 10 pixels a drawing against the pipeline's own rule. `shrink_selftest.py`
+holds those cases: a 3-px line across two 8-px cells stays one pixel wide, and a drawing blown up 3, 7.5 and 8
+times in solid cells comes back the same. The three showcase drawings come back the same from their 8x pictures.
+
 ## Actions, jumps, hits and effects (3.12, 3.13, 3.14)
 
 - Broadleaf Digital (video, above): a punch of 5 anticipation frames (small steps, sinking 2 px, the fist drawn
