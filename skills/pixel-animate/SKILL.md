@@ -9,9 +9,13 @@ The goal is an animation that keeps the approved drawing's look and moves like a
 creature. A redrawn one that moves well but no longer looks like itself reads as a different creature, and a
 faithful one that moves like a cut-out reads as paper. Work from the approved drawing.
 
-**Paths.** The scripts sit next to this file. Inside Claude Code, `${CLAUDE_SKILL_DIR}` is that folder; outside
-Claude Code, read `${CLAUDE_SKILL_DIR}` as the folder holding this SKILL.md. Python 3.8+ with numpy and Pillow.
-Sources named below are linked in [REFERENCES.md](REFERENCES.md).
+**Paths.** The scripts sit next to this file. Inside Claude Code, `${CLAUDE_SKILL_DIR}` is that folder; outside Claude
+Code, read `${CLAUDE_SKILL_DIR}` as the folder holding this SKILL.md. Python 3.8+ with numpy and Pillow. The commands
+use `python -I` (isolated mode): it leaves the script's own folder, `PYTHON*` variables (such as a `PYTHONPATH` into
+the project) and the user's site-packages off the import path, so a stray file named like a standard module
+(`json.py`) cannot shadow it. It also hides packages installed with `pip install --user`: on `No module named 'numpy'`
+(or `'PIL'`), install numpy and Pillow in a virtual environment or for the whole system, or drop the `-I`. Sources
+named below are linked in [REFERENCES.md](REFERENCES.md).
 
 **Terms.** *Game px*: one pixel of the sprite as the game shows it; *reference px*: one pixel of the larger drawing
 the animation is made from. *On twos*: a new drawing every 2nd frame (a *hold* of 2); *threes*: every 3rd. A

@@ -13,7 +13,8 @@ scrolling at the creature's own speed (a walker's planted feet keep pace with it
 passes pixel-anim-check with 0 faults; their sources are in [`examples/showcase/`](examples/showcase).
 
 **Requirements:** Python 3.8+ with numpy and Pillow (`python -m pip install -r requirements.txt`); Claude Code to use
-the skills.
+the skills. The skills run their scripts with `python -I`, which does not see a `pip install --user`: install the
+two in a virtual environment or for the whole system (see [Troubleshooting](docs/usage.md#troubleshooting)).
 
 ## Install
 

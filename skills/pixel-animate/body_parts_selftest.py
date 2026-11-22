@@ -332,6 +332,32 @@ def cli():
                      all(mask.getpixel(p) == labels[part] for p in visible) and mask.getpixel(covered) != labels[part])
         code, text = run_main([full, stray, "--out", os.path.join(tmp, "cut")])
         case("a cut with CHECK lines exits 1", code == 1 and "CHECK" in text, text[-300:])
+        child = next(n for n, p in MARKS["parts"].items() if p.get("parent"))
+        broken = {                                        # each must be a usage error naming the fault, no traceback
+            "no bone": {child: {"kind": "head"}},
+            "an empty bone": {child: dict(MARKS["parts"][child], bone=[])},
+            "a bone of nulls": {child: dict(MARKS["parts"][child], bone=[None, None])},
+            "a point not two numbers": {child: dict(MARKS["parts"][child], bone=[["a", 3], [4, 5]])},
+            "a point of true and false": {child: dict(MARKS["parts"][child], bone=[[True, 3], [4, 5]])},
+            "a point of three numbers": {child: dict(MARKS["parts"][child], bone=[[1, 2, 3]])},
+            "a part not an object": {child: [1, 2]},
+            "a parent misspelt": {child: dict(MARKS["parts"][child], parent="torsoo")},
+            "a parent that is itself": {child: dict(MARKS["parts"][child], parent=child)},
+            "a kind that is not text": {child: dict(MARKS["parts"][child], kind=5)},
+        }
+        files = {k: {"parts": dict(MARKS["parts"], **v)} for k, v in broken.items()}
+        files["an eye of one number"] = dict(MARKS, points={"eye": [1]})
+        files["points not an object"] = dict(MARKS, points=[1, 2])
+        for what, marks in files.items():
+            path = os.path.join(tmp, "broken.json")
+            with open(path, "w") as fh:
+                json.dump(marks, fh)
+            try:
+                code, text = run_main([full, path, "--out", os.path.join(tmp, "cut")])
+            except Exception as e:                        # a traceback: the check let it through
+                code, text = None, repr(e)
+            named = repr(child) in text if what in broken else '"points"' in text   # the error names the part
+            case(f"a landmarks file with {what} exits 2", code == 2 and "error:" in text and named, text[-200:])
     if "size" in inspect.signature(ImageFont.load_default).parameters:
         bb = bp._font(40, names=()).getbbox("Ag")
         case("the fallback font is drawn at the size asked", bb[3] - bb[1] >= 20, bb)

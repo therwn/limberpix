@@ -37,8 +37,13 @@ import os
 import sys
 from collections import deque
 
-import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+try:
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFilter
+except ImportError as e:                                  # python -I does not see a pip install --user
+    raise type(e)(f"{e}: {os.path.basename(__file__)} needs numpy and Pillow. python -I (isolated mode) does "
+                  "not see packages installed with pip install --user: install them in a virtual "
+                  "environment or for the whole system, or run without -I", name=e.name) from None
 
 WORK = 320                                                # the analysis copy's longest side
 
@@ -197,9 +202,10 @@ def _path_to(prev, end):
 def spine(sk, dist, toward=None):
     """The trunk's axis: the skeleton through the thick core of the body (width at least 70 % of the widest), then
     out of each end of the core: toward the eye on the head's side (when the eye is known), and on the other side to
-    the skeleton end that lies furthest along the axis, judged by its reach times the fourth power of how straight on
-    it lies (a tail trails on; a leg drops away, a raised wing turns off). With nothing straight on (cosine under
-    0.6: a jellyfish's bell, a blob) the spine stops at the core. A greedy walk instead ran into ears and wings."""
+    the skeleton end that lies furthest along the axis, judged by its reach times the sixth power of how straight on
+    it lies, the square of the path's mean width and the square of how straight on the path sets off (a tail trails
+    on; a leg drops away, a raised wing turns off). With nothing straight on (cosine under 0.55: a jellyfish's
+    bell, a blob) the spine stops at the core. A greedy walk instead ran into ears and wings."""
     pts = [(x, y) for y, x in zip(*np.nonzero(sk))]
     if not pts:
         return []

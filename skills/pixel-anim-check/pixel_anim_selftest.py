@@ -357,6 +357,8 @@ def run(verbose=False):
 
     ok &= later_quiet(walker, flier)
     ok &= crawler_quiet()
+    ok &= jump_short(walker)
+    ok &= thinned(walker, flier)
     cases += later_cases()
     for kind, who, fn in cases:
         L = copy.deepcopy(walker if who == "walker" else flier)
@@ -519,6 +521,70 @@ def crawler_quiet():
     print("clean crawler, a tone between its outline and fill for 2 frames, passes" +
           ("" if not warns else ": NO, FALSE ALARM: " + warns[0][:120]))
     ok &= not warns
+    return ok
+
+
+def jump_short(walker):
+    """jump's step ratio on short loops, where the usual step leaves out the two biggest steps. A pose out of order
+    makes two big steps; with both in the mean a loop of 6 moving steps or fewer could never fire. The ratio test,
+    not the sideways one, must catch the body stepping three levels at once on one pose of a 6- and an 8-pose idle.
+    A sparse idle (a 3-px lid blinking once, an ear flicked once out and back) has only 2 usual steps: its 23-px
+    flick stays quiet because it changes under a quarter of the figure. The broken example (a frame knocked 4 px)
+    still gives exactly two jump lines, one of each kind."""
+    ok = True
+    spec = pac.Spec(eye=EYE)
+    for n, k in ((6, 1), (8, 2)):
+        idle = [walker_frame(p / n, "idle", rise=3 if p == k else None) for p in range(n)]
+        f = pac.check(dict(walker, idle=idle), spec)
+        hit = [x for x in f if x.startswith("jump: idle a change of")]
+        print(f"jump     on walker caught by the step ratio ({n}-pose idle, one pose's body 3 px up)"
+              + ("" if hit and len(f) == 1 else f": NO ({f[:3]})"))
+        ok &= bool(hit) and len(f) == 1
+    base = walker_frame(0, "idle")
+    lid = copy.deepcopy(base)
+    for x in (26, 27, 28):
+        lid[6][x] = "#8a6448"
+    ear = [[None if v == INK else v for v in r] for r in base]
+    for y in (1, 2, 3, 4):
+        for x in (23, 24, 25, 26) if y > 1 else (24, 25):
+            ear[y][x] = FUR
+    ear = _outline(ear)
+    sparse = [copy.deepcopy(lid if k in (6, 7) else ear if k in (14, 15, 16) else base) for k in range(24)]
+    f = [x for x in pac.check(dict(walker, idle=sparse), spec) if x.startswith("jump:")]
+    print("clean sparse idle (a blink, one ear flick) gives no jump"
+          + ("" if not f else ": NO, FALSE ALARM: " + f[0]))
+    ok &= not f
+    broken = copy.deepcopy(walker)
+    broken["move"][8] = [[None] * 4 + r[:-4] for r in broken["move"][8]]
+    f = [x for x in pac.check(broken, spec) if x.startswith("jump:")]
+    two = len(f) == 2 and "against a usual" in f[0] and "knocked 4 px" in f[1]
+    print("jump     on walker the broken example still gives two jump lines" + ("" if two else f": NO ({f})"))
+    return ok and two
+
+
+def thinned(walker, flier):
+    """Clean loops thinned as pixel-animate advises (every 2nd frame at 15 fps, every 3rd at 10) must stay clean: on
+    12 frames a sixth of the loop is 2 flips, which a two-step walk's legs make on their own, so shimmer counts a
+    pixel only from 3. The eye tick's dwell is a time (0.1 s, 0.13 s): at 15 fps a level of 2 frames is enough, 1
+    is not; the same 2 frames at 30 fps are a tick."""
+    ok = True
+    ws, fs = dict(eye=EYE), dict(eye=EYE, flier=True, shadow={SHADOW})
+    for step, fps in ((2, 15), (3, 10)):
+        for name, loops, kw in (("walker", walker, ws), ("flier", flier, fs)):
+            f = pac.check({a: v[::step] for a, v in loops.items()}, pac.Spec(fps=fps, **kw))
+            print(f"clean {name} thinned to every {'2nd' if step == 2 else '3rd'} frame at {fps} fps passes"
+                  + ("" if not f else ": NO, FALSE ALARM: " + "; ".join(x[:110] for x in f[:2])))
+            ok &= not f
+    still = [walker_frame(p / 12, "idle", nods=False) for p in range(12)]
+    for up, fps, want in ((2, 15, False), (1, 15, True), (2, 30, True)):
+        idle = copy.deepcopy(still)
+        for f in idle[5:5 + up]:                          # the eye a row up for `up` frames
+            y = next(y for y, r in enumerate(f) if EYE in r)
+            f[y][27], f[y - 1][27] = FUR, EYE
+        got = [x for x in pac.tick({"idle": idle}, pac.Spec(eye=EYE, fps=fps), []) if x.startswith("tick:")]
+        print(f"tick     on walker an eye level of {up} frame(s) at {fps} fps {'caught' if got else 'passes'}"
+              + ("" if bool(got) == want else ": NO, WRONG"))
+        ok &= bool(got) == want
     return ok
 
 
@@ -803,6 +869,29 @@ def cli(walker):
         case("--action for a loop not given is a usage error", code == 2, (code, text[-200:]))
         code, text = run_main(base + ["--frame", "34", "--parts", "move=" + os.path.join(tmp, "ref.png")])
         case("--parts whose frames do not match the loop refused", code == 2, (code, text[-200:]))
+        code, text = run_main(base + ["--frame", "34", "--move", "walk"])
+        case("--move naming a loop not given is a usage error", code == 2 and "no loop named 'walk'" in text,
+             (code, text[-200:]))
+        named = ["--loop", "stand=" + os.path.join(tmp, "idle.png"), "--loop",
+                 "walk=" + os.path.join(tmp, "move.png"), "--frame", "34", "--eye", "#ffcc33", "--out",
+                 os.path.join(tmp, "out")]
+        code, text = run_main(named)
+        alone = 1 if pac.check({"stand": walker["idle"], "walk": walker["move"]}, pac.Spec(eye=EYE)) else 0
+        case("loops not named idle or move get a note each", code == alone and "no loop is named 'idle'" in text
+             and "no loop is named 'move'" in text and text.index("note:") < text.index("fault(s)"),
+             (code, text[:300]))
+        notes = {"walker": (pac.Spec(), "snap, hop and drift are not run", "still, stiff, skate and gait are not run, "
+                            "frozen, mark and lag do not judge a loop as the move, and ground judges every loop"),
+                 "flier": (pac.Spec(flier=True), "snap, shallow and drift are not run", "still is not run, frozen, "
+                           "tick, mark and lag do not judge a loop as the move, and shallow judges the idle"),
+                 "legless body": (pac.Spec(gait=False), "snap and drift are not run", "still is not run, frozen, mark "
+                                  "and lag do not judge a loop as the move, and ground")}
+        for who, (sp, idle_note, move_note) in notes.items():
+            got = pac._unnamed({"stand": []}, sp, False, False)
+            case(f"the notes name only a {who}'s checks", len(got) == 2 and idle_note in got[0]
+                 and move_note in got[1], got)
+        code, text = run_main(named + ["--idle", "stand", "--move", "walk"])
+        case("--idle and --move naming them: no note, clean", code == 0 and "note:" not in text, (code, text[:300]))
         code, text = run_main(["--loop", "idle=" + os.path.join(tmp, "idle.png"), "--loop", "move=" + gpath,
                                "--frame", "34", "--eye", "#ffcc33", "--out", os.path.join(tmp, "out")])
         case("a GIF loop runs from the command line", code in (0, 1) and "error" not in text, text[-200:])

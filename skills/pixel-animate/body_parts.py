@@ -53,7 +53,9 @@ is 12 px or more and 8 % or more of the part (not for a bone broken by null: tho
 whose bone ended up in another part's ground (the bone strays over a neighbour), a part mostly of colours not under
 its bone, an eye point (points.eye) that falls outside every head part (kind head, face or skull: the head's bone
 may miss the skull), and figure pixels no part reached. Fix those bones and run again.
-Exit code: 0 a clean cut (or the grid written), 1 a cut with CHECK lines, 2 a usage error."""
+Exit code: 0 a clean cut (or the grid written), 1 a cut with CHECK lines, 2 a usage error (a landmarks file not in
+the form above, its part named: a bone missing or empty, a point that is not two numbers, a parent naming no
+other part, an eye that is not two numbers or null)."""
 import heapq
 import json
 import math
@@ -61,8 +63,13 @@ import os
 import sys
 from collections import deque
 
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+try:
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError as e:                                  # python -I does not see a pip install --user
+    raise type(e)(f"{e}: {os.path.basename(__file__)} needs numpy and Pillow. python -I (isolated mode) does "
+                  "not see packages installed with pip install --user: install them in a virtual "
+                  "environment or for the whole system, or run without -I", name=e.name) from None
 
 L_WEIGHT, HUE_SAME = 0.25, 12.0                           # shading within one hue counts a quarter (cdist())
 WORK = 420                                                # the analysis copy's longest side
@@ -155,8 +162,9 @@ def load(im):
 
 
 def ink_lines(lab, mask):
-    """The drawing's dark outlines: pixels much darker than the figure's own tones (a fifth of the median
-    lightness, or under L 18) that are darker than what is round them."""
+    """The drawing's dark outlines: pixels much darker than the figure's own tones. A pixel is ink under the
+    smaller of L 18 and 0.4 of the figure's median lightness, or under 0.45 of the median and 18 darker than the
+    lightest of itself and the eight pixels 2 px from it (straight or diagonally)."""
     L = lab[..., 0]
     med = float(np.median(L[mask])) if mask.any() else 50.0
     pad = np.pad(L, 2, mode="edge")
@@ -809,6 +817,41 @@ def grid(im, path, step=50):
     g.save(path)
 
 
+def _xy(p):
+    """A point is two numbers (not true or false, which JSON would let pass as 1 and 0)."""
+    return (isinstance(p, (list, tuple)) and len(p) == 2
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in p))
+
+
+def check_marks(marks):
+    """ValueError, naming the part, for a landmarks file the cut would crash on or read wrong: a part that is not an
+    object, a bone that is not a list or holds no point once its nulls are left out, a point that is not two
+    numbers, a kind that is not text, a parent that names no other part (a typo would silently drop its joint
+    fence), and a points.eye that is not two numbers or null. A part of more than 4 points is allowed."""
+    parts = marks["parts"]
+    for n, spec in parts.items():
+        if not isinstance(spec, dict):
+            raise ValueError(f"part {n!r} is not an object")
+        bone = spec.get("bone")
+        if not isinstance(bone, list):
+            raise ValueError(f'part {n!r}: "bone" must be a list of [x, y] points')
+        if not any(q is not None for q in bone):
+            raise ValueError(f'part {n!r}: its bone has no point')
+        bad = next((q for q in bone if q is not None and not _xy(q)), None)
+        if bad is not None:
+            raise ValueError(f"part {n!r}: the bone point {bad!r} is not two numbers")
+        if "kind" in spec and not isinstance(spec["kind"], str):
+            raise ValueError(f'part {n!r}: "kind" must be text, not {spec["kind"]!r}')
+        par = spec.get("parent")
+        if par is not None and (not isinstance(par, str) or par == n or par not in parts):
+            raise ValueError(f'part {n!r}: "parent" {par!r} names no other part (the parts are {", ".join(parts)})')
+    points = marks.get("points", {})
+    if not isinstance(points, dict):
+        raise ValueError('"points" must be an object')
+    if points.get("eye") is not None and not _xy(points["eye"]):
+        raise ValueError(f'"points": the eye {points["eye"]!r} is not two numbers or null')
+
+
 def main(argv):
     """The command line (see the module's help). Returns the exit code: 0 a clean cut or the grid, 1 CHECK lines,
     2 a usage error."""
@@ -869,6 +912,7 @@ def main(argv):
             marks = json.load(fh)
         if not isinstance(marks, dict) or not isinstance(marks.get("parts"), dict) or not marks["parts"]:
             raise ValueError('no "parts" in it')
+        check_marks(marks)
     except ValueError as e:
         print(f"error: {pos[1]}: not a landmarks file ({e})", file=sys.stderr)
         return 2
