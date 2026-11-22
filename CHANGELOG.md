@@ -19,6 +19,13 @@ First public release.
     `CHECK:` lines. Made sound on real art before release: a dark body tone close to the background stays figure
     (background must also touch the border); the labels are grown back over every figure pixel at full size; a
     colour patch shared by two parts is no longer voted wholly to one; dark cloth is not taken for an ink line.
+    Joints and shading: a part never grows behind its joint (its bone's first point) or sideways along it past its
+    own width, and a parent never crosses into a child past it, wherever the drawing gives no edge; a lightness step
+    within one hue is shading, not an edge; a thin strip a part reached round a gap along another part's edge goes
+    back to that part (a `moved:` line); a part's width stops at an ink line and it does not reach far past it (a
+    near leg keeps off the far one, a jaw off the throat); a part inside its parent (a jaw in the head) is marked
+    `inside` and drawn hatched inside it; an eye point outside every head part is a `CHECK:`. The selftest adds a
+    shaded beast and a hand with thin fingers, as placed and with careless bones.
   - `creature_map.py`: a first look at a body plan from the silhouette alone. Refuses a strip of frames.
   - Selftests for both tools.
 - **pixel-anim-check** skill: `pixel_anim_check.py` finds 20 kinds of animation fault (size, empty, apart, eye,

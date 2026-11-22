@@ -47,11 +47,19 @@ human). So the work is split:
 
 - **Recognise, by eye (coarse):** for each part, a *bone*: 1 to 4 points down its middle, in the drawing's pixels.
   Examples: crown and chin; shoulder, elbow and hand; hip, knee, ankle and toe; a cape's collar and hem; a bow's
-  tip, grip and tip. A rough line is enough: it only has to lie inside the part, clear of its edges.
+  tip, grip and tip. A rough line is enough: it only has to lie inside the part, clear of its edges. One end is
+  exact: a part that hangs from a parent starts AT its joint, where it leaves the parent (a leg at the hip line,
+  not up in the rump; a head where the neck meets it; a finger at its knuckle).
 - **Measure, by the tool (exact):** it finds the drawing's dark ink lines and flat colour patches, and grows every
   part from its bone over the figure along the cheapest path. Crossing ink, a colour edge or a patch border costs;
   entering a colour unlike any under the part's own bone costs per pixel. So parts meet where the drawing draws
-  them apart, and a leg does not flood the cape behind it.
+  them apart, and a leg does not flood the cape behind it. Shading (a lightness step within one hue) is no edge.
+  Where the drawing gives none (one fur from back to paw), the joints decide: a part never grows behind its joint
+  or sideways along it, and a parent never crosses into a child past it.
+- **Look at the cut** (`NAME_parts.png`) before rigging from it: each limb starts at its joint, the torso runs
+  whole from rump to chest, the head holds the skull, a tail keeps off the rump's edge, a near leg stops at the ink
+  line before the far one. A part inside its parent (a jaw in the head) shows hatched inside it. A wrong cut is a
+  joint marked in the wrong place; move it and run again.
 
 ```
 python -I ${CLAUDE_SKILL_DIR}/body_parts.py drawing.png --grid --out DIR    # a labelled grid, to read coordinates

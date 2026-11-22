@@ -12,10 +12,15 @@ hair and a fin, a cape and a tail are the same to a skeleton (creature_map.py sh
 ear). What a part is needs recognising; where it ends can be measured. So the work is split:
 - Recognise (by eye, coarse): for each part, a bone, a line of 1-4 points down its middle in the drawing's pixels
   (a shoulder, elbow and hand; the crown and chin; a cape's collar and hem). A rough line is enough: it only has
-  to lie inside the part, away from its edges.
+  to lie inside the part, away from its edges. One end must be exact: a part that hangs from a parent starts AT
+  its joint (a leg at the hip, where it leaves the body; a head where it meets the neck; a finger at its
+  knuckle). Start the line there.
 - Measure (here, exact): the drawing is split into flat colour patches and its dark ink lines; each part grows
   from its bone over the figure along the cheapest path, and crossing an ink line, a colour edge or a patch
-  border costs (a geodesic, seeded segmentation). Parts meet where the drawing draws them apart. Last, a colour
+  border costs (a geodesic, seeded segmentation). Parts meet where the drawing draws them apart. A lightness step
+  within one hue is shading (a fur ramp from back to belly), not an edge, and costs a quarter. Where the drawing
+  gives no edge (one fur from rump to thigh), the joints decide: a part does not grow behind its joint, nor
+  sideways along it past its own width, and a parent does not cross into a child past its joint. Last, a colour
   patch that one part holds most of is given to it whole, so edges follow the drawn ones.
 
 landmarks.json:
@@ -27,21 +32,27 @@ landmarks.json:
      "points": {"eye": [520, 300]}}
 kind is free text, copied into the json for your own code (the cut does not read it); common words: head, neck,
 torso, pelvis, arm, hand, leg, foot, tail, wing, fin, ear, horn, antenna, jaw, hair, mane, cloth, prop, pack, shell,
-tentacle, crest. parent names the part this one hangs from: its pivot is the bone's first point (where it joins the
-parent). A null in a bone starts a new piece: use it for a part seen in pieces (a staff above and below the hand
-that holds it, a cape on both sides of the legs). Each piece is 1-4 points, e.g.
+tentacle, crest. parent names the part this one hangs from: the bone's first point is its joint, its pivot in the
+json. Put it where the part leaves the parent (a joint marked inside the parent gives the part the parent's mass
+there). A bone whose last point lies under half as far from the parent's bone is read from that end. A null in a
+bone starts a new piece: use it for a part seen in pieces (a staff above and below the hand that holds it, a cape
+on both sides of the legs). Each piece is 1-4 points, e.g.
     "cape": {"kind": "cloth", "bone": [[200, 690], [215, 520], null, [395, 520], [410, 690]]}
 
 Out: <name>_parts.png (each part tinted, its outline, bone and name), <name>_patches.png (the colour patches and ink
-the cut follows), <name>_parts.json (per part: kind, parent, pivot, bone, area share, bounding box, label, pieces
-and a simplified outline of the largest piece) and <name>_labels.png. To cut a part, select every pixel equal
-to its JSON label in the label image. Labels start at 1 in JSON part order, with 0 for the background.
-Each part's line gives its kind, area share, pieces and bounding box. "pieces" counts every fragment, however
+the cut follows), <name>_parts.json (per part: kind, parent, pivot, bone, area share, bounding box, label, pieces,
+inside and a simplified outline of the largest piece) and <name>_labels.png. To cut a part, select every pixel
+equal to its JSON label in the label image. Labels start at 1 in JSON part order, with 0 for the background.
+Each part's line gives its kind, area share, pieces and bounding box, and "inside PARENT" for a part that lies
+within its parent's box (a jaw in the head): the overlay shows it hatched inside its parent, and the json's
+"inside" names the parent. A "moved:" line names a thin strip a part took along the background and another
+part's edge (a tail down the rump's edge) and gave back to that part. "pieces" counts every fragment, however
 small; that alone is no fault (a part drawn half behind another often has a few). A "CHECK:" line is printed for a
 bone point off the figure, a bone wholly off the figure, a part with no pixels, a part in pieces whose second piece
 is 12 px or more and 8 % or more of the part (not for a bone broken by null: those are meant to be in pieces), a part
 whose bone ended up in another part's ground (the bone strays over a neighbour), a part mostly of colours not under
-its bone, and figure pixels no part reached. Fix those bones and run again.
+its bone, an eye point (points.eye) that falls outside every head part (kind head, face or skull: the head's bone
+may miss the skull), and figure pixels no part reached. Fix those bones and run again.
 Exit code: 0 a clean cut (or the grid written), 1 a cut with CHECK lines, 2 a usage error."""
 import heapq
 import json
@@ -53,6 +64,7 @@ from collections import deque
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+L_WEIGHT, HUE_SAME = 0.25, 12.0                           # shading within one hue counts a quarter (cdist())
 WORK = 420                                                # the analysis copy's longest side
 STEP, INK_COST, EDGE_COST, PATCH_COST = 0.3, 16.0, 0.5, 0.5   # a step's cost: STEP + these (going onto or off ink,
                                                           # colour change per Lab unit, a patch border crossed); the
@@ -66,6 +78,11 @@ SEED_R = 1                                                # bone pixels widened 
 ALIEN = 0.25                                              # a part this share unlike its own colours is flagged
 VOTE_MAX = 0.2                                            # ...unless a loser would lose this share of itself
 VOTE = 0.7                                                # a colour patch this share one part's goes to it whole
+SLIVER_MIN, SLIVER_RATIO, SLIVER_JOIN = 8, 2.0, 12.0      # a strip along another part goes to it (slivers())
+INSIDE = 0.9                                              # a part this share within its parent's box is inside it
+FAR_REACH = 1.3                                           # a child's reach off its bone, in its own widths
+JOINT_COST = 200.0                                        # a part's cost of a pixel across one of its joints
+JOINT_SLACK = 1.5                                         # working px of give either side of a joint's line
 SNAP = 8                                                  # a bone point off the figure moves to it, within this many
                                                           # working pixels (a rough point at the edge of a thin bow)
 PALETTE = [(255, 99, 132), (54, 162, 235), (255, 206, 86), (75, 192, 120), (153, 102, 255), (255, 159, 64),
@@ -113,6 +130,16 @@ def to_lab(rgb):
     xyz /= np.array([0.9505, 1.0, 1.089])
     f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
     return np.stack([116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])], -1)
+
+
+def cdist(a, b):
+    """The colour difference between Lab colours a and b (arrays, broadcast). A lightness step within one hue is
+    shading (a fur ramp from back to belly) and counts at L_WEIGHT; once the hue or chroma moves by HUE_SAME Lab
+    units or more it is a change of material (skin against cloth) and lightness counts in full."""
+    dl = a[..., 0] - b[..., 0]
+    dab = np.hypot(a[..., 1] - b[..., 1], a[..., 2] - b[..., 2])
+    w = np.where(dab < HUE_SAME, L_WEIGHT, 1.0)
+    return np.sqrt((w * dl) ** 2 + dab ** 2)
 
 
 def load(im):
@@ -255,17 +282,130 @@ def palette(lab, px, ink, tol=12.0, most=8):
         if ink[y, x]:
             continue
         c = lab[y, x]
-        if all(np.sqrt(((c - o) ** 2).sum()) > tol for o in cs):
+        if all(cdist(c, o) > tol for o in cs):
             cs.append(c)
             if len(cs) >= most:
                 break
     return np.array(cs)
 
 
-def cut(lab, mask, ink, patch, seeds, cores=None):
-    """Every figure pixel to the part it is cheapest to reach from (multi-source Dijkstra). cores: each bone's own
-    line, unwidened, which tells a part drawn in ink alone (its line lies on ink)."""
+def _bone_dist(bone, k, shape):
+    """Each working pixel's distance to a bone's line (its pieces; a null breaks it)."""
+    h, w = shape
+    yy, xx = np.mgrid[0:h, 0:w].astype(float)
+    best = np.full(shape, np.inf)
+    run = []
+    for p in list(bone) + [None]:
+        if p is not None:
+            run.append((p[0] / k, p[1] / k))
+            continue
+        for (ax, ay), (bx, by) in (list(zip(run, run[1:])) or [(run[0], run[0])]) if run else []:
+            dx, dy = bx - ax, by - ay
+            L2 = dx * dx + dy * dy
+            t = np.clip(((xx - ax) * dx + (yy - ay) * dy) / L2, 0, 1) if L2 else 0.0
+            best = np.minimum(best, np.hypot(xx - (ax + t * dx), yy - (ay + t * dy)))
+        run = []
+    return best
+
+
+def _width(bone, k, mask, at=(0.35, 0.5, 0.65, 0.8), ink=None):
+    """A part's width across its bone: the median of the mask's span across the bone at points `at` along it (by
+    default from a third of the way out, where a limb has left the body), each span capped at the bone's length.
+    Given the ink, a span stops at an ink line (a near leg is measured to the line between it and the far leg
+    behind, not across both), unless that leaves under 3 px (a part drawn in tones dark enough to read as ink)."""
+    pts = [(x / k, y / k) for x, y in bone]
+    segs = list(zip(pts, pts[1:]))
+    L = sum(math.dist(a, b) for a, b in segs)
+    if not L:
+        return 0.0
     h, w = mask.shape
+    spans = []
+    for f in at:
+        d, acc = f * L, 0.0
+        for a, b in segs:
+            sl = math.dist(a, b)
+            if d <= acc + sl:
+                t = (d - acc) / sl if sl else 0.0
+                cx, cy = a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])
+                nx, ny = -(b[1] - a[1]) / sl, (b[0] - a[0]) / sl
+                break
+            acc += sl
+        def across(stop):
+            span = 0.0
+            for sgn in (1, -1):
+                r = 0.0
+                while r < L:
+                    X, Y = int(round(cx + sgn * r * nx)), int(round(cy + sgn * r * ny))
+                    if not (0 <= X < w and 0 <= Y < h and mask[Y, X]) or (stop is not None and r and stop[Y, X]):
+                        break
+                    r += 0.5
+                span += r
+            return span
+        span = across(ink)
+        spans.append(span if ink is None or span >= 3 else across(None))
+    return float(np.median(spans))
+
+
+def joint_first(bone, parent_dist, k):
+    """The bone with its joint first: its first point, unless the last lies under half as far from the parent's
+    bone (a bone drawn from the far end). A part lying along its parent (a jaw under a skull) keeps its first."""
+    h, w = parent_dist.shape
+
+    def gap(p):
+        x, y = int(round(p[0] / k)), int(round(p[1] / k))
+        return parent_dist[min(max(y, 0), h - 1), min(max(x, 0), w - 1)]
+    return list(bone)[::-1] if gap(bone[-1]) < 0.5 * gap(bone[0]) else list(bone)
+
+
+def fences(marks, names, k, shape, mask=None, ink=None):
+    """The joints, as costs. A part that hangs from a parent meets it at its joint, the bone's first point (see
+    joint_first), and runs from there along the bone's first segment. Put that point AT the joint: a bone starting
+    past it leaves the part's root to the parent.
+    - fence: the child pays JOINT_COST for each pixel behind the line across its joint (a leg climbing into the
+      hip, an ear into the skull, a tail into the rump), for each pixel near that line but beyond its own width
+      (a thigh spreading along the belly or over the far leg's top), and for each pixel more than FAR_REACH times
+      its width from its bone (a jaw running down the throat).
+    - walls: the parent pays JOINT_COST once, to step onto a pixel past that line and nearer the child's bone than
+      its own (a neck crossing into the skull; it may still take the throat, nearer its own bone). A parent whose
+      bone lies past the line (a torso marked low, under an arm across the chest) has no wall there.
+    Without them, a part with no drawn edge to its parent (one fur from back to paw) grows into it as far as its
+    bone reaches. Both hold only within the child's reach, its own measured width round its bone (_width): the
+    line across a leg's joint does not run on along the whole belly. A bone of one point sets neither."""
+    dist = [_bone_dist(marks["parts"][n]["bone"], k, shape) for n in names]
+    yy, xx = np.mgrid[0:shape[0], 0:shape[1]].astype(float)
+    fence = np.zeros((len(names),) + shape)
+    walls = np.zeros((len(names),) + shape, bool)
+    for c, n in enumerate(names):
+        spec = marks["parts"][n]
+        bone, par = spec["bone"], spec.get("parent")
+        if par not in names or len(bone) < 2 or None in bone:
+            continue
+        p = names.index(par)
+        bone = joint_first(bone, dist[p], k)
+        (px, py), (qx, qy) = [(x / k, y / k) for x, y in bone[:2]]
+        L = math.hypot(qx - px, qy - py)
+        if not L:
+            continue
+        s = ((xx - px) * (qx - px) + (yy - py) * (qy - py)) / L
+        wid = _width(bone, k, mask, ink=ink) if mask is not None else np.inf
+        r = 0.75 * wid + JOINT_SLACK
+        reach = dist[c] <= r
+        fence[c][s < -JOINT_SLACK] += JOINT_COST
+        fence[c][(s < r) & ~reach] += JOINT_COST          # nor spread sideways along the joint (down a belly)
+        fence[c][dist[c] > FAR_REACH * wid + JOINT_SLACK] += JOINT_COST   # nor far off its bone (a jaw down a throat)
+        on = dist[p] < 0.75                               # the parent's own bone line
+        if on.any() and np.median(s[on]) <= JOINT_SLACK:
+            walls[p] |= (s > JOINT_SLACK) & (dist[c] < dist[p]) & reach
+    return fence, walls
+
+
+def cut(lab, mask, ink, patch, seeds, cores=None, joints=None):
+    """Every figure pixel to the part it is cheapest to reach from (multi-source Dijkstra). cores: each bone's own
+    line, unwidened, which tells a part drawn in ink alone (its line lies on ink). joints: (fence, walls) from
+    fences()."""
+    h, w = mask.shape
+    fence, walls = joints if joints is not None else (np.zeros((len(seeds),) + mask.shape),
+                                                     np.zeros((len(seeds),) + mask.shape, bool))
     label = np.full(mask.shape, -1)
     cost = np.full(mask.shape, np.inf)
     heap = []
@@ -283,7 +423,7 @@ def cut(lab, mask, ink, patch, seeds, cores=None):
     fit = np.zeros((len(seeds),) + mask.shape)            # each part's cost of each pixel's colour
     for i, cs in enumerate(pal):
         if len(cs) and not ink_only[i]:
-            d = np.min(np.sqrt(((lab[:, :, None, :] - cs[None, None]) ** 2).sum(-1)), -1)
+            d = np.min(cdist(lab[:, :, None, :], cs[None, None]), -1)
             fit[i] = FIT * np.clip(d - FIT_TOL, 0, FIT_CAP)
     heapq.heapify(heap)
     while heap:
@@ -295,11 +435,14 @@ def cut(lab, mask, ink, patch, seeds, cores=None):
                 continue
             if ink[Y, X] and ink[y, x]:
                 step = INK_STEP                           # an outline is no road: running along it costs
-            d = step + EDGE_COST * float(np.sqrt(((lab[Y, X] - lab[y, x]) ** 2).sum()))
+            d = step + EDGE_COST * float(cdist(lab[Y, X], lab[y, x]))
             if ink[Y, X] != ink[y, x]:
                 d += INK_COST
             if not ink[Y, X]:
                 d += fit[i, Y, X]
+            d += fence[i, Y, X]
+            if walls[i, Y, X] and not walls[i, y, x]:
+                d += JOINT_COST                           # a parent stepping across a child's joint
             if patch[Y, X] != patch[y, x] and patch[Y, X] >= 0 and patch[y, x] >= 0:
                 d += PATCH_COST
             if c + d < cost[Y, X]:
@@ -314,7 +457,7 @@ def cut(lab, mask, ink, patch, seeds, cores=None):
             continue
         win = int(np.argmax(votes))
         if all(votes[j] <= VOTE_MAX * area[j] for j in range(len(seeds)) if j != win):
-            label[sel] = win
+            label[sel & (fence[win] == 0) & ~(walls[win] & (label != win))] = win   # never across a joint
     for i, px in enumerate(seeds):                        # a part's own bone stays its own
         for x, y in px:
             if seeded[y, x] == i and cost[y, x] == 0:
@@ -348,6 +491,64 @@ def adopt(label, mask):
                 q.append((X, Y))
     label[lost] = near[lost]
     return n
+
+
+def _grow(m, n, shrink=False):
+    """m eroded (shrink) or dilated n times by its 8 neighbours."""
+    for _ in range(n):
+        p = np.pad(m, 1, constant_values=not shrink)
+        nb = [p[1 + dy:p.shape[0] - 1 + dy, 1 + dx:p.shape[1] - 1 + dx] for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
+        m = np.logical_and.reduce(nb) if shrink else np.logical_or.reduce(nb)
+    return m
+
+
+def slivers(label, names, lab, ink):
+    """A thin strip of one part lying between the background and another part, joined to its own part only at one
+    end (a tail that took a strip of the rump's edge down the gap beside it). Each part's bulk is what survives an
+    opening a third as deep as the part is thick. A strip left over, of SLIVER_MIN pixels or more, goes to a
+    neighbour when it touches that neighbour across one surface (no ink line, no colour edge of SLIVER_JOIN or
+    more) SLIVER_RATIO times more than it touches its own bulk, and borders the background along its length. A part
+    thin all through (a finger, a string) has no bulk to measure against and is left alone, and so is a thin end
+    touching only its own part and the background (a toe, a tail tip), or a strip the drawing parts from the
+    neighbour by a line. Every part is judged on the labels as they were before any move. Returns notes."""
+    before = label.copy()
+    h, w = label.shape
+    notes, moves = [], []
+    for i, n in enumerate(names):
+        sel = before == i
+        depth, e = 0, sel
+        while e.any():
+            e = _grow(e, 1, shrink=True)
+            depth += 1
+        t = max(1, depth // 3)
+        bulk = _grow(_grow(sel, t, shrink=True), t) & sel
+        if bulk.sum() < 0.5 * sel.sum():
+            continue
+        for comp in pieces(sel & ~bulk):
+            if len(comp) < SLIVER_MIN:
+                continue
+            own, bg, other = 0, 0, {}
+            for x, y in comp:
+                for X, Y in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if not (0 <= Y < h and 0 <= X < w) or before[Y, X] < 0:
+                        bg += 1
+                        continue
+                    j = before[Y, X]
+                    if bulk[Y, X]:
+                        own += 1
+                    elif j >= 0 and j != i and not ink[Y, X] and not ink[y, x] and \
+                            cdist(lab[Y, X], lab[y, x]) < SLIVER_JOIN:
+                        other[j] = other.get(j, 0) + 1
+            if other:
+                j = max(other, key=other.get)
+                if other[j] >= SLIVER_RATIO * max(1, own) and bg >= 0.5 * other[j]:   # between a gap and it
+                    moves.append((comp, j))
+                    notes.append(f"{n}: a strip of {len(comp)} working px along {names[j]}, joined to {n} only at "
+                                 f"one end, given to {names[j]}")
+    for comp, j in moves:
+        for x, y in comp:
+            label[y, x] = j
+    return notes
 
 
 def pieces(sel):
@@ -414,17 +615,19 @@ def simplify(pts, eps):
 def analyse(im, marks):
     k, mask, lab, full = load(im)
     ink = ink_lines(lab, mask)
-    patch, _ = patches(lab, mask, ink)
+    flat = lab * np.array([L_WEIGHT, 1.0, 1.0])           # patches of one material, not of one shading band
+    patch, _ = patches(flat, mask, ink)
     names = list(marks["parts"])
     trims = [0.0 if len(marks["parts"][n]["bone"]) == 1 else 0.12 for n in names]
     parents = {marks["parts"][n].get("parent") for n in names}
     # the start of a bone is a joint, not a sure seed; its end too when another part hangs from this one
     seeds = [_bone_pixels(marks["parts"][n]["bone"], k, mask, t, n in parents) for n, t in zip(names, trims)]
     cores = [_bone_pixels(marks["parts"][n]["bone"], k, mask, t, n in parents, 0) for n, t in zip(names, trims)]
-    label = cut(lab, mask, ink, patch, seeds, cores)
+    label = cut(lab, mask, ink, patch, seeds, cores, fences(marks, names, k, mask.shape, mask, ink))
     pal = [palette(lab, px, ink) for px in seeds]
     total = int(mask.sum())
     loose = adopt(label, mask)
+    moved = slivers(label, names, lab, ink)
     aux = dict(k=k, mask=mask, ink=ink, patch=patch, label=label, names=names, full=full)
     labels_full = full_labels(aux, im.size)
     aux["labels_full"] = labels_full
@@ -454,7 +657,7 @@ def analyse(im, marks):
                                           or [i]).argmax())]
             warn.append(f"{n}: {len(stolen)} of {len(seeds[i])} bone pixels ended in {other}: the bone strays")
         if area and len(pal[i]):                          # much of it unlike every colour under its bone
-            cd = np.min(np.sqrt(((lab[sel & ~ink][:, None, :] - pal[i][None]) ** 2).sum(-1)), -1)
+            cd = np.min(cdist(lab[sel & ~ink][:, None, :], pal[i][None]), -1)
             alien = float((cd > FIT_TOL + 25).mean()) if len(cd) else 0.0
             if alien > ALIEN:
                 warn.append(f"{n}: {alien:.0%} of it is a colour not under its bone: a piece of another part seen "
@@ -464,10 +667,30 @@ def analyse(im, marks):
         parts.append(dict(name=n, label=i + 1, kind=spec.get("kind", n), parent=spec.get("parent"),
                           pivot=bone[0], bone=spec["bone"], area_share=round(area / max(1, total), 4), pieces=len(ps),
                           bbox=list(bbox) if bbox else None, poly=poly))
+    for p in parts:                                       # a part inside its parent (a jaw in the head)
+        par = next((q for q in parts if q["name"] == p["parent"]), None)
+        p["inside"] = None
+        if par and p["bbox"] and par["bbox"]:
+            sel = label == names.index(p["name"])
+            ys, xs = np.nonzero(sel)
+            x0, y0, x1, y1 = [v / k for v in par["bbox"]]
+            within = ((xs >= x0) & (xs < x1) & (ys >= y0) & (ys < y1)).mean()
+            if within >= INSIDE:
+                p["inside"] = par["name"]
+    for pname, pt in marks.get("points", {}).items():      # the eye in the head
+        if pname != "eye" or pt is None:
+            continue
+        x, y = int(round(pt[0] / k)), int(round(pt[1] / k))
+        if 0 <= y < label.shape[0] and 0 <= x < label.shape[1] and label[y, x] >= 0:
+            kind = marks["parts"][names[label[y, x]]].get("kind", "")
+            if kind not in ("head", "face", "skull"):
+                warn.append(f"the eye lies in {names[label[y, x]]} ({kind}), not in a head: the head's bone may miss "
+                            "the skull (run it through the skull's middle)")
     if loose > 0.02 * total:
         warn.append(f"{loose} figure pixels reached by no part, given to the nearest: a piece apart from the body "
                     "with no bone in it (give it one if it is a part of its own)")
-    return dict(size=[im.width, im.height], k=round(k, 3), parts=parts, warnings=warn, points=marks.get("points", {})), aux
+    return dict(size=[im.width, im.height], k=round(k, 3), parts=parts, warnings=warn, moved=moved,
+                points=marks.get("points", {})), aux
 
 
 # ---- drawing the result -----------------------------------------------------------------------------------------
@@ -517,8 +740,17 @@ def draw(im, res, aux, out_dir, name):
     W, H = im.size
     flab = aux["labels_full"] if "labels_full" in aux else full_labels(aux, (W, H))
     col = np.zeros((H, W, 4), np.uint8)
-    for i in range(len(aux["names"])):
-        col[flab == i] = PALETTE[i % len(PALETTE)] + (120,)
+    names = aux["names"]
+    yy, xx = np.mgrid[0:H, 0:W]
+    hatch = ((xx + yy) // max(3, W // 160)) % 3 == 0      # diagonal stripes
+    for i, p in enumerate(res["parts"]):
+        own = PALETTE[i % len(PALETTE)] + (120,)
+        if p.get("inside"):                               # shown as part of its parent, hatched in its own colour
+            j = names.index(p["inside"])
+            col[flab == i] = PALETTE[j % len(PALETTE)] + (120,)
+            col[(flab == i) & hatch] = PALETTE[i % len(PALETTE)] + (230,)
+        else:
+            col[flab == i] = own
     tint = Image.fromarray(col)
     base = im.convert("RGBA")
     over = Image.alpha_composite(base, tint)
@@ -527,7 +759,8 @@ def draw(im, res, aux, out_dir, name):
     for i, p in enumerate(res["parts"]):
         c = PALETTE[i % len(PALETTE)]
         if p["poly"]:
-            d.line(p["poly"] + p["poly"][:1], fill=c + (255,), width=max(2, W // 400))
+            d.line(p["poly"] + p["poly"][:1], fill=c + (255,), width=max(1, W // 800) if p.get("inside") else
+                   max(2, W // 400))
         run = []
         for q in p["bone"] + [None]:
             if q is None:
@@ -642,7 +875,10 @@ def main(argv):
     res, aux = analyse(im, marks)
     draw(im, res, aux, out, name)
     for p in res["parts"]:
-        print(f"{p['name']:14s} {p['kind']:10s} share {p['area_share']:.3f} pieces {p['pieces']} bbox {p['bbox']}")
+        print(f"{p['name']:14s} {p['kind']:10s} share {p['area_share']:.3f} pieces {p['pieces']} bbox {p['bbox']}"
+              + (f" inside {p['inside']}" if p.get("inside") else ""))
+    for m in res["moved"]:
+        print("moved:", m)
     for w in res["warnings"]:
         print("CHECK:", w)
     return 1 if res["warnings"] else 0

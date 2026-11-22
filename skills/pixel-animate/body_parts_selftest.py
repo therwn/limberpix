@@ -67,13 +67,173 @@ MARKS = {"parts": {
     "torso": {"kind": "torso", "bone": [[285, 380], [290, 460]]},          # low, clear of the arm across the chest
     "cape":  {"kind": "cloth", "parent": "torso", "bone": [[200, 690], [215, 520], None, [300, 530], [300, 690], None,
                                                       [395, 520], [410, 690]]},
-    "leg_a": {"kind": "leg", "parent": "torso", "bone": [[262, 520], [268, 740]]},
-    "leg_b": {"kind": "leg", "parent": "torso", "bone": [[338, 520], [332, 740]]},
-    "arm":   {"kind": "arm", "parent": "torso", "bone": [[300, 255], [420, 320]]},
+    "leg_a": {"kind": "leg", "parent": "torso", "bone": [[262, 482], [268, 740]]},   # a joint end at its joint:
+    "leg_b": {"kind": "leg", "parent": "torso", "bone": [[338, 482], [332, 740]]},   # the hip, the shoulder
+    "arm":   {"kind": "arm", "parent": "torso", "bone": [[272, 234], [420, 320]]},
     "hand":  {"kind": "hand", "parent": "arm", "bone": [[462, 342]]},
     "staff": {"kind": "prop", "parent": "hand", "bone": [[461, 80], [458, 290], None, [462, 400], [470, 770]]},
     "string": {"kind": "prop", "parent": "staff", "bone": [[480, 95], [550, 275]]},
 }}
+
+
+# ---- creatures drawn the pixel-art way ----------------------------------------------------------------------------
+# One fur ramp shaded by height runs across every part (no edge where a leg meets the body, bands of shading that
+# cross the parts), ink only round the silhouette and between near and far limbs, a gap of background between the
+# tail and the thigh, a head and neck of one fur, thin fingers side by side. Each figure: (image, truth, marks).
+FIG_INK = (22, 18, 32)
+FUR = [(214, 218, 236), (188, 194, 220), (160, 168, 200), (134, 144, 182), (110, 120, 162), (88, 98, 140),
+       (70, 78, 118), (54, 60, 96), (42, 46, 78), (34, 36, 62)]
+SKIN = [(250, 214, 180), (236, 192, 156), (214, 168, 134), (190, 144, 114), (164, 120, 96), (138, 98, 80),
+        (112, 78, 64)]
+
+
+def compose(W, H, layers, ramp, band, top, ink_pairs=()):
+    """layers: (name, draw_fn, tone_shift) back to front; each pixel takes the ramp tone of its height (band px a
+    step from top), shifted darker for far parts. Ink round the silhouette and where an ink pair meets."""
+    owner = np.full((H, W), -1)
+    shift = []
+    for i, (name, fn, sh) in enumerate(layers):
+        m = Image.new("L", (W, H), 0)
+        fn(ImageDraw.Draw(m))
+        owner[np.asarray(m) > 0] = i
+        shift.append(sh)
+    names = [l[0] for l in layers]
+    rgba = np.zeros((H, W, 4), np.uint8)
+    yy = np.mgrid[0:H, 0:W][0]
+    for i in range(len(layers)):
+        sel = owner == i
+        idx = np.clip((yy - top) // band + shift[i], 0, len(ramp) - 1)
+        col = np.array(ramp)[idx]
+        rgba[sel, :3] = col[sel]
+        rgba[sel, 3] = 255
+    fig = owner >= 0
+    pad = np.pad(fig, 1)
+    edge = fig & ~(pad[:-2, 1:-1] & pad[2:, 1:-1] & pad[1:-1, :-2] & pad[1:-1, 2:])
+    pairs = [(names.index(a), names.index(b)) for a, b in ink_pairs]
+    po = np.pad(owner, 1, constant_values=-1)
+    for a, b in pairs:                                    # the front one's edge against the back one: inked
+        nb_b = (po[:-2, 1:-1] == b) | (po[2:, 1:-1] == b) | (po[1:-1, :-2] == b) | (po[1:-1, 2:] == b)
+        edge |= (owner == a) & nb_b
+    rgba[edge, :3] = FIG_INK
+    truth = {n: owner == i for i, n in enumerate(names)}
+    return Image.fromarray(rgba, "RGBA"), truth
+
+
+def beast():
+    """A side-on wolf-like beast, 768x432 (a 96x54 sprite at 8x): one fur from back to paw."""
+    def poly(pts):
+        return lambda d: d.polygon(pts, fill=255)
+
+    def ell(box):
+        return lambda d: d.ellipse(box, fill=255)
+
+    def both(*fns):
+        return lambda d: [f(d) for f in fns]
+    layers = [
+        ("ear_far", poly([(478, 96), (488, 44), (504, 92)]), 2),
+        ("hind_far", poly([(222, 290), (282, 290), (286, 334), (262, 364), (272, 410), (250, 414), (236, 364),
+                           (224, 332)]), 2),
+        ("front_far", poly([(356, 290), (394, 290), (392, 352), (398, 410), (376, 414), (372, 352), (358, 320)]), 2),
+        ("tail", poly([(168, 178), (140, 172), (104, 196), (78, 258), (82, 330), (100, 348), (118, 334), (112, 266),
+                       (126, 216), (160, 200)]), 0),
+        ("torso", ell((146, 168, 432, 302)), 0),
+        ("neck", poly([(384, 184), (432, 168), (478, 118), (512, 136), (500, 190), (468, 236), (422, 272)]), 0),
+        ("hind_near", poly([(174, 286), (238, 286), (244, 330), (218, 362), (230, 406), (206, 414), (190, 362),
+                            (178, 330)]), 0),
+        ("front_near", poly([(392, 286), (434, 286), (430, 350), (438, 408), (414, 414), (408, 352), (394, 322)]), 0),
+        ("head", both(ell((466, 78, 562, 154)),
+                      poly([(540, 104), (612, 114), (612, 134), (544, 140)])), 0),
+        ("jaw", poly([(546, 140), (606, 134), (600, 152), (552, 154)]), 1),
+        ("ear_near", poly([(500, 92), (516, 36), (532, 90)]), 0),
+    ]
+    im, truth = compose(768, 432, layers, FUR, 34, 70,
+                        ink_pairs=[("hind_near", "hind_far"), ("front_near", "front_far")])
+    px = np.asarray(im).copy()                            # the rump's back edge in shadow, down the gap by the tail
+    torso = truth["torso"]
+    for y in range(206, 292):
+        xs = np.nonzero(torso[y])[0]
+        if len(xs):
+            x0 = xs.min() + 2
+            px[y, x0:x0 + 14, :3] = FUR[8]
+    im = Image.fromarray(px, "RGBA")
+    marks = {"parts": {
+        "torso": {"kind": "torso", "bone": [[176, 232], [290, 236], [400, 230]]},
+        "tail": {"kind": "tail", "parent": "torso", "bone": [[150, 190], [112, 214], [94, 270], [98, 330]]},
+        "neck": {"kind": "neck", "parent": "torso", "bone": [[410, 210], [470, 150]]},
+        "head": {"kind": "head", "parent": "neck", "bone": [[484, 116], [530, 114], [596, 122]]},
+        "jaw": {"kind": "jaw", "parent": "head", "bone": [[556, 145], [598, 143]]},
+        "ear_far": {"kind": "ear", "parent": "head", "bone": [[490, 88], [489, 58]]},
+        "ear_near": {"kind": "ear", "parent": "head", "bone": [[516, 86], [516, 50]]},
+        "hind_near": {"kind": "leg", "parent": "torso", "bone": [[206, 290], [214, 330], [204, 362], [216, 404]]},
+        "hind_far": {"kind": "leg", "parent": "torso", "bone": [[256, 294], [262, 334], [250, 364], [260, 404]]},
+        "front_near": {"kind": "leg", "parent": "torso", "bone": [[412, 290], [414, 340], [424, 404]]},
+        "front_far": {"kind": "leg", "parent": "torso", "bone": [[376, 294], [380, 350], [386, 404]]},
+    }, "points": {"eye": [530, 108]}}
+    return im, truth, marks
+
+
+def hand():
+    """A hand, 400x400, palm and four thin fingers and a thumb of one skin ramp; two fingers touch along their sides
+    with only an ink line between them."""
+    def poly(pts):
+        return lambda d: d.polygon(pts, fill=255)
+    layers = [
+        ("palm", poly([(120, 220), (290, 220), (300, 330), (130, 340)]), 0),
+        ("thumb", poly([(122, 250), (80, 210), (62, 168), (76, 160), (100, 196), (136, 228)]), 0),
+        ("index", poly([(132, 222), (136, 90), (152, 88), (156, 222)]), 0),
+        ("middle", poly([(170, 222), (172, 60), (190, 58), (194, 222)]), 0),
+        ("ring", poly([(194, 222), (198, 76), (216, 76), (218, 222)]), 1),
+        ("little", poly([(240, 222), (248, 118), (262, 118), (264, 222)]), 0),
+    ]
+    im, truth = compose(400, 400, layers, SKIN, 50, 40, ink_pairs=[("ring", "middle")])
+    marks = {"parts": {
+        "palm": {"kind": "hand", "bone": [[150, 280], [270, 280]]},
+        "thumb": {"kind": "finger", "parent": "palm", "bone": [[118, 236], [84, 196], [72, 170]]},
+        "index": {"kind": "finger", "parent": "palm", "bone": [[144, 220], [144, 100]]},
+        "middle": {"kind": "finger", "parent": "palm", "bone": [[182, 220], [181, 70]]},
+        "ring": {"kind": "finger", "parent": "palm", "bone": [[207, 220], [207, 86]]},
+        "little": {"kind": "finger", "parent": "palm", "bone": [[252, 220], [255, 128]]},
+    }}
+    return im, truth, marks
+
+
+def rough(marks, d=10, seed=1):
+    """The same marks moved by up to d px, as a careless eye would place them."""
+    rng = np.random.default_rng(seed)
+    out = {"parts": {}, "points": marks.get("points", {})}
+    for n, spec in marks["parts"].items():
+        bone = [None if p is None else [p[0] + int(rng.integers(-d, d + 1)), p[1] + int(rng.integers(-d, d + 1))]
+                for p in spec["bone"]]
+        out["parts"][n] = dict(spec, bone=bone)
+    return out
+
+
+THIN = {"index", "middle", "ring", "little", "thumb", "ear_far", "ear_near", "jaw"}
+
+
+def creatures():
+    """Each creature cut from its marks as placed and from the same marks moved by a careless eye: every part must
+    match its true pixels (off the ink) by IoU 0.8, a thin part 0.6, and the neck 0.7 (where a neck drawn over the
+    chest in the same fur ends is a matter of taste). A leg must not take the hip, a tail the rump's edge."""
+    ok = True
+    for fig in (beast, hand):
+        im, truth, marks = fig()
+        for how, mk in (("as placed", marks), ("rough", rough(marks, 8 if fig is beast else 4))):
+            res, aux = bp.analyse(im, mk)
+            H, W = next(iter(truth.values())).shape
+            full = bp.full_labels(aux, (W, H))
+            a = np.asarray(im.convert("RGBA")).astype(int)
+            off_ink = (np.abs(a[..., :3] - np.array(FIG_INK)).sum(2) > 30) & (a[..., 3] > 0)
+            bad = []
+            for i, n in enumerate(aux["names"]):
+                t, g = truth[n] & off_ink, (full == i) & off_ink
+                iou = (t & g).sum() / max(1, (t | g).sum())
+                need = 0.6 if n in THIN else 0.7 if n == "neck" else 0.8
+                if iou < need:
+                    bad.append(f"{n} {iou:.2f} < {need}")
+            print(f"{fig.__name__:7s} {how:9s} {'ok' if not bad else 'WRONG: ' + ', '.join(bad)}")
+            ok &= not bad
+    return ok
 
 
 def run():
@@ -112,6 +272,7 @@ def run():
     all_pixels = np.array_equal(bp.full_labels(detail_aux, detail.size) == 0, np.asarray(detail.getchannel("A")) != 0)
     print("full-size mask keeps a thin tail and a detached spark:", "ok" if all_pixels else "WRONG")
     ok &= all_pixels
+    ok &= creatures()
     ok &= cli()
     print("selftest:", "all hold" if ok else "FAILED")
     return ok

@@ -199,13 +199,21 @@ def parts_png(path, S=10):
                 lab[y, x] = np.bincount(b).argmax() if len(b) else -1
     if (lab[art[..., 3] > 0] < 0).any():
         sys.exit("parts: a pixel of the drawing has no part")
+    inside = {p["name"]: p.get("inside") for p in res["parts"]}
     tint = np.zeros((h, w, 3))
-    for i, n in enumerate(names):
-        tint[lab == i] = PART_COLOURS[n]
+    for i, n in enumerate(names):                         # a part inside its parent (the jaw in the head) wears
+        tint[lab == i] = PART_COLOURS[inside[n] or n]     # the parent's colour, hatched in its own below
     grey = art[..., :3].astype(float).mean(-1, keepdims=True) / 255.0
-    body = np.clip(tint * (0.34 + 1.1 * grey), 0, 255).astype(np.uint8)  # the drawing's light and dark (its ink
-                                                          # too) kept under the tint
-    fig = Image.fromarray(np.dstack([ms.up(body, S), ms.up(art[..., 3], S)]), "RGBA")
+    shade = 0.34 + 1.1 * grey                             # the drawing's light and dark (its ink too) under the tint
+    body = ms.up(np.clip(tint * shade, 0, 255).astype(np.uint8), S).copy()
+    Y, X = np.mgrid[0:h * S, 0:w * S]
+    stripe = ((X + Y) // 4) % 3 == 0
+    for i, n in enumerate(names):
+        if inside[n]:
+            sel = ms.up((lab == i).astype(np.uint8), S).astype(bool) & stripe
+            own = np.clip(np.array(PART_COLOURS[n], float) * ms.up(shade, S)[..., 0:1].repeat(3, -1), 0, 255)
+            body[sel] = own[sel].astype(np.uint8)
+    fig = Image.fromarray(np.dstack([body, ms.up(art[..., 3], S)]), "RGBA")
     fd = ImageDraw.Draw(fig)
     for y in range(h):                                    # the seams: every edge between two parts
         for x in range(w):

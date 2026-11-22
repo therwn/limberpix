@@ -220,18 +220,26 @@ The first prints `beast: 0 fault(s)` and exits 0. Each option has a reason:
 The second cuts the wolf into eleven parts from the bones in `examples/showcase/beast/marks.json` and exits 0:
 
 ```
-torso          torso      share 0.135 pieces 1 bbox [240, 168, 393, 312]
-tail           tail       share 0.146 pieces 1 bbox [32, 160, 176, 376]
-neck           neck       share 0.183 pieces 1 bbox [360, 86, 560, 280]
-head           head       share 0.066 pieces 1 bbox [455, 73, 624, 146]
-jaw            jaw        share 0.015 pieces 1 bbox [521, 143, 592, 176]
-ear_far        ear        share 0.015 pieces 1 bbox [456, 40, 512, 92]
-ear_near       ear        share 0.016 pieces 1 bbox [504, 32, 554, 88]
-hind_near      leg        share 0.212 pieces 1 bbox [136, 160, 288, 424]
-hind_far       leg        share 0.061 pieces 1 bbox [203, 289, 296, 424]
-front_near     leg        share 0.109 pieces 1 bbox [389, 192, 480, 424]
-front_far      leg        share 0.041 pieces 1 bbox [360, 293, 417, 424]
+torso          torso      share 0.339 pieces 1 bbox [130, 150, 453, 317]
+tail           tail       share 0.132 pieces 1 bbox [32, 160, 137, 376]
+neck           neck       share 0.165 pieces 1 bbox [376, 73, 560, 296]
+head           head       share 0.073 pieces 1 bbox [485, 72, 624, 189]
+jaw            jaw        share 0.015 pieces 1 bbox [521, 137, 592, 170] inside head
+ear_far        ear        share 0.010 pieces 1 bbox [464, 40, 512, 84]
+ear_near       ear        share 0.017 pieces 1 bbox [497, 32, 550, 88]
+hind_near      leg        share 0.075 pieces 1 bbox [144, 273, 241, 424]
+hind_far       leg        share 0.062 pieces 1 bbox [207, 276, 296, 424]
+front_near     leg        share 0.068 pieces 1 bbox [389, 286, 480, 424]
+front_far      leg        share 0.042 pieces 1 bbox [360, 289, 413, 424]
+moved: torso: a strip of 515 working px along neck, joined to torso only at one end, given to neck
+moved: tail: a strip of 204 working px along torso, joined to tail only at one end, given to torso
 ```
+
+Each leg's bone starts at its joint (the hip line, the elbow), so each leg starts there: the torso runs whole from
+rump to chest, and the near hind leg stops at the ink line between it and the far one. The jaw lies within the
+head's box, so it is `inside head`: the overlay shows it hatched inside the head. The `moved:` lines are strips
+handed back: the rump's edge down the gap beside the tail, which the tail had reached round the gap, and the ruff's
+lower edge, which goes with the neck.
 
 `examples/showcase/make_showcase.py` draws the README's pictures from these files (see [Development](#development)).
 
@@ -329,12 +337,18 @@ python skills/pixel-animate/body_parts.py --selftest
   The `bbox` is the tight crop of the full-size label, with exclusive right and bottom coordinates.
   The JSON `poly` is a simplified outline of the largest piece for display. `--out` defaults to the
   drawing's folder and is made if missing; `--name` to the drawing's file name.
+- Each part grows from its bone; where the drawing gives no edge (one fur from back to paw), the joints decide. A
+  part that hangs from a parent starts at its bone's first point: put it AT the joint (a leg at the hip line, not up
+  in the rump). Shading, a lightness step within one hue, is no edge.
+- A part within its parent's box (a jaw in the head) is marked `inside PARENT` on its line and in the json, and the
+  overlay shows it hatched inside its parent.
 - It prints one line per part. Its `pieces` count is every fragment of the part, however small, and is no fault by
   itself: the example prints `pieces 5` for the staff, which is broken by `null` on purpose and drawn behind the
   hand. A `CHECK:` line is printed only for a real problem: a bone point off the figure, a bone wholly off it, a
   part with no pixels, a part whose second piece is 12 px or more *and* 8 % or more of the part (parts with
   `null`-broken bones are not judged), a bone that ended up in a neighbour, a part mostly of colours not under its
-  bone, and figure pixels no part reached.
+  bone, an `eye` point outside every head part, and figure pixels no part reached. A `moved:` line names a thin strip
+  a part reached round a gap, along another part's edge, and gave back to it.
 - Exit code: 0 a clean cut (or the grid written), 1 a cut with `CHECK:` lines, 2 a usage error.
 
 Example, on the figure in `examples/` (a person with a staff and a cape):
