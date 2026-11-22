@@ -109,10 +109,10 @@ cut into whole frames).
 | `--effects #hex,...` | colours of effects drawn apart from the figure on purpose |
 | `--allow LOOP=N` | pieces up to N px may sit apart from the figure in that loop (a thrown coin) |
 | `--glows-eye LOOP` | the eye is recoloured by a glow in that loop, so it is not checked there |
-| `--idle NAME --move NAME` | which loops are the rest and the travel loop (default `idle`, `move`) |
+| `--idle NAME --move NAME` | which loops are the rest and the travel loop (default `idle`, `move`). A name given here must match a `--loop`, or it is a usage error. With no loop of the default name, a `note:` line says which checks do not run: `snap`, `hop`, `shallow` and `drift` need the idle; `still`, `stiff`, `skate` and `gait` need the move; and without a move a walker's `ground` judges every loop |
 | `--legless` | a snake or slug: no body rise asked of its move |
 | `--facing right\|left` | which way the head faces (default right) |
-| `--fps N` | the rate the game plays the loops at (default 30; a decimal is allowed) |
+| `--fps N` | the rate the game plays the loops at (default 30; a decimal is allowed). It sets the GIF's speed and how a GIF input is sampled, and scales `choppy`, `boil`'s rates, `snap`, `hitch`, the eye `tick`'s dwell and an action's held key |
 | `--out DIR` | where `<name>_check.png` and `<name>_check.gif` go (default `.`, the current folder) |
 | `--name NAME` | the stem of the written files (default `anim`) |
 | `--action NAME[:KIND[:DIR]]` | that loop is an action: one key may be held up to 13 frames. `strike` (with a direction) has its phases judged; `jump` is not asked to keep to the ground |
@@ -250,7 +250,7 @@ the same lines without the two faults and the warning, and its move reads `28 21
 
 ```
 broken: 2 fault(s)
-  jump: move a change of 272 px against a mean of 75 (frame 7)
+  jump: move a change of 272 px against a usual 49 (frame 7)
   jump: move[8] is knocked 4 px sideways out of step
   warn: skate: move a planted foot slides 1 px forward (frame 9; 1 slide(s)): a planted foot stays on its world pixel; drawn in place it goes back the same amount each pose
   idle: steps 0 0 13 0 6 0 0 4 0 18 0 5 0 13 0 0 5 0 0 5 0 4 13 6 (% of the figure)
@@ -380,6 +380,11 @@ person with a staff and a cape as `serpent or worm`: a wrong plan, which is the 
   reviewer. That set is not included. No published source gives a pixel threshold for judder. Each function's
   docstring states its margins. Expect false alarms or misses on styles far from that set, and rerun your approved
   animations whenever you change a threshold.
+- **Some margins still count frames,** set at 30 fps, and `--fps` does not scale them: `vanish` asks a piece to stay
+  gone 3+ frames, `speck` looks for a blink of 1-2 frames, `hitch` leaves a step that comes back within 3 frames to
+  `tick`, and `mark` faults a jump of 2 px in one frame. At another rate the same count is another length of time
+  (3 frames are 0.1 s at 30 fps and 0.25 s at 12), so on a 12 or 15 fps loop read their reports, and their silence,
+  with that in mind.
 - **The check does not judge taste.** It cannot see likeness, appeal or whether an attack reads. That is why the skill
   ends with a look by eye.
 - **`creature_map.py` is a first look only.** It reads the silhouette, and a silhouette cannot tell a bow from an arm
@@ -404,6 +409,7 @@ person with a staff and a cape as `serpent or worm`: a wrong plan, which is the 
 | An effect (a spark, a thrown coin) reported as `apart` | Name its colours with `--effects`, or allow small pieces with `--allow LOOP=N`. |
 | `eye` faults in a loop where a glow recolours the eye | Pass `--glows-eye LOOP`. |
 | `TypeError` from the module | Your pixels are not `"#rrggbb"` keys. Pass `lum` and `rgb` to `Spec` (see [From code](#from-code)). |
+| `No module named 'numpy'` (or `'PIL'`) though both are installed | The skills run the scripts with `python -I`, isolated mode: it leaves the script's own folder, `PYTHON*` variables (such as a `PYTHONPATH` into the project) and the user's site-packages off the import path, so a stray file named like a standard module (`json.py`) cannot shadow it. Packages from `pip install --user` (where pip also falls back when it cannot write elsewhere) are not seen then. Install numpy and Pillow in a virtual environment or for the whole system, or run the command without `-I`. |
 | `--selftest` says its test file is missing | Copy the matching `*_selftest.py` beside the script. |
 | `creature_map.py` names the parts wrong | Expected on real art. Use `body_parts.py` with bones placed by eye. |
 | `body_parts.py` prints `CHECK:` lines | Each names a bone or part to fix. Make a `--grid`, move the bone, and run again. |

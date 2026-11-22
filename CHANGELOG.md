@@ -4,6 +4,30 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **pixel-anim-check** `jump`: the step ratio is now read against the loop's usual step, the mean of its moving
+  steps with the two biggest left out, since a pose out of order makes two big steps. Before, a loop of 6 moving
+  steps or fewer could never fire, and one of 8 only at 12 times its other steps. A declared jump's launch and
+  landing are left out first, like a strike's own step. With under 4 usual steps a change must also reach a quarter
+  of the figure. `JUMP` goes from 3.2 to 3.6, fitted on this repo's 13 clean loops and its broken example only; the
+  message reads `against a usual N`.
+- **pixel-anim-check** `shimmer` counts a pixel only when it flips at least 3 times a loop, and the eye `tick`'s
+  dwell (3 and 4 frames at 30 fps) scales with `--fps`. A clean loop thinned to every 2nd frame at 15 fps, or every
+  3rd at 10, no longer fails `shimmer`.
+- **pixel-anim-check** `--idle NAME` or `--move NAME` naming no given loop is a usage error (exit 2). With no loop of
+  the default name and no option given, a `note:` line says which checks do not run.
+- **pixel-animate** `body_parts.py` checks the landmarks file before cutting: a part that is not an object, a bone
+  missing, empty or of nulls, a point that is not two numbers, a kind that is not text, a parent naming no other
+  part, or an eye that is not two numbers or null is a usage error (exit 2) naming the part, not a traceback.
+- The three scripts name the fix when numpy or Pillow cannot be imported (`python -I` does not see a
+  `pip install --user`); the SKILL.md files, the README and `docs/usage.md` explain it.
+- Docs: corrected numbers in `MOTION.md` (a chain's 1-3 frames are 10-30° of a 36-frame loop; 0.17 at A = 0.58;
+  the strike against the median anticipation step) and in the docstrings of `tick`, `frozen`, `split`,
+  `ink_lines` and `spine`; `tick`'s SKILL.md row says which lift peaks its body check lets through.
+
 ## [0.1.0] - 2026-11-21
 
 First public release.

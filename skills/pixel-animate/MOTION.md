@@ -85,7 +85,7 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
 ### 3.4 Lift and bob without ticks
 
 - **The square wave:** rounded to whole game pixels, a 1-px lift is a square wave. With a peak of A game px,
-  `round(max(0, sin)·A)` is up for `(π − 2·asin(0.5/A)) / 2π` of the beat: 0.16 at A = 0.58 (reads as a tick), 0.35
+  `round(max(0, sin)·A)` is up for `(π − 2·asin(0.5/A)) / 2π` of the beat: 0.17 at A = 0.58 (reads as a tick), 0.35
   at A = 1.07 (reads as a lift).
 - **Choose:**
   - **A < 0.5 (no lift)**, the wings alone carrying the hover;
@@ -245,7 +245,7 @@ Frame counts assume 30 fps. Scale them to the game's playback rate. Sources are 
 ### 3.10 Chains and overlap
 
 - Nothing starts or stops together: body, then head, then ears; root, then tail, then tip.
-- In a chain each link lags its parent by **1-3 frames** (20-40° of phase in a 36-frame loop), the amplitude
+- In a chain each link lags its parent by **1-3 frames** (10-30° of phase in a 36-frame loop), the amplitude
   growing toward the tip. Lag 0 moves the chain as a board; a lag over a quarter loop detaches it. A tail catches
   up in about 0.3 s.
 - **One pose of lag is enough** at sprite scale, and it may be one-sided: hair, a plume or ears come down a pose
@@ -301,7 +301,7 @@ An action is a gesture, not a cycle. Its timing has its own rules; everything el
 - **Phases of a strike** (a lunge, a bite, a swing, a pounce):
   1. *Anticipation:* a counter-move of at least 1 px against the strike, over 2-5 small poses. A still
      anticipation has no force.
-  2. *Strike* in 1-2 frames: the largest step of the action, at least 3× the mean anticipation step. A middle frame
+  2. *Strike* in 1-2 frames: the largest step of the action, at least 3× the median anticipation step. A middle frame
      may be skipped to make it stronger.
   3. *One held key,* 4-13 frames at 30 fps: the wind-up for a telegraph or a heavy attack, or the contact for
      weight. Never hold both as briefly as the in-betweens. Make it a moving hold: the body sinks 1-2 px, the head

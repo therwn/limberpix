@@ -22,10 +22,12 @@ optional. Options:
   --effects #hex,...  colours of effects drawn apart from the figure on purpose (sparks, rings, auras)
   --allow loop=N      pieces up to N px may sit apart from the figure in that loop (a thrown coin)
   --glows-eye loop    the eye is recoloured by a glow in that loop (not checked there)
-  --idle NAME --move NAME   which loops are the rest and the travel loop (default idle, move)
+  --idle NAME --move NAME   which loops are the rest and the travel loop (default idle, move). A loop named
+                      with them must be given; with no loop of the default name a note says which checks do not run
   --legless           it crawls without legs (a snake, a slug): no body rise asked of its move; hop judges every loop
   --out DIR --fps N   where the contact sheet and the GIF go (default .); the rate the game plays them, frames a
-                      second, a decimal allowed (default 30: used by the GIF, choppy and snap)
+                      second, a decimal allowed (default 30: used to sample a GIF input and play the GIF, and by
+                      choppy, boil's rates, snap, hitch, the eye tick's dwell and an action's held key)
   --name NAME         the stem of the written files (default anim)
   --action NAME[:KIND[:DIR]]  that loop is an action: it may hold one key up to 13 frames (at 30 fps) outside choppy
                       and uneven. KIND strike (its phases are judged; DIR right|left|up|down, default the facing),
@@ -48,11 +50,15 @@ Faults (each a line "kind: ..."):
   apart    a piece apart from the figure    eye      the eye missing on a frame
   outline  coloured edge pixels with no ink round them (an open contour)
   ground   a walker's feet leave one ground line in a loop other than the move; a flier's shadow slides
-  jump     a change between two frames over JUMP times the loop's mean (a declared strike's own step left out), or
-           one pose knocked sideways out of step against the distinct poses either side of it, a pose held on
-           twos or threes included ("move[6-7] (a held pose)")
+  jump     a change between two frames over JUMP times the loop's usual step: the mean of its moving steps with
+           the two biggest left out, since a pose out of order makes two (into it and out of it); a declared
+           strike's own step and a declared jump's launch and landing are left out first. Under 4 usual steps the
+           change must also reach a quarter of the figure; under 2 (3 moving steps or fewer) only the sideways test
+           runs. Or one pose knocked sideways out of step against the
+           distinct poses either side of it, a pose held on twos or threes included ("move[6-7] (a held pose)")
   still    the move changes under STILL of the figure a frame
-  shimmer  pixels flipping to another tone for one frame and back, often (texture crawling); a stroke's turning
+  shimmer  pixels flipping to another tone for one frame and back on a sixth of the frames, 3 times a loop at the
+           least (texture crawling); a stroke's turning
            frames, tones too alike to tell apart (FAINT), and a tone stepping monotonically along a moving edge
            (a sub-pixel in-between) are not counted
   frozen   the head (round the eye) hardly moves against the body in the idle or the move: a mask on a living body
@@ -113,10 +119,15 @@ import statistics
 import sys
 from fractions import Fraction
 
-import numpy as np
-from PIL import Image, ImageDraw
+try:
+    import numpy as np
+    from PIL import Image, ImageDraw
+except ImportError as e:                                  # python -I does not see a pip install --user
+    raise type(e)(f"{e}: {os.path.basename(__file__)} needs numpy and Pillow. python -I (isolated mode) does "
+                  "not see packages installed with pip install --user: install them in a virtual "
+                  "environment or for the whole system, or run without -I", name=e.name) from None
 
-JUMP, STILL, SHIMMER, FROZEN, FAINT, STIFF = 3.2, 0.015, 0.03, 0.12, 10, 0.5
+JUMP, STILL, SHIMMER, FROZEN, FAINT, STIFF = 3.6, 0.015, 0.03, 0.12, 10, 0.5
 MOVE_MIN, CADENCE_STEP, LURCH = 0.02, 0.08, 3.0          # uneven and lurch (unchanged)
 CHOPPY_RATE, MOVE_EPS = 10.0, 0.002                      # choppy: updates a second; a move is over MOVE_EPS of A
 SNAP_STEP, SNAP_STILL = 0.25, 0.02                       # snap: the step out of a dead stop; what counts as still
@@ -428,10 +439,7 @@ def check(loops, spec, warns=None):
         steps = [_change(figs[k], figs[(k + 1) % len(figs)]) for k in range(len(figs))]
         moving = [s for s in steps if s]
         mean = sum(moving) / len(moving) if moving else 0
-        top = sorted(steps)[-2] if kind == "strike" and len(steps) > 1 else max(steps)   # a strike's own step is
-        if moving and top > JUMP * mean:                  # the biggest on purpose: strike judges it
-            faults.append(f"jump: {a} a change of {top} px against a mean of {mean:.0f} "
-                          f"(frame {steps.index(top)})")
+        faults += _jump(a, steps, figs, kind)
         faults += _knocked(a, frames, spec)
 
         body = sum(1 for r in _figure(frames[0], spec) for v in r if v is not None)
@@ -445,6 +453,36 @@ def check(loops, spec, warns=None):
     for later in (action, boil, skate, gait, parts, orphans, doubles, blend, drift, swap, split, hitch):   # warnings
         later(loops, spec, warns)
     return faults
+
+
+def _jump(a, steps, figs, kind):
+    """A change far over the loop's usual step (jump). steps: the pixels changed from each frame to the next (a
+    1-px bob forgiven). The steps meant to be big are left out first: a declared strike's own step (strike judges
+    it) and a declared jump's two biggest (its launch and its landing). The usual step is then the mean of the
+    moving steps left once the two biggest are also set aside: a pose out of order makes two big steps (into it
+    and out of it), and with them in the mean a short loop could hardly fire (on 6 moving steps or fewer the
+    bigger of two alike big steps can never pass 3.2 times a mean both are part of; on 8 it must be 12 times the
+    others). Fault when the biggest step left is over JUMP times the usual. Under 4 usual steps the base is thin
+    (a sparse idle: a 3-px blink and one ear flick out and back): the step must then also change SNAP_STEP of the
+    figure, snap's big change. Under 2 usual steps (3 moving steps or fewer; 4 in a declared strike, 5 in a
+    declared jump) there is no usual step to compare with: this test is off and only the sideways one (_knocked)
+    runs. Fitted on the 13 clean loops of this repo (the selftest's walker and flier, which examples/ holds too,
+    and the showcase's nine) and examples/broken_move.png, by one person's look: the clean loops' ratios run
+    1.35-3.25 (the lizard's idle highest), the broken move's 5.56. JUMP 3.6 keeps about 10 % over the highest
+    clean loop and 54 % under the broken one. On a long loop (36 steps) leaving two steps out raises the ratio
+    about 1.13 times, so 3.6 is there as strict as 3.2 against the plain mean. Not yet rerun on the private set of
+    39 creatures the motion thresholds were fitted to: rerun it on your accepted animations before trusting it."""
+    moving = sorted(s for s in steps if s)
+    drop = {"strike": 1, "jump": 2}.get(kind, 0)          # big on purpose: a strike's own step, a jump's launch
+    if drop and len(moving) > drop:                       # and landing
+        moving = moving[:-drop]
+    top = moving[-1] if moving else 0
+    usual = moving[:-2]                                   # a pose out of order makes two big steps: both left out
+    base = sum(usual) / len(usual) if len(usual) >= 2 else 0
+    body0 = sum(1 for r in figs[0] for v in r if v is not None)
+    if base and top > JUMP * base and (len(usual) >= 4 or top >= SNAP_STEP * body0):
+        return [f"jump: {a} a change of {top} px against a usual {base:.0f} (frame {steps.index(top)})"]
+    return []
 
 
 def _knocked(a, frames, spec):
@@ -479,8 +517,11 @@ def _raw_triples(frames, dys, x, y):
 
 def _shimmer(a, frames, spec):
     """Texture crawl: pixels drawn in every (bob-aligned) frame that flip A, B, A on at least a sixth of the frames,
-    over SHIMMER of those pixels. A flip at a stroke's turn, between tones too alike to see, or one that is a
-    monotonic sub-pixel step in the unaligned frames (see _flips) is not counted."""
+    and at least 3 times a loop, over SHIMMER of those pixels. The floor of 3 is for short loops: a two-step walk
+    passes a leg over the same pixel twice a loop, and on 12 frames (a walk thinned to every 2nd frame at 15 fps) a
+    sixth is those 2 passes, the walk itself. On 18 frames or more a sixth is 3 or more and the floor changes
+    nothing. A flip at a stroke's turn, between tones too alike to see, or one that is a monotonic sub-pixel step in
+    the unaligned frames (see _flips) is not counted."""
     dys = []
     al = _aligned(frames, dys)
     h, w = len(al[0]), len(al[0][0])
@@ -488,8 +529,9 @@ def _shimmer(a, frames, spec):
     if not held or len(al) <= 4:
         return []
     near = _near_turns(al)
+    need = max(3, len(al) / 6)
     flick = sum(1 for x, y in held
-                if _flips([f[y][x] for f in al], spec.lum, near, _raw_triples(frames, dys, x, y)) >= len(al) / 6)
+                if _flips([f[y][x] for f in al], spec.lum, near, _raw_triples(frames, dys, x, y)) >= need)
     if flick / len(held) > SHIMMER:
         return [f"shimmer: {a} {flick} of its {len(held)} steady pixels flicker back and forth"]
     return []
@@ -640,26 +682,28 @@ def _runs(levels):
     return out
 
 
-def _pulse(R):
+def _pulse(R, fps=30):
     """Extremum runs (both neighbours on one side) dwelling too briefly: under 3 frames, or under 4 when a neighbour
     is itself an extremum (a two-level square wave). A run inside a cluster of 3+ consecutive short runs (3 frames or
-    less each: a sniff, a buzz) is exempt."""
+    less each: a sniff, a buzz) is exempt. The frame counts are for 30 fps (0.1 s and 0.13 s) and scale with fps:
+    at 15 fps an extreme needs 2 frames, a square wave's level 2."""
     N, bad = len(R), []
     if N < 2:
         return bad
+    d3, d4 = math.ceil(3 * fps / 30 - 1e-9), math.ceil(4 * fps / 30 - 1e-9)   # 0.1 s and 0.13 s, in frames
 
     def ext(i):
         return N <= 2 or (R[(i - 1) % N][0] - R[i % N][0]) * (R[(i + 1) % N][0] - R[i % N][0]) > 0
 
     def short(i):
-        return R[i % N][1] <= 3
+        return R[i % N][1] <= d3
     for i, (v, ln) in enumerate(R):
         if not ext(i):
             continue
         if N >= 3 and short(i) and ((short(i - 1) and short(i - 2)) or (short(i - 1) and short(i + 1))
                                     or (short(i + 1) and short(i + 2))):
             continue
-        need = 4 if (ext(i - 1) or ext(i + 1)) else 3
+        need = d4 if (ext(i - 1) or ext(i + 1)) else d3
         if ln < need:
             bad.append((v, ln))
     return bad
@@ -681,10 +725,11 @@ def _lift_track(figs):
 
 def tick(loops, spec, warns):
     """A3: a whole-pixel level left and regained within a few frames reads as a tick, not a lift. After rounding, a
-    1-px sine of peak A is up for (pi - 2 asin(0.5/A)) / 2pi of the beat: 0.16 at A = 0.58, so a lift peaking just
+    1-px sine of peak A is up for (pi - 2 asin(0.5/A)) / 2pi of the beat: 0.17 at A = 0.58, so a lift peaking just
     over half a pixel (or a head turn moving the eye 0.5-0.9 px) shows its top for two frames.
     Eye anchor (the idle; a warning in other loops, where a jump or a strike may be quick on purpose): the eye's row
-    per frame split into cyclic runs; an extremum run must last 3 frames, 4 in a two-level square wave (_pulse).
+    per frame split into cyclic runs; an extremum run must last 3 frames, 4 in a two-level square wave (_pulse; at
+    30 fps, 0.1 s and 0.13 s, scaled with spec.fps).
     Shift anchor (a flier's idle and move, eye or none): the whole-body height track (_lift_track); rest = the level
     held longest; each run at another level is an excursion; duty = the shortest excursion / (n / the number of
     excursions), i.e. its length against its fair share of the loop; fault under TICK_DUTY. Fitted margins: the
@@ -697,12 +742,14 @@ def tick(loops, spec, warns):
         if spec.eye and a not in spec.glows_eye:
             ys = _eye_rows(frames, spec)
             R = _runs(ys) if ys else []
-            bad = _pulse(R)
+            bad = _pulse(R, spec.fps)
             if bad:
                 v, ln = min(bad, key=lambda t: t[1])
+                d4 = math.ceil(4 * spec.fps / 30 - 1e-9)  # _pulse's square-wave dwell at this fps
                 line = (f"tick: {a} the eye reaches row {v} for only {ln} frame(s) (eye runs "
                         f"{[tuple(r) for r in R]}): a lift peaking 0.5-0.9 px or a quick head turn; make each level "
-                        f"dwell 4+ frames (lift under 0.5 or 1+ game px), or keep the head's turn under half a pixel")
+                        f"dwell {d4}+ frames (lift under 0.5 or 1+ game px), or keep the head's turn under half a "
+                        f"pixel")
                 (out if a == spec.idle else warns).append(line if a == spec.idle else "warn: " + line)
         if spec.flier and a in (spec.idle, spec.move):
             figs, _ = _arrays(frames, spec)
@@ -973,8 +1020,9 @@ def stiff(loops, spec):
 
 
 def frozen(loops, spec):
-    """The head, a box round the eye an eighth of the figure across, in the idle and the move with the bob aligned
-    away: under FROZEN of its pixels ever change, it is a mask on a living body."""
+    """The head, a box round the eye reaching 0.12 of the figure's width to each side of it (about a quarter of the
+    width across, 3 px each side at least), in the idle and the move with the bob aligned away: under FROZEN of its
+    pixels ever change, it is a mask on a living body."""
     eye = spec.eye
     f0 = next((f for v in loops.values() for f in v if any(eye in r for r in f)), None) if eye else None
     if f0 is None:
@@ -1921,7 +1969,7 @@ def split(loops, spec, warns):
     body band's rows and the columns whose topline is the torso's own. In every loop, each change from one distinct
     pose to the next, both laid on the rest frame by their torso block (_torso_dx), is read along the topline and the
     belly line: per torso column, how far the line moved. Warn when one column parts two sides that each move
-    rigidly over a quarter of the torso (SPLIT_RUN) by different amounts, with a 1-px step where the rest line is
+    rigidly over 30 % of the torso (SPLIT_RUN) by different amounts, with a 1-px step where the rest line is
     level (_seams): the rear band riding the hips and the front band the shoulders, one a pose after the other.
     A whole-body bob moves every column alike; a shear spread over the length is a staircase; a head turning
     against the body lies outside the torso's columns; legs and a tail are thinner than the band. A flier is not
@@ -2388,6 +2436,32 @@ def _args(argv):
     return got
 
 
+def _and(names):
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _unnamed(loops, spec, idle_given, move_given):
+    """The notes for a rest or travel loop missing under its default name (no --idle or --move given): the checks
+    tied to that loop then do not run, which would otherwise pass for a clean result. Only the checks that run for
+    this kind of body are named (hop, stiff, skate and gait never run on a flier; shallow only on one). Checking an
+    action loop alone is fine, so these are notes, not errors."""
+    out, legged = [], not spec.flier and spec.gait
+    if not idle_given and spec.idle not in loops:
+        skip = ["snap"] + (["hop"] if legged else []) + (["shallow"] if spec.flier else []) + ["drift"]
+        out.append(f"note: no loop is named '{spec.idle}' (name the rest loop with --idle NAME): {_and(skip)} "
+                   f"{'is' if len(skip) == 1 else 'are'} not run, and frozen, tick, reshape, mark and lag do not "
+                   f"judge a loop as the idle")
+    if not move_given and spec.move not in loops:
+        skip = ["still"] + (["stiff", "skate", "gait"] if legged else [])
+        judge = ["frozen"] + (["tick"] if spec.flier else []) + ["mark", "lag"]
+        rest = (", and shallow judges the idle without a move to compare" if spec.flier
+                else ", and ground judges every loop")
+        out.append(f"note: no loop is named '{spec.move}' (name the travel loop with --move NAME): {_and(skip)} "
+                   f"{'is' if len(skip) == 1 else 'are'} not run, {_and(judge)} do not judge a loop as the move"
+                   f"{rest}")
+    return out
+
+
 def main(argv):
     """The command line (see the module's help). Returns the exit code: 0 no fault, 1 faults, 2 a usage error."""
     if "--help" in argv or "-h" in argv:
@@ -2444,7 +2518,8 @@ def main(argv):
             if not poses:
                 raise ValueError(f"no frames in loop {name!r}")
         actions = dict(parse_action(t, facing) for t in opt("--action", many=True))
-        for a in list(actions) + opt("--sheet", many=True):
+        named = [opt(o) for o in ("--idle", "--move") if opt(o) is not None]
+        for a in list(actions) + opt("--sheet", many=True) + named:
             if a not in loops:
                 raise ValueError(f"no loop named {a!r} (give it with --loop)")
         part_strips = {}
@@ -2485,6 +2560,8 @@ def main(argv):
         return 2
     if not frame and not frames and any(_wide_strip(s.split("=", 1)[1]) for s in opt("--loop", many=True)):
         print("note: strips cut into square frames (no --frame or --frames given)")
+    for line in _unnamed(loops, spec, "--idle" in got, "--move" in got):
+        print(line)
     warns = []
     faults = check(loops, spec, warns)
     name = opt("--name", "anim")
