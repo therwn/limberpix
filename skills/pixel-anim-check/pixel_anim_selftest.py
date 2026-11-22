@@ -381,6 +381,7 @@ def run(verbose=False):
     ok &= walk_tempo()
     ok &= blog_attacks()
     ok &= relaxed_bounds(walker)
+    ok &= edge_band()
     cases += later_cases()
     for kind, who, fn in cases:
         L = copy.deepcopy(walker if who == "walker" else flier)
@@ -655,6 +656,35 @@ def blog_attacks():
         print(f"clean blog attack ({name}, {', '.join(str(50 * h) for h in holds)} ms) has no fault"
               + ("" if not f else ": NO, FALSE ALARM: " + "; ".join(x[:90] for x in f)))
         ok &= not f
+    return ok
+
+
+def edge_band():
+    """A band across the whole frame, touching both edges, its scales scrolling 2 px a pose (8 poses on twos, a
+    pattern of 16 px): the poses fit each other only moved sideways with air let in at an edge. Shifts that wrapped
+    round (np.roll) brought the band back in at the other edge, matched every pose with its neighbour moved 2 px
+    and called each one knocked sideways (8 jump faults). The same loop with one pose pushed 4 px sideways (air at
+    its left edge) is still a jump."""
+    W, H = 34, 20
+
+    def frame(off, knock=0):
+        f = [[None] * W for _ in range(H)]
+        for y in range(8, 16):
+            for x in range(W):
+                f[y][x] = INK if y in (8, 15) else (BELLY if ((x - off) // 8) % 2 else FUR)
+        return [[None] * knock + r[:W - knock] for r in f] if knock else f
+
+    ok = True
+    for name, frames, want in (
+            ("a band touching both edges, its scales scrolling 2 px a pose, has no jump",
+             [frame(2 * k) for k in range(8) for _ in range(2)], False),
+            ("the same band with one pose pushed 4 px sideways is a jump",
+             [frame(2 * k, 4 if k == 3 else 0) for k in range(8) for _ in range(2)], True)):
+        f = [x for x in pac.check({"idle": frames, "move": frames}, pac.Spec(eye=None, gait=False), [])
+             if x.startswith("jump")]
+        good = bool(f) == want
+        print(f"{name:<75} {'ok' if good else 'FAILED: ' + '; '.join(f[:2])}")
+        ok &= good
     return ok
 
 

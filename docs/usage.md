@@ -254,6 +254,13 @@ lower edge, which goes with the neck.
 
 `examples/showcase/make_showcase.py` draws the README's pictures from these files (see [Development](#development)).
 
+[`examples/fighter/`](../examples/fighter) holds a fighter in a stance, drawn at game size (48x64) from a skeleton by
+`fighter.py`, and its idle built the Pixelblog 52 way: one bounce of 8 poses held 3 frames over the rise and the top
+and 2 on the drop, the torso moving on every pose, the limbs further from the body moving more, the head holding at
+the turns and the headband's tails a pose behind it. `python examples/fighter/fighter.py OUT_DIR` writes the
+drawing, the strip, its part strip and a GIF; the check command in its docstring (the lit-side ink declared with
+`--ink`) gives 0 faults and 0 warnings, which CI checks.
+
 ### Sample output, explained
 
 The broken walker's run, first lines (read-outs such as the box size and the bob follow). The clean walker prints
@@ -423,8 +430,7 @@ colour there, or else to the first tied colour in the palette's order.
 - **Exit code:** 0 done, 2 a usage error (a bad option, a missing file, an image with no transparency and no
   `--key`, a rest frame of another size).
 - **Limits:**
-  - Even at its best a small move changes a third of the pixels, so parts are still moved by whole game pixels;
-    the tool does not solve that.
+  - Small moves: see Limitations below.
   - It takes one frame at a time: a strip cannot be cut safely when a cell is fractional.
   - Putting back the eye and small marks, dropping a pixel left with no neighbour, and drawing the outline are not
     its job (pixel-animate's step 5 does them after it).
@@ -444,22 +450,24 @@ colour there, or else to the first tied colour in the palette's order.
   `tick`, and `mark` faults a jump of 2 px in one frame. At another rate the same count is another length of time
   (3 frames are 0.1 s at 30 fps and 0.25 s at 12), so on a 12 or 15 fps loop read their reports, and their silence,
   with that in mind.
-- **A texture redrawn at random on twos or threes is not caught.** `shimmer` reads each pixel's runs of one tone, so
-  a texture alternating between two tones is caught on ones, twos and threes; one redrawn at random changes half or
-  a third as often on twos or threes, and a pixel's flips stay under the count. Look for it in the GIF.
-- **One 4-frame hold among twos is not caught.** A lost update in the middle of a motion is seen only where the
-  usual hold is 3 or more (`choppy`) or at the loop's seam (`seam`). Check the rig's pose list for two identical
-  ticks outside a turn (pixel-animate, section 5). No general test was written: the measure tried (how far the
-  motion carries through a hold) read an accepted flier idle's turns as more faulty than broken loops.
-- **A walk pose out of order is not caught.** Every walk step already changes about a third of the figure, so a
-  misplaced pose does not stand out (`jump` reads 1.3-1.5 against 3.6). The test tried, how much moving a pose to
-  another place in the loop lowers its total change, gained up to 0.62 of the figure on a clean bird (its wing
-  passes the same drawings down and up) and 0.16-0.59 on broken walks: no line between them. Read the contact
-  sheet.
-- **A bob drawn upside down (the body up while the legs are spread) is not caught.** The measure tried, how the
-  lower band's width follows the body's top row, read +0.71 on the clean walker, +1.0 on the clean lizard, -0.75
-  on the walker turned upside down, but -0.33 on the clean beast: a four-legged lateral walk's leg band does not
-  follow the step. Read the `legs widest ... body lowest ...` read-out (pixel-anim-check SKILL.md, section 3).
+- **A walk pose out of order is not caught.** Every walk step already changes 35-40 % of the figure, so a misplaced pose
+  reads 1.3-1.5 times the usual step against `jump`'s 3.6, and the test tried (how much better a pose fits elsewhere in
+  the loop) gave 0.58-0.62 on the clean bird and 0.16-0.59 on broken walks: find it by eye on the contact sheet, where
+  each pose should fall between its neighbours.
+- **A texture redrawn at random on twos or threes is not caught.** One alternating between two tones is caught on ones,
+  twos and threes, but a random one changes half or a third as often there, so each pixel's flips stay under `shimmer`'s
+  3 a loop: watch the GIF at full speed for it.
+- **One 4-frame hold among twos is not caught.** A lost update is seen only at the loop's seam (`seam`) or where the
+  usual hold is 3 or more (`choppy`), and the measure tried (how far the motion carries through a hold) read an accepted
+  flier idle's turns as worse than broken loops: check the rig's pose list for two identical ticks outside a turn
+  (pixel-animate, section 5) and look for the stall in the GIF.
+- **A bob drawn upside down (the body up while the legs are spread) is not caught.** With part strips (each leg part's
+  centre against the body part's top row) the clean walks read +0.53 (the selftest walker), -0.03 (the lizard) and -0.24
+  (the beast) against -0.71 for the walker turned upside down, and without them (the lower band's width) +0.71, +1.0 and
+  -0.33 against -0.75, since a four-legged walk's legs do not follow one step: read the `legs widest ... body lowest
+  ...` read-out and the GIF.
+- **`shrink.py` cannot make a small move clean.** Even its best method changes a third of the pixels when the drawing
+  moves a fifth of a cell, so parts are moved by whole game pixels: look at the shrunk frames side by side.
 - **The check does not judge taste.** It cannot see likeness, appeal or whether an attack reads. That is why the skill
   ends with a look by eye.
 - **`creature_map.py` is a first look only.** It reads the silhouette, and a silhouette cannot tell a bow from an arm

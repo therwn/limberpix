@@ -284,11 +284,13 @@ def _codes(f):
 
 
 def _best_dx(a, b, reach=6):
-    """The sideways shift (and up to 3 px up or down) bringing frame a nearest frame b: (dx, pixels still off)."""
+    """The sideways shift (and up to 3 px up or down) bringing frame a nearest frame b: (dx, pixels still off).
+    The shift lets air in at the edge it leaves (_sh): nothing wraps round, so a shape touching one edge never
+    comes back in at the other and matches what is not there (a band across the frame, its texture scrolling)."""
     best, best_dx = None, 0
     for dx in range(-reach, reach + 1):
         for dy in range(-3, 4):
-            m = int((np.roll(np.roll(a, dy, 0), dx, 1) != b).sum())
+            m = int((_sh(a, dy, dx) != b).sum())
             if best is None or m < best or (m == best and abs(dx) < abs(best_dx)):
                 best, best_dx = m, dx
     return best_dx, best

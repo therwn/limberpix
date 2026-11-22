@@ -76,30 +76,37 @@ elsewhere, at a uniform frame time (Broadleaf's attack and Sandy Gordon's attack
 Raymond Schlitter's Pixelblog (Slynyrd): the text of all 91 posts was read (64 numbered Pixelblogs and 27 unnumbered
 devlogs and Pixel Diaries); animation is taught in about 25 of them. The GIFs of 20 of those posts (94 files) were
 then measured: each sprite's region on a lesson sheet found and its pose times read. Each number below says where it
-comes from: *text* (written in the post), *measured* (read from its GIF) or *unverified* (neither: the sheet's fixed
-lines defeated the automatic measure, and the text does not give it). No measure contradicts the text.
+comes from: *text* (written in the post) or *measured* (read from its GIF: each sprite's region on the sheet, its
+parts followed by their colour, the sheet's enlargement read from its pixel blocks). No measure contradicts the
+text; where a measure corrected an earlier reading, the measure is given.
 - 8, Intro to Animation (frames dropped from a run of 8 in a set order; idles):
   https://www.slynyrd.com/blog/2018/8/19/pixelblog-8-intro-to-animation
   Run of 8 at 80 ms a pose and of 4 at 160 ms (*text*); of 6 at 120 ms and of 3 drawings as 4 × 200 ms (*measured*);
-  idles of 2 × 800, 4 × 400, 6 × 200 and 8 × 200 ms (*measured*). A plume falling after the body: *unverified*.
+  idles of 2 × 800, 4 × 400, 6 × 200 and 8 × 200 ms (*measured*). The plumed knight's 8-pose idle (8 × 200 ms): the
+  face 0, 0, 0, 0, 0, +1, +2, +1 px (down positive), the plume's top 0, -1, -1, -1, -1, 0, 0, 0 and its tip 0, 0, -1,
+  -1, -1, 0, +1, 0 (*measured*): the plume drops with the body, on the same poses, and rises one pose (its top) and
+  two (its tip) after the body has risen, while the body holds.
 - 9, Melee Attacks (one-frame anticipation, smear, follow-through held, one-frame recovery, then the rest pose a
   pixel back; *text*): https://www.slynyrd.com/blog/2018/9/8/pixelblog-9-melee-attacks
 - 24, Items: https://www.slynyrd.com/blog/2019/12/21/pixelblog-24-items
-  Item idles step at 80 ms with long still spells between (*measured*); a float eased by step size, 0, -1, -3, -5, -6
-  px: *unverified*.
+  Item idles step at 80 ms with long still spells between; the cherry's bob is eased by step size, its top row 0,
+  -1, -3, -5, -6, -5, -3, -1 px, 80 ms a pose (*measured*).
 - 25, Motion Cycles (a puppet of colour-coded parts first; a dog's hind leg a step behind the opposite foreleg, hips
   and shoulders rising and falling opposite but equal; *text*):
   https://www.slynyrd.com/blog/2020/1/23/pixelblog-25-motion-cycles
-  Human walk 8 × 140 ms, dog walk 8 × 100 ms, wing 8 × 80 ms (*measured*). The dog's tail root 0, +1, +1, 0 (a pose
-  late and damped) and a 12 px wing: *unverified*.
+  Human walk 8 × 140 ms, dog walk 8 × 100 ms, wing 8 × 80 ms (*measured*). The dog (33x23 px): its hips (the hind
+  leg's top) 0, +1, +1, 0, 0, +1, +1, 0 px and its tail's top the same, on the same poses: no lag up and down; the
+  tail shifts back a pixel a pose later, 0, 0, -1, -1 (*measured*). The bird seen from the front (39x28 px): the wing
+  tip's row 0, +2, +12 (the smear), +23, +18, +16, +13, +3 from the top of the stroke, 23 px in all, about 12 above
+  and below the body, which rises 2 px on the downstroke (*measured*).
 - 33, Wind Effects (flow points 12 px apart moving 2 px a frame over 6 frames; waves growing to the tip; a leaf
   tipping the frame after its neighbour; 0.2 s a frame; *text*):
   https://www.slynyrd.com/blog/2021/7/16/pixelblog-33-wind-effects
 - 36, 16x16 hero attack (strike, follow-through and overshoot frames 80 ms, 320 ms of idle before the next; *text*);
   a 2-pose idle of 2 × 800 ms and a walk at 160 ms (*measured*).
 - 37, Castlevania study: https://www.slynyrd.com/blog/2022/3/19/pixelblog-37-classic-castlevania-study
-  A walk of 4 × 160 ms and a second loop of 4 × 240 ms (*measured*). A bat's wing pose held 160 ms while it moves
-  every 40 ms: *unverified*.
+  A walk of 4 × 160 ms and a second loop of 4 × 240 ms (*measured*). The bat holds each wing pose 4 frames of 40 ms
+  (160 ms) while it travels 2 px every 40 ms frame (*measured*).
 - 38, Metroid study (the hips in one column; *text*): https://www.slynyrd.com/blog/2022/5/24/pixelblog-38-metroid-study
 - 45 (a 16 px mouse and pawn, 4 frames × 200 ms, *text* and *measured*; fire 6 × 100 ms with a 50 ms glint, *text*,
   measured as 12 × 50 ms).
@@ -124,8 +131,11 @@ lines defeated the automatic measure, and the text does not give it). No measure
 - 59, Tiny Sci-Fi (a hero's run of 100, 150, 100, 100, 150, 100 ms, *text* and *measured*; a mech walk of 12 × 100 ms,
   *text*): https://www.slynyrd.com/blog/2025/11/28/pixelblog-59-tiny-sci-fi-pixels
 - 60, Side View Run 'N Gun (idle and walk 120 ms, run, shot and landing 60 ms; no anticipation on a player's jump;
-  *text*; a walk of 8 × 120 ms, *measured*): https://www.slynyrd.com/blog/2026/1/26/side-view-run-n-gun
-  The head two poses at each level while the limbs change every pose: *unverified*.
+  *text*): https://www.slynyrd.com/blog/2026/1/26/side-view-run-n-gun
+  The 8x16 dummy's walk, 8 × 120 ms: the head 0, 0, -1, -1, 0, 0, -1, -1 px, two poses at each level with the torso,
+  while the legs' spread changes every pose (6, 5, 3, 4 px), lowest at the widest stride (*measured*). The sheet's
+  8 × 90 ms loops are the run and the run-and-shoot (the head 0, +1, -1, -1), not the 60 ms the text gives for the
+  run (*measured*).
 - 63 (roll, not rotation, for a craft's pitch; the player's hitbox in one place every frame; *text*).
 - 64, Ninja Platformer (a gorilla's 6-frame loop, hind legs a step ahead, head and body one piece; *text*):
   https://www.slynyrd.com/blog/2026/9/25/pixelblog-64-ninja-platformer
@@ -256,9 +266,12 @@ leaves tip one at a time, 39's idle is still, and for 8 an idle only has to move
 ## Bringing a frame down to game size (2, step 5)
 
 - Astropulse, K-Centroid downscale (MIT): https://github.com/Astropulse/K-Centroid-Aseprite . Its README calls it
-  "a new downsampling algorithm using k-means"; its itch.io page (https://astropulse.itch.io/k-centroid , *summary
-  only*) describes it as taking the most common colour of every tile. `shrink.py`'s voted fill is that idea with the
-  palette known beforehand.
+  "a new downsampling algorithm using k-means". Its itch.io page (https://astropulse.itch.io/k-centroid) says it
+  runs k-means on each tile of the source (the block that becomes one output pixel) to find the tile's most common
+  colour, keeping the image close to the original with less noise and blur than other methods; it is an Aseprite
+  extension in Lua (Sprite > K-Centroid Resize) and can take seconds. The page gives no default count; the
+  extension's dialog sets 2 centroids (2-16) and 3 iterations (1-20), and the tile takes the mean colour of its
+  largest cluster. `shrink.py`'s voted fill is that idea with the palette known beforehand.
 - Shin-Ying Yeh, PixelOE (Apache-2.0): https://github.com/KohakuBlueleaf/PixelOE . It widens the outlines of key
   features before downscaling, so that fine details and high-contrast edges survive it, and lists Astropulse's
   k-centroid among its downscale modes. `shrink.py` meets the same loss by reading the contour apart.

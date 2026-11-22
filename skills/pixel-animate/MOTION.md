@@ -16,6 +16,7 @@ showcase, judged by one person.
   judgment); the blog does not state it, and does otherwise where it suits: hair shifting on 2 of an idle's frames
   (55, text), leaves tipping one after another (33, text), a still idle (39, text). Here a free tip may finish the
   body's move a pose late; a part stepping on a beat of its own on a still body is the click to avoid.
+  A working example of 52's idle: `examples/fighter/fighter.py` (the repo's fighter, clean under pixel-anim-check).
 - **Further from the body, more pixels a pose** (52, text): head and torso 1 px a step, shoulders and elbows 2, the
   inner fist 4.
 - **Parts joined by a seam move together at 1-px steps** (this repo's showcase, one person's judgment; the blog
@@ -90,9 +91,8 @@ showcase, judged by one person.
     (Slynyrd's walks and idles, 3.0). The showcase's idles hold 3 frames over the top and 2 on the drop, its wolf
     walks on ones.
   - **One longer hold belongs only where the motion stops:** at a sway's turn (below), in an idle's rest (3.3), on
-    an action's held key (3.13). In the middle of a running motion it is a lost update (below): the check sees it
-    only when the usual hold is 3+ (`choppy`) or at the loop's seam (`seam`), not as one 4-frame hold among twos, so
-    check the pose list for two identical ticks outside a turn.
+    an action's held key (3.13). In the middle of a running motion it is a lost update (below): check the pose list
+    for two identical ticks outside a turn, since the check does not see one 4-frame hold among twos.
   - Sources: Williams' twos (secondhand, animationpodcast and AWN); Wave Motion Cannon (threes and fours read
     jerky).
 - **Turns:** at a sway's turn, and only there, a hold may double a 1-2 frame base, up to 4. Ease with smaller
@@ -330,14 +330,16 @@ showcase, judged by one person.
   growing toward the tip. Lag 0 moves the chain as a board; a lag over a quarter loop detaches it. A tail catches
   up in about 0.3 s. This is for links that move several pixels (a tail's swing, a wing); a 1-px rise is carried
   by the parts joined by seams together, and only a free tip lags it.
-- **One pose of lag is enough** at sprite scale, and it may be one-sided: hair, a plume or a free tail tip comes
-  down a pose late and rises with the body. A tail base may take the hip's 0, +1, +2, +1 as 0, +1, +1, 0: a pose
-  late and damped. Both are this repo's preference: a plume falling late (Slynyrd 8) and a dog's tail root moving
-  so (25) are in neither post's text and could not be measured from their GIFs (unverified, REFERENCES.md).
+- **One pose of lag is enough** at sprite scale, and it may be one-sided. Slynyrd's plumed knight (8, measured) drops
+  its plume with the body, on the same poses, and lifts it a pose (its top) and two (its tip) after the body has risen.
+  The other way round, a free tip coming down a pose late and rising with the body, is this repo's preference. A tail
+  base may take the hip's 0, +1, +2, +1 as 0, +1, +1, 0, a pose late and damped: also this repo's preference; Slynyrd's
+  dog (25, measured) moves its tail up and down with the hips on the same poses and lets it trail sideways a pose later.
 - **The head on a bob.** Where the head is joined without a seam (redrawn each pose, or a neck drawn under it at both
-  places), it may hold a pose at the bob's turn while the body moves under it (Slynyrd 50, measured: 0, 0, -2, -1). A
-  head cut from its neck rides the body: a pixel off, it opens the cut. Either way it never takes the rise alone a pose
-  after the body, or the eye ticks (3.4).
+  places), it may hold a pose at the bob's turn while the body moves under it (Slynyrd 50, measured: 0, 0, -2, -1).
+  Slynyrd 60's small dummy holds head and torso together two poses at each level (0, 0, -1, -1) while its legs change
+  every pose. A head cut from its neck rides the body: a pixel off, it opens the cut. Either way it never takes the rise
+  alone a pose after the body, or the eye ticks (3.4).
 - **Paired appendages** (two antennae, two ears) alternate about half a loop apart, stepping on the poses the body
   moves on; an ear flicking alone while the body holds reads as a hop off the head.
 - **Thin tips drag** 1-2 px against the travel on a contact or impact frame.

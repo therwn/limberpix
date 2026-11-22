@@ -111,18 +111,33 @@ All notable changes to this project are listed here. The format follows
   whole body 2 times a second (`choppy`), a body lifted off its feet's row (`hop`), a walk bobbing 2 px with every
   part on one frame (`lag`, a warning) are still caught.
 - **pixel-animate** attributions: every rule credited to the blog says whether its number is in the post's text or
-  measured from its GIF, and the claims neither shows are marked unverified (24's float, 25's tail root and wing,
-  37's bat, 60's head, 8's plume); a tail root lagging a pose and damped, and a plume falling late, are this repo's
-  preference. The rule "the body moves on every pose, never a small part alone" and the seam rule are credited to
-  this repo's showcase (one person's judgment), the blog doing otherwise in places (55's hair, 33's leaves, 39's
-  still idle). The steps that staged a move part after part (3.8's idle layers, SKILL.md's heads and ears, the
-  `hitch` advice) are rewritten to carry the part with the body.
+  measured from its GIF. Five claims first read off the GIFs were measured again, part by part by colour: 24's cherry
+  bob (0, -1, -3, -5, -6 px at 80 ms), 37's bat (each wing pose 160 ms while it moves 2 px every 40 ms) and 60's dummy
+  (head and torso two poses at each level, the legs changing every pose) held; 25's dog moves its tail with the hips on
+  the same poses (it trails only sideways, a pose later), 25's bird's wing tip travels 23 px, and 8's plume drops with
+  the body and rises one or two poses after it. A tail root lagging a pose and damped, and a tip coming down late, are
+  this repo's preference. 60's 8 × 90 ms loops are the run, not the 60 ms of the text. The rule "the body moves on every
+  pose, never a small part alone" and the seam rule are credited to this repo's showcase (one person's judgment), the
+  blog doing otherwise in places (55's hair, 33's leaves, 39's still idle). The steps that staged a move part after part
+  (3.8's idle layers, SKILL.md's heads and ears, the `hitch` advice) are rewritten to carry the part with the body.
 - **pixel-animate** MOTION.md gains Slynyrd's attack pattern beside the multi-pose one (one held anticipation
   frame, a 1-3 frame smear, the follow-through held, one recovery frame, the overshoot) with the sword, spear and
   hammer timings and when to use which; no anticipation on a jump the player controls (60); quadruped footfall
   (25, 64) beside the existing order; a walk's four poses (50, 60); the wave rule (33); the blog's idle options
   (8, 36, 39: "an idle never stops dead" is this repo's choice); effect timings (36, 45, 48); noise (58), linked
   from `shimmer`. These thresholds were not rerun on the private 39-creature set; rerun it before a release.
+- **pixel-anim-check** `jump`'s sideways test (`_best_dx`) shifts frames with air let in at the edge (`_sh`), no
+  longer wrapping round: a band touching both edges with its scales scrolling 2 px a pose gave 8 false `jump` faults
+  and now gives none, while the same band with a pose pushed 4 px sideways is still caught (the selftest's
+  `edge_band`). Nothing else in the selftest, the examples or the showcase changes.
+- **Examples** `examples/fighter/`: a fighter drawn at game size from a skeleton and its idle built the Pixelblog 52
+  way; it checks clean (0 faults, 0 warnings), and CI checks that.
+- Docs: what the check does not catch, and is looked for by eye, is written once with its measured numbers, in
+  `docs/usage.md`'s Limitations and pixel-anim-check SKILL.md section 2b: a walk pose out of order, a texture redrawn
+  at random on twos or threes, one 4-frame hold among twos, a bob drawn upside down (tried again with part strips:
+  the clean walks read +0.53, -0.03 and -0.24 against -0.71 upside down, so no check was added) and `shrink.py`'s
+  small moves. REFERENCES.md describes Astropulse's K-Centroid from its own page (k-means per tile, 2 centroids and
+  3 iterations by default).
 
 ## [0.1.0] - 2026-11-21
 
