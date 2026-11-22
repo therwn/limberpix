@@ -382,6 +382,7 @@ def run(verbose=False):
     ok &= blog_attacks()
     ok &= relaxed_bounds(walker)
     ok &= edge_band()
+    ok &= redrawn_cases()
     cases += later_cases()
     for kind, who, fn in cases:
         L = copy.deepcopy(walker if who == "walker" else flier)
@@ -995,6 +996,110 @@ def later_cases():
         return {"sheets": {"move"}}
     cases.append(("swap", "walker", shield_off))
     return cases
+
+
+GRAIN = {FUR: "#cc9a70", BELLY: "#dfbc96", "#a8744e": "#ac7852"}   # near tones: a grain redrawn every pose
+
+
+def _redrawn_idle(n=16):
+    """The walker's idle redrawn on every pose: its grain drawn anew each pose (half the fur, belly and leg pixels
+    in a near tone, at random), the head nodding and the tail wagging as before."""
+    out = []
+    for k in range(n):
+        g = walker_frame(k / n, "idle")
+        rnd = random.Random(k)
+        for r in g:
+            for i, v in enumerate(r):
+                if v in GRAIN and rnd.random() < 0.5:
+                    r[i] = GRAIN[v]
+        out.append(g)
+    return out
+
+
+def redrawn_cases():
+    """--style redrawn. The walker's idle redrawn on every pose at 8 fps passes (no shimmer, no choppy: its grain is
+    new on purpose); the plain walker's idle as 6 poses held 9 frames at 30 fps, its body still while the head and
+    tail step, is stepped; --style takes pixel or redrawn only."""
+    ok = True
+    f = pac.check({"idle": _redrawn_idle()}, pac.Spec(eye=EYE, fps=8, style="redrawn"))
+    print(f"clean redrawn idle (a new grain every pose, 8 fps) passes"
+          f"{'' if not f else ': NO, FALSE ALARM: ' + '; '.join(f[:3])}")
+    ok &= not f
+    held = [walker_frame(p / 6, "idle") for p in range(6) for _ in range(9)]
+    f = pac.check({"idle": held}, pac.Spec(eye=EYE, style="redrawn"))
+    hit = any(x.startswith("stepped:") for x in f)
+    print(f"stepped  on redrawn {'caught' if hit else 'MISSED'}")
+    ok &= hit
+
+    def studded(skip):                                    # the walker's idle with a 2-px stud on its belly, left
+        out = []                                          # out of the frames in skip
+        for k in range(24):
+            g = walker_frame(k / 24, "idle")
+            if k not in skip:
+                g[13][14] = g[13][15] = DARK
+            out.append(g)
+        return out
+    spec = pac.Spec(eye=EYE, style="redrawn")
+    lost = [x for x in pac.check({"idle": studded({5, 11, 17})}, spec) if x.startswith("lostmark:")]
+    print(f"lostmark on redrawn {'caught' if lost else 'MISSED'}  (the stud gone in 3 separate poses)")
+    ok &= bool(lost)
+    blink = [x for x in pac.check({"idle": studded({5, 6})}, spec) if x.startswith("lostmark:")]
+    kept = [x for x in pac.check({"idle": studded(set())}, spec) if x.startswith("lostmark:")]
+    print(f"lostmark lets a blink (one run) and a stud on every pose pass"
+          f"{'' if not blink and not kept else ': NO, FALSE ALARM: ' + (blink + kept)[0]}")
+    ok &= not blink and not kept
+
+    def broken(f):                                        # every 5th inked edge pixel of the body turned to fur
+        h, w = len(f), len(f[0])
+        edge = [(x, y) for y in range(h) for x in range(w) if f[y][x] == INK and any(
+            not (0 <= x + a < w and 0 <= y + b < h) or f[y + b][x + a] is None
+            for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))]
+        for x, y in edge[2::5]:
+            f[y][x] = FUR
+        return f
+    clean = _redrawn_idle()
+    hit = [x for x in pac.check({"idle": [broken(copy.deepcopy(f)) for f in clean]},
+                                pac.Spec(eye=EYE, fps=8, style="redrawn")) if x.startswith("gaps:")]
+    print(f"gaps     on redrawn {'caught' if hit else 'MISSED'}  (every 5th edge ink pixel coloured)")
+    ok &= bool(hit)
+
+    SPECKS = [(9, 13), (10, 17), (11, 11)]                # three GEM specks on the walker's fur, placed by eye
+
+    def specked(k, drop=(), grey=(), lift=0):
+        g = walker_frame(k / 24, "idle")
+        for i, (y, x) in enumerate(SPECKS):
+            if i not in drop:
+                g[y][x] = "#8a8a8a" if i in grey else GEM
+        return pac._shifted(g, -lift) if lift else g
+    ref = specked(0)
+    sspec = dict(eye=EYE, ref=ref, spots={"specks": SPECKS})
+    clean = [specked(k, grey={1} if k % 4 == 0 else (), lift=1 if 8 <= k < 16 else 0) for k in range(24)]
+    f = [x for x in pac.check({"idle": clean}, pac.Spec(**sspec)) if x.startswith("spots:")]
+    print(f"spots lets specks moved with a lift, one turned grey, pass{'' if not f else ': NO, FALSE ALARM: ' + f[0]}")
+    ok &= not f
+    broken = [specked(k, drop={2} if k in (5, 6, 15) else (), lift=1 if 8 <= k < 16 else 0) for k in range(24)]
+    f = [x for x in pac.check({"idle": broken}, pac.Spec(**sspec)) if x.startswith("spots:")]
+    hit = f and "idle[5-6] 2" in f[0] and "idle[15] 2" in f[0] and "idle[4" not in f[0]
+    print(f"spots    on walker  {'caught' if hit else 'MISSED'}  (one speck gone in frames 5, 6 and 15)"
+          + ("" if hit else f"  ({f[0][:110] if f else 'nothing'})"))
+    ok &= bool(hit)
+    with tempfile.TemporaryDirectory() as d:
+        p, q = os.path.join(d, "idle.png"), os.path.join(d, "spots.json")
+        _strip(clean, p)
+        with open(q, "w") as fh:
+            fh.write('{"specks": [[9, 13], [10, 17]]}')
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            code = pac.main(["--loop", f"idle={p}", "--frame", "34", "--spots", q, "--out", d])
+    print(f"--spots  without --ref is a usage error {'yes' if code == 2 else 'NO'}")
+    ok &= code == 2
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "idle.png")
+        _strip(_redrawn_idle(4), p)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            code = pac.main(["--loop", f"idle={p}", "--frame", "34", "--style", "cutout", "--out", d])
+    print(f"--style  refuses an unknown style {'yes' if code == 2 else 'NO'}")
+    ok &= code == 2
+    return ok
 
 
 def _strip(frames, path):

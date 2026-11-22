@@ -8,6 +8,22 @@ All notable changes to this project are listed here. The format follows
 
 ### Added
 
+- **pixel-anim-check** `--style redrawn`, for animations whose every pose is a new drawing of the whole figure (frame
+  by frame, or generated). `stepped` replaces `choppy`, `uneven` and `lurch`: the whole body must move at least 6
+  times a second, a new pose changing 40 % of the figure's tiles. `shimmer` is off and `reshape` and `outline` only
+  warn. The margin is a first guess from three idles of one character judged by playing them (a generated idle
+  accepted, two cut-out idles rejected as slow and stepped); the default style is unchanged. Two faults for
+  generated frames run in this style: `lostmark`, marks closed in by a patch of one colour (a mouth on a face) gone in
+  3 or more separate runs of poses, which named exactly the four poses the reviewer saw without a mouth; and `gaps`,
+  an outline broken in short stretches. Neither fires on the 21 other loops in the repo and the trials when their
+  outline colours are given. With selftest cases. A first `flicker` warning (a mark both neighbouring poses draw,
+  missing in this one) was dropped: it marked none of the places the reviewer saw.
+- **pixel-anim-check** `--spots PATH` (with `--ref`): small marks of the approved drawing placed by eye in groups (a
+  hat's specks, a mouth), looked for at their place in every pose of every loop but an action; the `spots` fault
+  names the poses showing fewer of a group's marks than the drawing. A mark that turned another colour or into a
+  pinhole still counts. On the reviewed generated idle it named exactly the poses the reviewer saw lose a hat speck
+  and the mouth (32 judgements of 32), where `lostmark` could not see the specks. With selftest cases.
+
 - **pixel-animate** `shrink.py`: brings a frame posed at the reference's resolution down to game size, the step the
   skill named but did not specify. A game pixel is drawn on coverage, the contour is read apart so a thin line stays
   whole and one pixel wide, and the fill is voted after every reference pixel is snapped to the palette; a cell is

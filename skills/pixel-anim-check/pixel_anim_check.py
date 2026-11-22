@@ -47,6 +47,13 @@ optional. Options:
                       fitted floors allow (Slynyrd 45's 16 px sprites hold a pose 200 ms, 5 a second, text; his
                       2-pose idles 800 ms, measured; give --min-rate 4 for poses of 250 ms). Default: 10, or the
                       walk's and the idle's own floors (see choppy)
+  --spots PATH        (with --ref) a JSON file {"group": [[row, column], ...], ...}: the approved drawing's small
+                      marks, placed by eye in its pixels (a hat's specks, a mouth); each must show in every pose
+                      (spots). The approved drawing must be at the loops' scale
+  --style pixel|redrawn   how the frames were made (default pixel). pixel: one drawing moved by whole pixels, its
+                      texture kept (the cut-out rules below). redrawn: every pose a new drawing of the whole figure
+                      (frame by frame, or generated): stepped replaces choppy, uneven and lurch; lostmark and gaps
+                      are run; shimmer is not run; reshape and outline only warn
   --key #rrggbb       the background colour of strips with no transparency: read as air in the loops, --parts,
                       --ref and --palette (that exact colour only: clean a key's fringe first). Without it, a loop
                       with no transparent pixel in any frame is refused (exit 2)
@@ -101,6 +108,15 @@ Faults (each a line "kind: ..."):
            redrawing the head in every cell)
   palette  (with --palette) a frame holds a colour outside the approved drawing's, --effects, --shadow and --glow
   mark     (with --mark) a mark missing on a frame, or jumping 2+ px in one frame, in the idle or the move
+  stepped  (--style redrawn) a loop other than an action whose whole body moves (a new pose changing 40 % of the
+           figure's tiles) fewer than 6 times a second: it reads slow and stepped
+  lostmark (--style redrawn) the marks a patch of one colour closes in (a mouth on a face, a stud on a coat), there
+           in most poses, gone in 3 or more separate runs of poses (a blink, once or twice a loop, passes)
+  gaps     (--style redrawn) the outline broken in short stretches: over 5 runs per 100 edge px of 1-4 coloured
+           pixels between ink on the figure's edge. Give every outline colour, lit ones too, with --ink
+  spots    (with --spots) a pose of a loop other than an action showing fewer of a group's marks than the approved
+           drawing, each looked for at its place (the group's window found again in the pose); a mark that turned
+           another colour, or into a pinhole, still counts
 Warnings (lines "warn: ...", not faults; look at them): the eye tick, reshape and mark in loops other than the idle
 (an action may jump or open its jaw on purpose), and the later checks, whose margins are not yet fitted:
   boil     outline-only steps that come back (A, B, A) are a quarter of the updates, or hide a real-pose rate
@@ -133,6 +149,8 @@ The thresholds of choppy, snap, tick, hop, vanish, shallow and reshape were fitt
 animated creatures, with 15 accept or reject judgements on them by one reviewer; not included), with the margins
 stated in each function. No source gives a pixel threshold for judder: rerun the check on every animation you have
 accepted whenever a threshold changes."""
+import colorsys
+import json
 import math
 import os
 import re
@@ -179,6 +197,18 @@ SWAP_LOW, SWAP_HIGH, SWAP_POSES, SWAP_BACK = 0.3, 2.0, 3, 0.7   # swap: a colour
 SPLIT_ROWS, SPLIT_COLS, SPLIT_RUN, SPLIT_MIN = 0.6, 0.6, 0.3, 10   # split: the torso's rows and columns; each side
 HITCH_HOLD, HITCH_ELSE, HITCH_RIGID, HITCH_MIN = 10, 0.5, 0.7, 8  # hitch: frames held at 30 fps; the rest's change
 SPLIT_BLOCK = 0.25                                       # split: a side's pixels off its rigid move
+# --style redrawn (every pose a new drawing of the whole figure: frame by frame, or generated). Fitted on three idles
+# of one character only (a generated idle the user accepted, two cut-out idles the user rejected as slow and stepped):
+# see stepped. Rerun it on every redrawn animation judged since.
+STEP_ROWS, STEP_TILE, STEP_COVER, STEPPED_RATE = 8, 0.15, 0.4, 6.0   # stepped: tile grid, a tile's change, a body
+                                                                     # move's share of tiles, body moves a second
+PATCH_MIN, PATCH_FRAC, PATCH_REACH, PATCH_SIZE = 12, 0.003, 0.12, 1.6   # lostmark: a patch's least px and share of
+LOST_HAVE, LOST_RUNS = 0.6, 3                            # the figure, its reach a pose (of the height), its size swing;
+GAP_LEN, GAP_RATE = 4, 5.0                               # marks on this share of the poses, gone this many times; gaps
+SPOT_PX, SPOT_HUE, SPOT_SAT, SPOT_INK = 3, 1 / 8, 0.15, 45   # spots: a mark's most px; a patch tone's hue reach (of
+SPOT_PAD, SPOT_REACH, SPOT_TOL, SPOT_DROP = 8, 12, 1, 0.4    # the circle), least saturation; ink's lightness; the
+                                                             # window round a group, its search, a mark's slack in
+                                                             # px, the share of a tone mark's lightness step
 
 
 def hexrgb(v):
@@ -196,7 +226,7 @@ class Spec:
     def __init__(self, ink=None, shadow=(), effects=(), eye=None, flier=False, idle="idle", move="move",
                  allow=None, glows_eye=(), lum=lum_hex, rgb=hexrgb, gait=True, fps=30, facing="right",
                  actions=None, speed=None, parts=None, squash=(), palette=None, glow=(), ref=None, marks=(),
-                 sheets=(), min_rate=None):
+                 sheets=(), min_rate=None, style="pixel", spots=None):
         self.ink, self.shadow, self.effects = ink, set(shadow), set(effects)
         self.eye, self.flier, self.idle, self.move = eye, flier, idle, move
         self.allow, self.glows_eye, self.lum, self.rgb = allow or {}, set(glows_eye), lum, rgb
@@ -215,6 +245,10 @@ class Spec:
         self.sheets = set(sheets)                         # loops drawn as a sheet or by AI (swap judges them)
         self.min_rate = min_rate                          # choppy's floor for the idle and the move, updates a
                                                           # second (None: the fitted floors)
+        self.style = style                                # "pixel": the cut-out rules (a drawing moved whole pixels,
+                                                          # its texture kept); "redrawn": every pose a new drawing
+        self.spots = dict(spots or {})                    # {group name: [(row, column)]}: small marks of the
+                                                          # approved drawing (ref), placed by eye (spots)
 
     def is_ink(self, v):
         return v in self.ink if self.ink is not None else v is not None and self.lum(v) < 40
@@ -456,8 +490,9 @@ def check(loops, spec, warns=None):
                         and f[y][x] not in fx and any(not (0 <= x + dx < w and 0 <= y + dy < h)
                                                       or f[y + dy][x + dx] is None
                                                       for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))))
-        if open_edge > 2:
-            faults.append(f"outline: {a}[{i}] {open_edge} coloured edge pixel(s) with no ink")
+        if open_edge > 2:                                 # a redrawn style may line its edges in colour (selout)
+            line = f"outline: {a}[{i}] {open_edge} coloured edge pixel(s) with no ink"
+            (faults.append(line) if spec.style == "pixel" else warns.append("warn: " + line))
     if any(not any(v is not None for r in f for v in r) for _, _, f in allf):
         return faults
     for a, frames in loops.items():
@@ -486,11 +521,18 @@ def check(loops, spec, warns=None):
         body = sum(1 for r in _figure(frames[0], spec) for v in r if v is not None)
         if a == spec.move and body and mean / body < STILL:
             faults.append(f"still: {a} changes {mean / body:.1%} of the figure a frame")
-        faults += _shimmer(a, frames, spec)
+        if spec.style == "pixel":                         # a redrawn pose redraws its texture on purpose
+            faults += _shimmer(a, frames, spec)
+    redrawn = spec.style == "redrawn"
+    face = reshape(loops, spec, warns)
+    if redrawn:                                           # a redrawn face changes its pixels on purpose
+        warns += ["warn: " + x for x in face]
+        face = []
     faults = (faults + eye_jumps(loops, spec, warns) + frozen(loops, spec) + stiff(loops, spec)
-              + cadence(loops, spec) + snap(loops, spec) + tick(loops, spec, warns) + hop(loops, spec)
-              + vanish(loops, spec) + shallow(loops, spec)
-              + reshape(loops, spec, warns) + palette(loops, spec) + marks(loops, spec, warns))
+              + (stepped(loops, spec) + lostmark(loops, spec) + gaps(loops, spec) if redrawn
+                 else cadence(loops, spec)) + snap(loops, spec)
+              + tick(loops, spec, warns) + hop(loops, spec) + vanish(loops, spec) + shallow(loops, spec)
+              + face + palette(loops, spec) + marks(loops, spec, warns) + spots(loops, spec, warns))
     for later in (action, boil, seam, skate, gait, parts, orphans, doubles, blend, drift, swap, split,
                   hitch):                                 # warnings
         later(loops, spec, warns)
@@ -1191,6 +1233,432 @@ def reshape(loops, spec, warns):
                     f"after the best alignment; worst {max(res):.2f}): draw the head once and move it whole (paste "
                     f"one approved head, placed by the eye), or read every drawing on one grid")
             (out if a == spec.idle else warns).append(line if a == spec.idle else "warn: " + line)
+    return out
+
+
+# ---- the redrawn style (--style redrawn) -----------------------------------------------------------------------
+def _cover(p, q):
+    """The share of the figure's tiles that change from pose p to pose q: the box both poses fill cut into tiles of
+    STEP_ROWS to its height; a tile counts when the figure fills a quarter of it, and moves when STEP_TILE of its
+    figure pixels change. A body redrawn whole moves nearly every tile; a band of rows stepped over a still body, or
+    a sparkle, moves a few."""
+    fig = (p > 0) | (q > 0)
+    if not fig.any():
+        return 0.0
+    ys, xs = np.nonzero(fig)
+    t = max(2, round((ys.max() - ys.min() + 1) / STEP_ROWS))
+    diff = (p != q) & fig
+    moving = total = 0
+    for y in range(ys.min(), ys.max() + 1, t):
+        for x in range(xs.min(), xs.max() + 1, t):
+            f = int(fig[y:y + t, x:x + t].sum())
+            if f < t * t / 4:
+                continue
+            total += 1
+            moving += int(diff[y:y + t, x:x + t].sum() >= STEP_TILE * f)
+    return moving / total if total else 0.0
+
+
+def _body_times(figs):
+    """The frames at which a new pose moves the whole body (_cover at least STEP_COVER), cyclic."""
+    runs = _same_runs(figs)
+    if len(runs) < 2:
+        return []
+    return [runs[i][0] for i in range(len(runs)) if _cover(figs[runs[i - 1][0]], figs[runs[i][0]]) >= STEP_COVER]
+
+
+def stepped(loops, spec):
+    """The redrawn style's cadence, for every loop but a declared action: the whole body must move often. A body
+    move is a new pose changing STEP_COVER of the figure's tiles (_cover); fault when the loop has fewer than
+    STEPPED_RATE of them a second. Played, a body that moves whole on every pose reads alive; one that holds still
+    and steps a band of rows at a time (a breath rolling down the body), however many small glints and specks
+    change between, reads slow and stepped, "like scanning".
+    The three idles it was fitted on, one character, judged by the user playing them: a generated idle, accepted, 16
+    poses at 8 fps, each new pose moving every tile (8 body moves a second); a cut-out idle with whole-pixel body
+    steps on 9-frame holds and cloth steps between, rejected (3.3 a second, 0.3 s still); a cut-out idle whose body
+    rose band by band with sparkles changing every frame, rejected (0.8 a second, up to 0.8 s still). 6 lies between
+    the accepted 8 and the rejected 3.3: a guess on three samples, not a fitted margin."""
+    out = []
+    for a, frames in loops.items():
+        n = len(frames)
+        if a in spec.actions or n < 2:
+            continue
+        figs, _ = _arrays(frames, spec)
+        times = _body_times(figs)
+        rate = len(times) * spec.fps / n
+        if rate < STEPPED_RATE:
+            gaps = [((times[(i + 1) % len(times)] - times[i]) % n) or n for i in range(len(times))] or [n]
+            out.append(f"stepped: {a} the whole body moves {rate:.1f} times a second (longest still "
+                       f"{max(gaps) / spec.fps:.2f} s): it reads slow and stepped. Redraw the whole figure on every "
+                       f"pose, at least {STEPPED_RATE:g} new poses a second, rather than stepping one band or part "
+                       f"over a still body")
+    return out
+
+
+def _comps4(m):
+    """4-connected pieces of a boolean array, each as (ys, xs) index arrays."""
+    H, W = m.shape
+    seen = np.zeros_like(m, bool)
+    out = []
+    for y, x in zip(*np.nonzero(m)):
+        if seen[y, x]:
+            continue
+        stack, ys, xs = [(y, x)], [], []
+        seen[y, x] = True
+        while stack:
+            cy, cx = stack.pop()
+            ys.append(cy)
+            xs.append(cx)
+            for ny, nx in ((cy + 1, cx), (cy - 1, cx), (cy, cx + 1), (cy, cx - 1)):
+                if 0 <= ny < H and 0 <= nx < W and m[ny, nx] and not seen[ny, nx]:
+                    seen[ny, nx] = True
+                    stack.append((ny, nx))
+        out.append((np.array(ys), np.array(xs)))
+    return out
+
+
+def _enclosed(ys, xs, H, W):
+    """How many pixels a patch (its pixels ys, xs) closes in: those its box holds that air from outside the box
+    cannot reach in 4-connected steps (a mouth on a face, a stud on a coat)."""
+    y0, x0 = ys.min() - 1, xs.min() - 1
+    m = np.ones((ys.max() - y0 + 2, xs.max() - x0 + 2), bool)
+    m[ys - y0, xs - x0] = False
+    reach = np.zeros_like(m)
+    border = [(y, x) for y in range(m.shape[0]) for x in (0, m.shape[1] - 1)] + \
+             [(y, x) for x in range(m.shape[1]) for y in (0, m.shape[0] - 1)]
+    stack = [p for p in border if m[p]]
+    for p in stack:
+        reach[p] = True
+    while stack:
+        cy, cx = stack.pop()
+        for ny, nx in ((cy + 1, cx), (cy - 1, cx), (cy, cx + 1), (cy, cx - 1)):
+            if 0 <= ny < m.shape[0] and 0 <= nx < m.shape[1] and m[ny, nx] and not reach[ny, nx]:
+                reach[ny, nx] = True
+                stack.append((ny, nx))
+    return int((m & ~reach).sum())
+
+
+def _pose_ref(a, runs, i, n):
+    k0, ln = runs[i]
+    return f"{a}[{k0}]" if ln == 1 else f"{a}[{k0}-{(k0 + ln - 1) % n}]"
+
+
+def lostmark(loops, spec):
+    """The redrawn style: marks drawn inside a patch of one colour (a mouth on a face, a stud on a coat) that vanish
+    in some poses. Every patch of one colour of PATCH_MIN px and PATCH_FRAC of the figure or more in the first pose
+    is followed through the distinct poses: in each, the patch of its colour nearest its last place, within
+    PATCH_REACH of the figure's height and within PATCH_SIZE times its last size either way (a patch not found in
+    some pose is let go). In each pose, the pixels the patch closes in are its marks. Fault when the marks are there
+    in LOST_HAVE of the poses and gone in LOST_RUNS or more separate runs of poses: a blink, once or twice a loop, is
+    drawn on purpose; a mouth missing again and again is a generated frame's slip.
+    Tried on: the generated wizard idle the user judged, whose mouth they saw missing in poses 9, 10, 13 and 15: the
+    face's patch has marks in the other 12 and none in exactly those 4. On the same idle it also names the hat's
+    patch in poses 1, 2, 10 and 15, where the user saw the hat's yellow specks lost; but the marks it counts there are
+    1-px dark specks and holes, not the yellow specks, which sit across the hat's shades and close in no one patch,
+    and the specks' partial losses (poses 4, 9, 13: some of the four left) it does not see. A search for the approved
+    drawing's small marks in every pose was tried for them and refused: the generated poses redraw the specks a few
+    px away and in another colour, and it named nearly the opposite poses. The two cut-out wizard idles, the
+    showcase's nine loops, the fighter and six test creatures: nothing (the bird's two blinks and a beast's closing
+    eye in its attack, one or two runs, are let go). Not proven beyond these."""
+    out = []
+    for a, frames in loops.items():
+        if a in spec.actions:
+            continue
+        figs, ink = _arrays(frames, spec)
+        runs = _same_runs(figs)
+        if len(runs) < 3:
+            continue
+        P = [figs[k] for k, _ in runs]
+        n, H, W = len(frames), *P[0].shape
+        area = _area(P)
+        rows = [np.nonzero(p.any(1))[0] for p in P]
+        height = statistics.mean(int(r.max() - r.min() + 1) for r in rows if len(r))
+        least = max(PATCH_MIN, PATCH_FRAC * area)
+        reach = PATCH_REACH * height
+        found = []
+        for i, p in enumerate(P):
+            found.append({})
+            for c in np.unique(p):
+                if c == 0 or c in ink or (p == c).sum() < least:
+                    continue
+                found[i][c] = [(ys, xs, (ys.mean(), xs.mean())) for ys, xs in _comps4(p == c) if len(ys) >= least]
+        for c, seeds in found[0].items():
+            for ys, xs, cen in seeds:
+                track, last = [(ys, xs)], (len(ys), cen)
+                for i in range(1, len(P)):
+                    near = [(math.dist(ce, last[1]), y_, x_, ce) for y_, x_, ce in found[i].get(c, [])
+                            if 1 / PATCH_SIZE <= len(y_) / last[0] <= PATCH_SIZE]
+                    near = [t for t in near if t[0] <= reach]
+                    if not near:
+                        track = None
+                        break
+                    _, y_, x_, ce = min(near, key=lambda t: t[0])
+                    track.append((y_, x_))
+                    last = (len(y_), ce)
+                if not track:
+                    continue
+                marks = [_enclosed(y_, x_, H, W) for y_, x_ in track]
+                gone = [i for i, m in enumerate(marks) if not m]
+                times = sum(1 for i in gone if (i - 1) % len(P) not in gone)
+                if gone and len(P) - len(gone) >= LOST_HAVE * len(P) and times >= LOST_RUNS:
+                    out.append(f"lostmark: {a} the marks inside a patch at row {round(cen[0])}, column "
+                               f"{round(cen[1])} (a mouth on a face, a stud on a coat: {marks[0]} px in the first "
+                               f"pose) vanish in {', '.join(_pose_ref(a, runs, i, n) for i in gone)}: a generated "
+                               f"frame dropping them. Draw them on every pose")
+    return out
+
+
+def gaps(loops, spec):
+    """The redrawn style: an outline broken in short stretches. On the figure's edge (a pixel beside air), a run of
+    GAP_LEN or fewer coloured (not ink) pixels with edge ink beside it at both ends is a gap. Fault when a loop has
+    over GAP_RATE gaps per 100 edge pixels over its poses. A lit outline (selout) colours long stretches of the edge
+    on purpose; those are longer than GAP_LEN or have no ink at an end.
+    Tried on: the generated wizard idle the user judged (they saw the contour lost in a few px at random on every
+    pose, hair, hat and robe alike, and found most of them among the gaps it marks, a few more missed): 8.1 gaps per
+    100 edge px, 37-76 a pose, many along the cape's and the staff's edges;
+    the two cut-out wizard idles 0; the showcase's beast 1.9, lizard 3.7 (its lit outline), the fighter 2.3, a test
+    crab 3.1. 5 lies between: a guess, not a fitted margin."""
+    out = []
+    for a, frames in loops.items():
+        figs, ink = _arrays(frames, spec)
+        runs = _same_runs(figs)
+        P = [figs[k] for k, _ in runs]
+        total = edges = 0
+        worst = []
+        for i, p in enumerate(P):
+            drawn = p > 0
+            pad = np.zeros((drawn.shape[0] + 2, drawn.shape[1] + 2), bool)
+            pad[1:-1, 1:-1] = drawn
+            air = ~pad
+            edge = drawn & (air[:-2, 1:-1] | air[2:, 1:-1] | air[1:-1, :-2] | air[1:-1, 2:])
+            inked = edge & np.isin(p, list(ink))
+            g = 0
+            for ys, xs in _blobs(edge & ~inked):
+                if len(ys) > GAP_LEN:
+                    continue
+                near = inked[max(0, ys.min() - 1):ys.max() + 2, max(0, xs.min() - 1):xs.max() + 2]
+                ty, tx = np.nonzero(near)
+                if len(ty) >= 2 and (np.ptp(ty) + np.ptp(tx)) >= len(ys) + 1:
+                    g += 1
+            total += g
+            edges += int(edge.sum())
+            worst.append((g, i))
+        rate = 100 * total / max(1, edges)
+        if rate > GAP_RATE:
+            top = sorted(worst, reverse=True)[:3]
+            out.append(f"gaps: {a} the outline breaks in short stretches, {rate:.1f} per 100 edge px (most in "
+                       f"{', '.join(f'{_pose_ref(a, runs, i, len(frames))} ({g})' for g, i in top)}): coloured "
+                       f"pixels of 1-{GAP_LEN} px between ink on the edge. Ink the edge on every pose")
+    return out
+
+
+def _rgbd(f, spec):
+    """A frame as an RGB array and a drawn mask (the shadow and effects left undrawn)."""
+    h, w = len(f), len(f[0])
+    rgb, drawn = np.zeros((h, w, 3), int), np.zeros((h, w), bool)
+    skip = spec.shadow | spec.effects
+    for y, r in enumerate(f):
+        for x, v in enumerate(r):
+            if v is not None and v not in skip:
+                rgb[y, x] = spec.rgb(v)
+                drawn[y, x] = True
+    return rgb, drawn
+
+
+def _lum3(c):
+    return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+
+
+def _tone_of(c, hue):
+    """Is colour c a tone of a patch of this hue: not near-black, saturated (SPOT_SAT, and 30 between its channels),
+    its hue within SPOT_HUE of the patch's. The patch's shading and dark shadow tones count; grey, a speck of another
+    hue and ink do not."""
+    h, _, s = colorsys.rgb_to_hls(*(v / 255 for v in c))
+    return (_lum3(c) >= 20 and s >= SPOT_SAT and max(c) - min(c) >= 30
+            and min(abs(h - hue), 1 - abs(h - hue)) <= SPOT_HUE)
+
+
+def _spot_maps(rgb, drawn, hue):
+    """For one patch hue: its tone mask, ink (dark, not its tone), lightness, and the air outside the figure (air
+    joined to the frame's border: a pinhole inside is not)."""
+    H, W = drawn.shape
+    tone, ink, L = np.zeros((H, W), bool), np.zeros((H, W), bool), np.zeros((H, W))
+    cache = {}
+    for y, x in zip(*np.nonzero(drawn)):
+        c = tuple(int(v) for v in rgb[y, x])
+        if c not in cache:
+            t = _tone_of(c, hue)
+            cache[c] = (t, _lum3(c) < SPOT_INK and not t, _lum3(c))
+        tone[y, x], ink[y, x], L[y, x] = cache[c]
+    air = np.zeros((H, W), bool)
+    for ys, xs in _comps4(~drawn):
+        if ys.min() == 0 or xs.min() == 0 or ys.max() == H - 1 or xs.max() == W - 1:
+            air[ys, xs] = True
+    return tone, ink, L, air
+
+
+def _ring(ys, xs, shape):
+    own = set(zip(ys.tolist(), xs.tolist()))
+    ring = {(y + b, x + a) for y, x in own for b in (-1, 0, 1) for a in (-1, 0, 1)} - own
+    return [q for q in ring if 0 <= q[0] < shape[0] and 0 <= q[1] < shape[1]]
+
+
+def _marks_found(rgb, drawn, hue, kind, drop):
+    """The small marks a frame shows on patches of this hue: (row, column) of each. kind "off": a blob of SPOT_PX px
+    or fewer of another hue, grey, or a pinhole, with only the patch's tones, ink and outside air round it, half of
+    it the patch (a speck on a hat: one that turned grey, or into a hole, still counts). kind "dark" or "light": a
+    blob of SPOT_PX px or fewer darker (lighter) than the patch's tones within 2 px by drop or more, three quarters of
+    its ring the patch (a mouth line on a face)."""
+    tone, ink, L, air = _spot_maps(rgb, drawn, hue)
+    if kind == "off":
+        cand = ~air & ~tone & ~ink
+    else:
+        med = np.full(L.shape, np.nan)
+        tl = np.where(tone, L, np.nan)
+        for y, x in zip(*np.nonzero(drawn)):
+            w = tl[max(0, y - 2):y + 3, max(0, x - 2):x + 3]
+            if not np.isnan(w).all():
+                med[y, x] = np.nanmedian(w)
+        with np.errstate(invalid="ignore"):
+            cand = drawn & ((L <= med - drop) if kind == "dark" else (L >= med + drop))
+    out = []
+    for ys, xs in _blobs(cand):
+        if len(ys) > (SPOT_PX - 1 if kind == "off" else SPOT_PX):   # a speck of another hue: 2 px at most
+            continue
+        ring = _ring(ys, xs, drawn.shape)
+        n = sum(1 for q in ring if tone[q])
+        if kind == "off":
+            ok = all(tone[q] or ink[q] or air[q] for q in ring) and n >= len(ring) / 2
+        else:
+            ok = n >= 0.75 * len(ring)
+        if ok:
+            out.append((float(ys.mean()), float(xs.mean())))
+    return out
+
+
+def _spot_kind(rgb, drawn, pts):
+    """A group's patch hue, read round its marks in the approved drawing (the tones 2 px out), and the marks' kind:
+    "off" when a mark is not a tone of the patch (a gold speck on a blue hat), else "dark" or "light" with the
+    lightness step from the patch (a mouth on a face)."""
+    hs, ls, ms = [], [], []
+    for y, x in pts:
+        y, x = int(round(y)), int(round(x))
+        ms.append(tuple(int(v) for v in rgb[y, x]))
+        for b in range(-2, 3):
+            for a in range(-2, 3):
+                if max(abs(a), abs(b)) == 2 and 0 <= y + b < drawn.shape[0] and 0 <= x + a < drawn.shape[1] \
+                        and drawn[y + b, x + a]:
+                    c = tuple(int(v) for v in rgb[y + b, x + a])
+                    if _lum3(c) >= 20 and max(c) - min(c) >= 30:
+                        hs.append(colorsys.rgb_to_hls(*(v / 255 for v in c))[0])
+                        ls.append(_lum3(c))
+    if not hs:
+        return None
+    hue = float(np.angle(np.mean(np.exp(2j * np.pi * np.array(hs)))) / (2 * np.pi)) % 1
+    if any(not _tone_of(m, hue) for m in ms):
+        return hue, "off", 0.0
+    step = statistics.median(ls) - statistics.median(_lum3(m) for m in ms)
+    return hue, ("dark" if step > 0 else "light"), SPOT_DROP * abs(step)
+
+
+def _class40(rgb, drawn):
+    return np.where(drawn, 1 + (np.array([[_lum3(c) for c in r] for r in rgb]) // 40).astype(int), 0)
+
+
+def _group_shift(pts, rc, pc, prior):
+    """Where a group of marks went in a pose: the shift (within SPOT_REACH of the figure's own) bringing the
+    approved drawing's window round the group (SPOT_PAD px out) nearest the pose, read in bands of 40 lightness."""
+    ys, xs = [p[0] for p in pts], [p[1] for p in pts]
+    y0, x0 = max(0, int(min(ys)) - SPOT_PAD), max(0, int(min(xs)) - SPOT_PAD)
+    w = rc[y0:int(max(ys)) + SPOT_PAD + 1, x0:int(max(xs)) + SPOT_PAD + 1]
+    H, W = pc.shape
+    best = None
+    for dy in range(prior[0] - SPOT_REACH, prior[0] + SPOT_REACH + 1):
+        for dx in range(prior[1] - SPOT_REACH, prior[1] + SPOT_REACH + 1):
+            a, b = y0 + dy, x0 + dx
+            if a < 0 or b < 0 or a + w.shape[0] > H or b + w.shape[1] > W:
+                continue
+            m = int((pc[a:a + w.shape[0], b:b + w.shape[1]] != w).sum())
+            key = (m, abs(dy - prior[0]) + abs(dx - prior[1]))
+            if best is None or key < best[0]:
+                best = (key, (dy, dx))
+    return best[1] if best else prior
+
+
+def _matched(pts, found, shift):
+    """How many of a group's marks have a found mark of their own within SPOT_TOL px of their place (each found mark
+    answers one), the group moved by the shift or by one px more either way (the most found)."""
+    best = 0
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            sy, sx = shift[0] + dy, shift[1] + dx
+            near = sorted((abs(fy - y - sy) + abs(fx - x - sx), i, j) for i, (y, x) in enumerate(pts)
+                          for j, (fy, fx) in enumerate(found)
+                          if abs(fy - y - sy) <= SPOT_TOL and abs(fx - x - sx) <= SPOT_TOL)
+            took, used = set(), set()
+            for _, i, j in near:
+                if i not in took and j not in used:
+                    took.add(i)
+                    used.add(j)
+            best = max(best, len(took))
+    return best
+
+
+def spots(loops, spec, warns):
+    """(with --spots and --ref) Small marks of the approved drawing, placed by eye in groups (a hat's four specks, a
+    mouth), looked for in every distinct pose of every loop but an action. The approved drawing must be at the loops'
+    scale. For a group: its patch's hue and its marks' kind are read from the drawing (_spot_kind); in a pose, the
+    group's window is found again near the figure's own shift (its top row and middle column against the drawing's;
+    _group_shift), and its marks are looked for there (_marks_found, _matched). A mark that turned another colour, or
+    into a pinhole, still counts: its place is what is asked. Fault when a pose shows fewer of a group's marks than
+    the drawing does.
+    Tried on: the generated wizard idle the user judged, with the hat's four yellow specks and the mouth placed on
+    the approved drawing: the poses it names are exactly those the user saw lose a speck (1, 2, 4, 9, 10, 13, 15; in
+    13 two of four left, as they marked) and the mouth (9, 10, 13, 15), 32 judgements of 32. One character, two
+    groups: not proven beyond them."""
+    out = []
+    if not spec.spots or spec.ref is None:
+        return out
+    rr, rd = _rgbd(spec.ref, spec)
+    if not rd.any():
+        return out
+    rc = _class40(rr, rd)
+    rys, rxs = np.nonzero(rd)
+    groups = {}
+    for name, pts in spec.spots.items():
+        got = _spot_kind(rr, rd, pts)
+        if got is None:
+            warns.append(f"warn: spots: group {name!r} has no patch round it in the approved drawing (place its marks "
+                         f"on the drawing's own pixels)")
+            continue
+        hue, kind, drop = got
+        n_ref = _matched(pts, _marks_found(rr, rd, hue, kind, drop), (0, 0))
+        if n_ref < len(pts):
+            warns.append(f"warn: spots: group {name!r}: only {n_ref} of its {len(pts)} marks read as marks in the "
+                         f"approved drawing (a mark must be {SPOT_PX} px or fewer, set in its patch): move them onto "
+                         f"the marks")
+        if n_ref:
+            groups[name] = (pts, hue, kind, drop, n_ref)
+    for a, frames in loops.items():
+        if a in spec.actions:
+            continue
+        runs = _same_runs(_arrays(frames, spec)[0])
+        lost = {name: [] for name in groups}
+        for i, (k, _) in enumerate(runs):
+            pr, pd = _rgbd(frames[k], spec)
+            if not pd.any():
+                continue
+            ys, xs = np.nonzero(pd)
+            prior = (int(ys.min() - rys.min()), int(round(float(np.median(xs) - np.median(rxs)))))
+            pc = _class40(pr, pd)
+            for name, (pts, hue, kind, drop, n_ref) in groups.items():
+                n = _matched(pts, _marks_found(pr, pd, hue, kind, drop), _group_shift(pts, rc, pc, prior))
+                if n < n_ref:
+                    lost[name].append(f"{_pose_ref(a, runs, i, len(frames))} {n}")
+        for name, where in lost.items():
+            if where:
+                out.append(f"spots: {a} the marks {name!r} ({groups[name][4]} in the approved drawing) are fewer in "
+                           f"{', '.join(where)}: draw every one on every pose, in its place")
     return out
 
 
@@ -2704,7 +3172,7 @@ def _wide_strip(src):
 
 VALUED = {"--loop", "--frame", "--frames", "--eye", "--facing", "--ink", "--shadow", "--effects", "--allow",
           "--glows-eye", "--idle", "--move", "--out", "--fps", "--name", "--action", "--speed", "--parts", "--squash",
-          "--palette", "--glow", "--ref", "--mark", "--sheet", "--key", "--min-rate"}
+          "--palette", "--glow", "--ref", "--mark", "--sheet", "--key", "--min-rate", "--style", "--spots"}
 FLAGS = {"--flier", "--legless", "--selftest", "--help", "-h"}
 
 
@@ -2807,6 +3275,9 @@ def main(argv):
         facing = opt("--facing", "right")
         if facing not in ("right", "left"):
             raise ValueError("--facing must be right or left")
+        style = opt("--style", "pixel")
+        if style not in ("pixel", "redrawn"):
+            raise ValueError("--style must be pixel or redrawn")
         allow = {}
         for a in opt("--allow", many=True):
             k, _, v = a.partition("=")
@@ -2865,6 +3336,22 @@ def main(argv):
                 raise ValueError(f"no such file: {p}")
             return _grid(Image.open(p), key)
         pal = image("--palette")
+        spot_groups = None
+        if opt("--spots"):
+            if not opt("--ref"):
+                raise ValueError("--spots needs --ref: its marks are placed on the approved drawing")
+            if not os.path.isfile(opt("--spots")):
+                raise ValueError(f"no such file: {opt('--spots')}")
+            try:
+                with open(opt("--spots"), encoding="utf-8") as fh:
+                    raw = json.load(fh)
+                raw = raw.get("groups", raw)
+                spot_groups = {str(k): [(float(p[0]), float(p[1])) for p in v] for k, v in raw.items()}
+            except (ValueError, TypeError, AttributeError, IndexError, KeyError):
+                raise ValueError("--spots takes a JSON file {\"group\": [[row, column], ...], ...} in the "
+                                 "approved drawing's pixels") from None
+            if not spot_groups or not all(spot_groups.values()):
+                raise ValueError("--spots: every group needs one mark or more")
         eye = opt("--eye")
         spec = Spec(ink=cols(opt("--ink")) or None, shadow=cols(opt("--shadow")), effects=cols(opt("--effects")),
                     eye=hexcol(eye) if eye else None, flier="--flier" in got, idle=opt("--idle", "idle"),
@@ -2873,7 +3360,7 @@ def main(argv):
                     parts=part_strips, squash=cols(opt("--squash")),
                     palette={v for r in pal for v in r if v is not None} if pal else None,
                     glow=cols(opt("--glow")), ref=image("--ref"), marks=sorted(cols(opt("--mark"))),
-                    sheets=opt("--sheet", many=True), min_rate=min_rate)
+                    sheets=opt("--sheet", many=True), min_rate=min_rate, style=style, spots=spot_groups)
     except ValueError as e:
         print(f"error: {e}  (--help lists the options)", file=sys.stderr)
         return 2
