@@ -378,6 +378,10 @@ def run(verbose=False):
     ok &= jump_short(walker)
     ok &= thinned(walker, flier)
     ok &= eye_cases(walker)
+    ok &= walk_tempo()
+    ok &= blog_attacks()
+    ok &= relaxed_bounds(walker)
+    ok &= edge_band()
     cases += later_cases()
     for kind, who, fn in cases:
         L = copy.deepcopy(walker if who == "walker" else flier)
@@ -599,6 +603,144 @@ def jump_short(walker):
     two = len(f) == 2 and "against a usual" in f[0] and "knocked 4 px" in f[1]
     print("jump     on walker the broken example still gives two jump lines" + ("" if two else f": NO ({f})"))
     return ok and two
+
+
+def walk_tempo():
+    """choppy on a move whose every pose change is big (each a new drawing of the stride): Slynyrd's walks and runs
+    hold a pose 80-200 ms, so such a move may update CHOPPY_WALK (5.2) times a second. The walker's 8-pose walk at
+    120 ms, held 4 frames at 30 fps, a 6-pose run at 100 ms, a 4-pose walk at 160 ms and his 6-pose walk at 200, 180,
+    180 ms pass; four drawings held 6 frames (5 a second, the private set's reject) and a 4-pose walk at 280 ms still
+    fail; --min-rate 3 lets those two pass. Only the move loop is given, so an idle drawn for 30 fps does not mix in."""
+    ok = True
+
+    def walk(n):
+        return [walker_frame(p / n, "move") for p in range(n)]
+
+    def held(frames, holds):
+        return [f for f, h in zip(frames, holds) for _ in range(h)]
+    few = [walker_frame((k // 6 * 6) / 24, "move") for k in range(24)]
+    slow = held(walk(4), [28] * 4)
+    for label, frames, fps, kw, want in (
+            ("8 poses at 120 ms", walk(8), 25 / 3, {}, False),
+            ("8 poses held 4 frames at 30 fps", held(walk(8), [4] * 8), 30, {}, False),
+            ("6 poses at 100 ms", walk(6), 10, {}, False),
+            ("4 poses at 160 ms", walk(4), 6.25, {}, False),
+            ("6 poses at 200, 180, 180 ms", held(walk(6), [10, 9, 9, 10, 9, 9]), 50, {}, False),
+            ("4 drawings held 6 frames (5 a second)", few, 30, {}, True),
+            ("4 poses at 280 ms", slow, 100, {}, True),
+            ("4 poses at 280 ms, --min-rate 3", slow, 100, {"min_rate": 3}, False),
+            ("4 drawings held 6 frames, --min-rate 3", few, 30, {"min_rate": 3}, False)):
+        got = [x for x in pac.cadence({"move": frames}, pac.Spec(fps=fps, **kw)) if x.startswith("choppy:")]
+        print(f"choppy   walk tempo: {label} {'caught' if got else 'passes'}" + ("" if bool(got) == want else ": NO"))
+        ok &= bool(got) == want
+    return ok
+
+
+BLOG_STRIKE = [(-1, -1), (1, 0), (2, 0), (3, 1), (4, 1), (1, 0)]   # wind-up, two in-betweens, the hit, the follow-
+                                                                    # through a pixel further, the recovery
+
+
+def blog_attacks():
+    """Slynyrd's attack pattern (56, text: a sword, a spear and a hammer in 6 frames of 100, 50, 50, 50, 100, 50 / 200,
+    50, 50, 50, 150, 50 / 250, 50, 50, 50, 300, 100 ms), declared a strike at 20 fps: the wind-up held, the hit,
+    the follow-through held, one frame back, then the overshoot (the rest pose a pixel back, one frame) and the rest.
+    No fault: an action may hold two keys (the wind-up and the follow-through), and the overshoot's whole-figure pixel
+    is forgiven in jump. The strike warnings (counter, strike, recover, stage) may still show: they ask for the
+    other, multi-pose pattern (MOTION.md 3.13)."""
+    ok = True
+    rest = walker_frame(0, "idle")
+    for name, holds in (("sword", (2, 1, 1, 1, 2, 1)), ("spear", (4, 1, 1, 1, 3, 1)), ("hammer", (5, 1, 1, 1, 6, 2))):
+        frames = [walker_frame(0, "idle", lunge=p) for p, h in zip(BLOG_STRIKE, holds) for _ in range(h)]
+        frames += [_sx(rest, -1)] + [copy.deepcopy(rest) for _ in range(6)]
+        f = pac.check({"atk": frames}, pac.Spec(eye=EYE, fps=20, actions={"atk": "strike:right"}), [])
+        print(f"clean blog attack ({name}, {', '.join(str(50 * h) for h in holds)} ms) has no fault"
+              + ("" if not f else ": NO, FALSE ALARM: " + "; ".join(x[:90] for x in f)))
+        ok &= not f
+    return ok
+
+
+def edge_band():
+    """A band across the whole frame, touching both edges, its scales scrolling 2 px a pose (8 poses on twos, a
+    pattern of 16 px): the poses fit each other only moved sideways with air let in at an edge. Shifts that wrapped
+    round (np.roll) brought the band back in at the other edge, matched every pose with its neighbour moved 2 px
+    and called each one knocked sideways (8 jump faults). The same loop with one pose pushed 4 px sideways (air at
+    its left edge) is still a jump."""
+    W, H = 34, 20
+
+    def frame(off, knock=0):
+        f = [[None] * W for _ in range(H)]
+        for y in range(8, 16):
+            for x in range(W):
+                f[y][x] = INK if y in (8, 15) else (BELLY if ((x - off) // 8) % 2 else FUR)
+        return [[None] * knock + r[:W - knock] for r in f] if knock else f
+
+    ok = True
+    for name, frames, want in (
+            ("a band touching both edges, its scales scrolling 2 px a pose, has no jump",
+             [frame(2 * k) for k in range(8) for _ in range(2)], False),
+            ("the same band with one pose pushed 4 px sideways is a jump",
+             [frame(2 * k, 4 if k == 3 else 0) for k in range(8) for _ in range(2)], True)):
+        f = [x for x in pac.check({"idle": frames, "move": frames}, pac.Spec(eye=None, gait=False), [])
+             if x.startswith("jump")]
+        good = bool(f) == want
+        print(f"{name:<75} {'ok' if good else 'FAILED: ' + '; '.join(f[:2])}")
+        ok &= good
+    return ok
+
+
+def relaxed_bounds(walker):
+    """What the five relaxed checks still catch, beside what they now let pass on purpose: a head pasted in place
+    while the body moves under it (frozen); an idle whose body stands while its head and tail step at 1 and 3 frames
+    in turn (uneven: only an idle moving its whole body is let off); an idle moving its whole body but 2 times a
+    second (choppy); a body lifted off its feet's row with no leg stretching (hop); a walk bobbing 2 px with every
+    part on the body's frame (lag, a warning). And the cases let pass: the head carried on the breath, 2.5 updates a
+    second, the legs stretching under the breath, a 1-px bob with every part on its frame."""
+    ok = True
+    ws = dict(eye=EYE)
+    ride = breathing()
+    pasted = copy.deepcopy(walker)
+    for a in ("idle", "move"):
+        f0 = pasted[a][0]
+        ey, ex = next((y, r.index(EYE)) for y, r in enumerate(f0) if EYE in r)
+        for f in pasted[a][1:]:
+            for y in range(max(0, ey - 5), min(len(f), ey + 6)):
+                for x in range(max(0, ex - 5), min(len(f[0]), ex + 6)):
+                    f[y][x] = f0[y][x]
+    stut = [walker_frame(p / 8, "idle") for p in range(8)]
+    whole = [walker_frame(P / 4, "idle", rise=r, nods=False) for P, r in enumerate((0, 1, 0, -1))]
+    lift = copy.deepcopy(walker)
+    for k in (6, 7):
+        f = lift["idle"][k]
+        low = max(y for y, r in enumerate(f) if any(v is not None for v in r))
+        lift["idle"][k] = pac._shifted(f[:low], -1) + f[low:]
+
+    def bob(px):
+        rise = [px if abs(math.sin(2 * math.pi * k / 16)) < 0.5 else 0 for k in range(16)]
+        return ([walker_frame(k / 16, "move", nods=False, rise=rise[k]) for k in range(16)],
+                {"parts": {"move": [walker_frame(k / 16, "move", nods=False, rise=rise[k], labels=True)
+                                    for k in range(16)]}, "squash": {LEG_L}})
+    b2, b2kw = bob(2)
+    b1, b1kw = bob(1)
+    for label, loops, kind, kw, want in (
+            ("a head pasted in place, the body moving", pasted, "frozen", {}, True),
+            ("the head carried on the breath", dict(walker, idle=ride), "frozen", {}, False),
+            ("an idle's head and tail at 1 and 3 frames, the body still",
+             dict(walker, idle=[f for p, f in enumerate(stut) for _ in range(1 if p % 2 else 3)]), "uneven", {}, True),
+            ("an idle moving its whole body 2 times a second",
+             dict(walker, idle=[f for f in whole for _ in range(15)]), "choppy", {}, True),
+            ("an idle moving its whole body 2.5 times a second",
+             dict(walker, idle=[f for f in whole for _ in range(12)]), "choppy", {}, False),
+            ("a body lifted off its feet's row", lift, "hop", {}, True),
+            ("a breath, the legs stretching under it", dict(walker, idle=ride), "hop", {}, False),
+            ("a walk bobbing 2 px, every part on its frame", dict(walker, move=b2), "lag", b2kw, True),
+            ("a walk bobbing 1 px, every part on its frame", dict(walker, move=b1), "lag", b1kw, False)):
+        warns = []
+        f = pac.check(loops, pac.Spec(**dict(ws, **kw)), warns)
+        got = [x for x in f + warns if x.startswith(kind + ":") or x.startswith("warn: " + kind + ":")]
+        print(f"{kind:8s} relaxed but bounded: {label} {'reported' if got else 'passes'}"
+              + ("" if bool(got) == want else ": NO"))
+        ok &= bool(got) == want
+    return ok
 
 
 def thinned(walker, flier):
@@ -1001,6 +1143,10 @@ def cli(walker):
         plain = run_main(base + ["--frame", "34", "--eye", "#ffcc33"])
         case("--key reads it as the strip with alpha", (code, keyed_text.split("sheets:")[0])
              == (plain[0], plain[1].split("sheets:")[0]), (code, keyed_text[:300]))
+        code, text = run_main(base + ["--frame", "34", "--min-rate", "fast"])
+        case("--min-rate that is no number is a usage error", code == 2 and "--min-rate" in text, (code, text[-200:]))
+        code, text = run_main(base + ["--frame", "34", "--eye", "#ffcc33", "--min-rate", "3"])
+        case("--min-rate 3 runs the clean walker clean", code == 0, (code, text[-200:]))
         code, text = run_main(base + ["--frame", "34", "--move", "walk"])
         case("--move naming a loop not given is a usage error", code == 2 and "no loop named 'walk'" in text,
              (code, text[-200:]))

@@ -75,6 +75,18 @@ jobs:
             --loop idle=examples/flier_idle.png --loop move=examples/flier_move.png \
             --frame 30 --eye "#ffcc33" --flier --shadow "#2b2430" --out "$OUT" --name flier
 
+      - name: The fighter example passes clean (exit 0, no warning)
+        run: |
+          python -I examples/fighter/fighter.py "$OUT/fighter"
+          python -I skills/pixel-anim-check/pixel_anim_check.py \
+            --loop idle="$OUT/fighter/fighter_idle.png" --frame 48 --eye "#3a1a14" --ink "#1b1420,#4a3346" \
+            --parts idle="$OUT/fighter/fighter_idle_parts.png" \
+            --palette "$OUT/fighter/fighter_art.png" --ref "$OUT/fighter/fighter_art.png" \
+            --out "$OUT" --name fighter | tee "$OUT/fighter.txt"
+          test "${PIPESTATUS[0]}" -eq 0
+          grep -q "fighter: 0 fault(s)" "$OUT/fighter.txt"
+          ! grep -q "warn:" "$OUT/fighter.txt"
+
       - name: Broken example fails (exit 1)
         run: |
           set +e

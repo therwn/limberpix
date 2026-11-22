@@ -27,11 +27,12 @@ optional. Options:
   --legless           it crawls without legs (a snake, a slug): no body rise asked of its move; hop judges every loop
   --out DIR --fps N   where the contact sheet and the GIF go (default .); the rate the game plays them, frames a
                       second, a decimal allowed (default 30: used to sample a GIF input and play the GIF, and by
-                      choppy, boil's rates, snap, hitch, the eye tick's dwell and an action's held key)
+                      choppy, boil's rates, snap, hitch, the eye tick's dwell and an action's held keys)
   --name NAME         the stem of the written files (default anim)
-  --action NAME[:KIND[:DIR]]  that loop is an action: it may hold one key up to 13 frames (at 30 fps) outside choppy
-                      and uneven. KIND strike (its phases are judged; DIR right|left|up|down, default the facing),
-                      jump (it leaves the ground: ground is not asked), or any other word (a gesture)
+  --action NAME[:KIND[:DIR]]  that loop is an action: it may hold up to two keys (a wind-up and a follow-through),
+                      each up to 13 frames (at 30 fps), outside choppy and uneven. KIND strike (its phases are
+                      judged; DIR right|left|up|down, default the facing), jump (it leaves the ground: ground is
+                      not asked), or any other word (a gesture)
   --speed PX          the road's scroll in game px a frame: the planted feet's speed is printed beside it, and the
                       GIF scrolls a ground line under the move
   --parts LOOP=PATH   a part strip for that loop (same frames, each rig part one flat colour): per-part volume and
@@ -42,6 +43,10 @@ optional. Options:
   --glow #hex,...     colours shown in some frames on purpose (glow steps, glints, blink lids)
   --mark #hex,...     small defining marks (a gem, a lamp): on every frame, never jumping 2 px in one frame
   --sheet LOOP        that loop was drawn as a sheet or by AI: a part switched off for a cell is looked for (swap)
+  --min-rate R        choppy's floor for the idle and the move, updates a second, for a style held longer than the
+                      fitted floors allow (Slynyrd 45's 16 px sprites hold a pose 200 ms, 5 a second, text; his
+                      2-pose idles 800 ms, measured; give --min-rate 4 for poses of 250 ms). Default: 10, or the
+                      walk's and the idle's own floors (see choppy)
   --key #rrggbb       the background colour of strips with no transparency: read as air in the loops, --parts,
                       --ref and --palette (that exact colour only: clean a key's fringe first). Without it, a loop
                       with no transparent pixel in any frame is refused (exit 2)
@@ -76,10 +81,11 @@ Faults (each a line "kind: ..."):
   choppy   a loop updating fewer than CHOPPY_RATE times a second, or one update dropped (a hold twice the usual
            of 3+ frames): read as a dropped frame rate (--fps: the rate the game plays it at). A rest (a hold of a
            third of the loop) is left out and the rest of the loop judged. An idle moving its whole body on every
-           pose may update 2.5 times a second and hold one pose twice the others
+           pose may update 2.5 times a second and hold one pose twice the others; a move whose every pose
+           change is big (a new drawing of the stride), 5.2 times; --min-rate sets both floors
   uneven   the holds between a loop's moves jump in turn (1 frame, then 3, then 1): the motion stutters though
-           the rate is the same (ease lengthening the holds at a turn is on purpose; the idle is not judged: its
-           breath is eased, slow over the top and quick on the drop)
+           the rate is the same (ease lengthening the holds at a turn is on purpose; an idle that breathes, its
+           body moving whole, is not judged: its breath is eased, slow over the top and quick on the drop)
   lurch    a held loop whose moves alternate big and small (a whole-body bob after a leg's small step, frames held
            between): a hitch each beat; with something moving on every frame the bob reads as a gait (not in the
            idle, where a whole-body step between a free tip's small steps is the breath)
@@ -147,6 +153,7 @@ MOVE_MIN, CADENCE_STEP, LURCH = 0.02, 0.08, 3.0          # uneven and lurch (unc
 CHOPPY_RATE, MOVE_EPS = 10.0, 0.002                      # choppy: updates a second; a move is over MOVE_EPS of A
 BODY_TOPS = 0.8                                          # a pose change moving the body: this share of the columns'
 CHOPPY_BODY_IDLE = 2.5                                   # tops moves; then an idle may update this slowly a second
+CHOPPY_WALK = 5.2                                        # a move whose every pose change is big: updates a second
 SNAP_STEP, SNAP_STILL = 0.25, 0.02                       # snap: the step out of a dead stop; what counts as still
 TICK_DUTY = 0.18                                         # tick: the shortest excursion against its share of the loop
 HOP_LIFT, HOP_SHARE, HOP_STEP = 0.5, 0.6, 0.3            # hop: contact kept; rigid share of a big step; big step
@@ -155,7 +162,7 @@ SHALLOW, SHALLOW_ROWS, SHALLOW_PX = 0.3, 0.8, 0.6
 RESHAPE = 0.10
 # The checks below warn only (except palette and mark, which run only when asked for): their margins are first
 # guesses from the sources, not yet fitted to accepted animations. Rerun them on your accepted set before trusting.
-ACTION_KEY = 13                                          # an action's one held key, frames at 30 fps (4-13 sourced)
+ACTION_KEY = 13                                          # an action's held keys (two), frames at 30 fps (4-13 sourced)
 STRIKE_SNAP, SETTLE = 3.0, 0.5                           # strike: >= 3x the anticipation; recover: no step over half
 STAGE_IOU = 0.9                                          # stage: the strike pose's silhouette against the rest pose
 PISTON_SPAN, PISTON_DEV = 4, 1.0                         # piston: a path of 4+ px within 1 px of its chord
@@ -189,7 +196,7 @@ class Spec:
     def __init__(self, ink=None, shadow=(), effects=(), eye=None, flier=False, idle="idle", move="move",
                  allow=None, glows_eye=(), lum=lum_hex, rgb=hexrgb, gait=True, fps=30, facing="right",
                  actions=None, speed=None, parts=None, squash=(), palette=None, glow=(), ref=None, marks=(),
-                 sheets=()):
+                 sheets=(), min_rate=None):
         self.ink, self.shadow, self.effects = ink, set(shadow), set(effects)
         self.eye, self.flier, self.idle, self.move = eye, flier, idle, move
         self.allow, self.glows_eye, self.lum, self.rgb = allow or {}, set(glows_eye), lum, rgb
@@ -206,6 +213,8 @@ class Spec:
         self.ref = ref                                    # the approved drawing at game size, a frame
         self.marks = list(marks)                          # small defining marks (a gem, a lamp): on every frame
         self.sheets = set(sheets)                         # loops drawn as a sheet or by AI (swap judges them)
+        self.min_rate = min_rate                          # choppy's floor for the idle and the move, updates a
+                                                          # second (None: the fitted floors)
 
     def is_ink(self, v):
         return v in self.ink if self.ink is not None else v is not None and self.lum(v) < 40
@@ -247,6 +256,14 @@ def _change(p, q):
     return min(_diff(_shifted(p, dy), q) for dy in (-1, 0, 1))
 
 
+def _change_action(p, q):
+    """_change in a declared action, where the whole figure moved a pixel sideways is forgiven too: an attack's
+    overshoot shows the rest pose a pixel back for a frame on purpose (Slynyrd 9 and 53, text), a recoil the same."""
+    left = [r[1:] + [None] for r in p]
+    right = [[None] + r[:-1] for r in p]
+    return min(_change(p, q), _diff(left, q), _diff(right, q))
+
+
 def _aligned(frames, dys=None):
     """Each frame moved up or down (at most 2 px) to match the first best, so a bob does not read as flicker.
     dys, if a list, receives each frame's shift."""
@@ -267,11 +284,13 @@ def _codes(f):
 
 
 def _best_dx(a, b, reach=6):
-    """The sideways shift (and up to 3 px up or down) bringing frame a nearest frame b: (dx, pixels still off)."""
+    """The sideways shift (and up to 3 px up or down) bringing frame a nearest frame b: (dx, pixels still off).
+    The shift lets air in at the edge it leaves (_sh): nothing wraps round, so a shape touching one edge never
+    comes back in at the other and matches what is not there (a band across the frame, its texture scrolling)."""
     best, best_dx = None, 0
     for dx in range(-reach, reach + 1):
         for dy in range(-3, 4):
-            m = int((np.roll(np.roll(a, dy, 0), dx, 1) != b).sum())
+            m = int((_sh(a, dy, dx) != b).sum())
             if best is None or m < best or (m == best and abs(dx) < abs(best_dx)):
                 best, best_dx = m, dx
     return best_dx, best
@@ -457,7 +476,8 @@ def check(loops, spec, warns=None):
                 warns.append(f"warn: ground: {a} the lowest drawn row moves (rows {sorted(feet)}): a lift applied "
                              f"to the whole figure takes the feet off the ground twice a stride; raise the body, not "
                              f"the feet. A run, a gallop or a hopping gait leaves the ground on purpose")
-        steps = [_change(figs[k], figs[(k + 1) % len(figs)]) for k in range(len(figs))]
+        chg = _change_action if a in spec.actions else _change
+        steps = [chg(figs[k], figs[(k + 1) % len(figs)]) for k in range(len(figs))]
         moving = [s for s in steps if s]
         mean = sum(moving) / len(moving) if moving else 0
         faults += _jump(a, steps, figs, kind)
@@ -620,6 +640,30 @@ def _body_moves(figs):
     return True
 
 
+def _big_steps(figs, area):
+    """Does every change from one distinct pose to the next change CADENCE_STEP of the figure or more (a walk whose
+    poses are each a new drawing of the stride, not one part stepping over a still body)?"""
+    runs = _same_runs(figs)
+    P = [figs[k] for k, _ in runs]
+    return len(P) >= 2 and all(_nd(P[i - 1], P[i]) >= CADENCE_STEP * area for i in range(len(P)))
+
+
+def _breathes(figs, area):
+    """Is the loop a breath: its body moves (_body_moves' test on some pose change), and every pose change that does
+    not move the body is small (under CADENCE_STEP of the figure: a free tip's step, a tail's or a blink's)?"""
+    runs = _same_runs(figs)
+    P = [figs[k] for k, _ in runs]
+    body = False
+    for i in range(len(P)):
+        a, b = P[i - 1] > 0, P[i] > 0
+        cols = a.any(0) & b.any(0)
+        if cols.any() and (np.argmax(a, 0)[cols] != np.argmax(b, 0)[cols]).sum() >= BODY_TOPS * cols.sum():
+            body = True
+        elif _nd(P[i - 1], P[i]) >= CADENCE_STEP * area:
+            return False
+    return body
+
+
 def cadence(loops, spec):
     """How the motion is spread over the frames: choppy on the creature alone (effects and shadow removed, A0);
     uneven and lurch exactly as before (effects removed, a flier's shadow kept).
@@ -634,16 +678,26 @@ def cadence(loops, spec):
     (the second sees one lost update the mean rate hides: twelve poses on threes with one skipped, a 6-frame hold).
     A declared action (--action) may hold one key (a wind-up or a contact) up to ACTION_KEY frames at 30 fps: that
     single longest hold is left out, and the rest of the frames must still update at CHOPPY_RATE with no dropped
-    update. Every other hold keeps the rules: the proven limits govern idles, moves and an action's other frames.
+    update. A second held key is left out too when it is also within ACTION_KEY and at least twice the median of
+    the rest (Slynyrd 56, text: the hammer holds its wind-up 250 ms and its follow-through 300 ms; the sword and
+    the spear hold both as well; the selftest's blog_attacks). Every other hold keeps the rules: the proven limits
+    govern idles, moves and an action's other frames.
     An idle in which every change of pose moves the body (_body_moves: the top of BODY_TOPS of the columns shifts, as
     a body rising or swaying does) may update more slowly, CHOPPY_BODY_IDLE a second (a pose held up to 0.4 s), and
     may hold one pose twice the others (not a dropped update: eased on purpose). Slynyrd's idles hold 100-400 ms a
-    pose (Pixelblog 52: 100 and 50; 55: 200, 200, 400, which he found less robotic than even holds), every pose moving
-    the whole figure; the faulty idles of the private set stepped one part over a still body. His walks hold 100-140
-    ms (25, 50, 60), under 10 updates a second; walks keep the CHOPPY_RATE floor here, untested below it. Measured:
-    changes that move the body move 0.90-1.00 of the columns' tops (the walker breathing whole, the showcase's wolf
-    and lizard), the selftest's faulty idles (one part stepping every 6 frames, an update dropped) at most 0.59;
-    BODY_TOPS 0.8 lies between. Not rerun on the private 39-creature set.
+    pose (Slynyrd's text: 52's 100 and 50 ms; measured from the GIF: 55's 200, 200, 400 ms, which his text calls
+    less robotic than even holds), the torso moving on every pose (52, text); the faulty idles of the private set
+    stepped one part over a still body. A move whose every pose change is big (_big_steps: CADENCE_STEP of the figure or
+    more, each pose a new drawing of the stride) may update CHOPPY_WALK (5.2) times a second: Slynyrd's walks and
+    runs hold a pose 80-200 ms (text: 8's run 80 and 160 ms, 58's 100, 60's 120; measured from the GIFs: 25's and
+    50's walks 8 x 140 ms, 7.1 a second, 50's six poses at 200, 180, 180 ms, 5.4), while the private set rejected
+    four walk drawings held 6 frames (exactly 5 a second, the selftest's few_drawings). The margin between the two
+    is narrow (5.0 to 5.4); the likely difference is the sprite's size and texture (45's 200 ms walk is a 16 px
+    sprite, text). A move stepping one part over a still body keeps the CHOPPY_RATE floor. What the idle and walk floors
+    no longer catch: an idle moving its whole body 2.5-10 times a second, a walk of big pose changes 5.2-10 times a
+    second; an idle moving its whole body 2 times a second is still choppy (relaxed_bounds). Spec.min_rate (--min-rate)
+    sets the floor of the idle and the move outright, for a style held longer (his 8-16 px sprites, 200-800 ms a
+    pose). Not rerun on the private 39-creature set.
     Leaving the rest out, rather than the whole loop, was measured on this repo only: the selftest holds (a dead stop
     is still snap's; the declared bite and leap stay clean), the 13 clean loops give no fault, and an idle stepped
     every 6 frames after a 12-frame rest, or four walk drawings with the last held 14 frames more, are caught (they
@@ -654,17 +708,21 @@ def cadence(loops, spec):
     2 frames or more and by twice (one long rest, at least twice the next longest, is an idle's pause and is left
     out). lurch: the median ratio of one move to the next over LURCH (a whole-body bob after a small leg step: a hitch
     on each beat). uneven and lurch only where the moves are big enough to see (over CADENCE_STEP of the figure), and
-    on a cycle of moves (four or more; six for lurch): one gesture in an idle is drawn on purpose. Neither judges the
-    idle: a breath of whole-pixel steps is eased on purpose, slow over the top and quick on the drop (Pixelblog 52),
+    on a cycle of moves (four or more; six for lurch): one gesture in an idle is drawn on purpose. Neither judges an
+    idle that breathes (_breathes: its body moves whole, and its other pose changes are a free tip's small steps):
+    a breath of whole-pixel steps is eased on purpose, slow over the top and quick on the drop (Slynyrd 52, text),
     so its holds differ, and its body's one-pixel steps fall between small ones of the free tips (a tail's) that
-    follow it. Left out after one person judged the showcase's wolf idle so drawn smooth, on this repo only; not
-    rerun on the private 39-creature set. Walks and actions keep both rules."""
+    follow it. An idle whose body stands while its parts
+    step at uneven holds is still judged (the selftest's idle stepping its head and tail at 1 and 3 frames in turn:
+    uneven). What this no longer catches: a whole-body breath whose holds stutter (1, 3, 1, 3) rather than ease.
+    Left out after one person judged the showcase's wolf idle so drawn smooth, on this repo only; not rerun on the
+    private 39-creature set. Walks and actions keep both rules."""
     out = []
     for a, frames in loops.items():
         n = len(frames)
         if n < 4:
             continue
-        key = round(ACTION_KEY * spec.fps / 30) if a in spec.actions else 0   # an action's one held key
+        key = round(ACTION_KEY * spec.fps / 30) if a in spec.actions else 0   # an action's held keys
         figs, _ = _arrays(frames, spec)
         area = _area(figs)
         steps = [_nd(figs[k], figs[(k + 1) % n]) for k in range(n)]
@@ -676,28 +734,38 @@ def cadence(loops, spec):
             for h in rests:
                 js.remove(h)
                 jn -= h
-            if not rests and max(hs) <= key:              # an action's one held key (up to ACTION_KEY frames)
-                js.remove(max(hs))
-                jn = n - max(hs)
+            if not rests and max(hs) <= key:              # an action's held keys (up to ACTION_KEY frames
+                js.remove(max(hs))                        # each): the longest, and a second when it is held too
+                jn = n - max(hs)                          # (the wind-up and the follow-through, Slynyrd 56)
+                if len(js) > 3 and max(js) <= key and max(js) >= 2 * statistics.median(sorted(js)[:-1]):
+                    jn -= max(js)
+                    js.remove(max(js))
             body = a == spec.idle and _body_moves(figs)   # an idle moving its body on every pose: longer
-            floor = CHOPPY_BODY_IDLE if body else CHOPPY_RATE   # holds read smooth
+            if spec.min_rate is not None and a in (spec.idle, spec.move):   # holds read smooth
+                floor = spec.min_rate                     # the user's own style
+            elif body:
+                floor = CHOPPY_BODY_IDLE
+            elif a == spec.move and _big_steps(figs, area):   # a walk whose every pose is a new drawing of the
+                floor = CHOPPY_WALK                       # whole stride
+            else:
+                floor = CHOPPY_RATE
             if len(js) >= 3:
                 rate, med = len(js) * spec.fps / jn, statistics.median(js)
                 if rate < floor:
-                    most = int(spec.fps // CHOPPY_RATE)           # the longest hold that keeps CHOPPY_RATE
+                    most = int(spec.fps // floor)                 # the longest hold that keeps the floor
                     how = (f"at {spec.fps:g} fps hold each pose {most} frame{'s' if most > 1 else ''} at most"
                            if most >= 1 else f"at {spec.fps:g} fps even a new pose every frame is too few: play it "
                            f"faster")
                     out.append(f"choppy: {a} updates {rate:.1f} times a second (holds {hs}): a few drawings each "
                                f"held long read as a dropped frame rate: a new pose at least every "
-                               f"{1 / CHOPPY_RATE:g} s ({how}); spread the parts on one clock with staggered "
+                               f"{1 / floor:.2g} s ({how}); spread the parts on one clock with staggered "
                                f"phases, or draw in-betweens")
                 elif med >= 3 and max(js) >= 2 * med and not body:
                     out.append(f"choppy: {a} drops an update: a hold of {max(js)} frames among holds of {med:g} "
                                f"(holds {hs}): two ticks running gave one pose; stagger the parts' phases so "
                                f"something changes on every tick")
-        if a == spec.idle:                                # an idle's breath is eased on purpose: not judged here
-            continue
+        if a == spec.idle and _breathes(figs, area):      # an idle breathing with its whole body is eased on
+            continue                                      # purpose: not judged here
         figs, _ = _arrays(frames, Spec(ink=spec.ink, effects=spec.effects, lum=spec.lum))   # as before: effects
         area = _area(figs)                                # alone removed (the shadow kept) for uneven and lurch
         steps = [_nd(figs[k], figs[(k + 1) % n]) for k in range(n)]
@@ -711,8 +779,10 @@ def cadence(loops, spec):
         holds = _holds([s > MOVE_MIN * area for s in steps])
         longest = sorted(holds)
         rest = (len(longest) > 2 and longest[-1] >= 2 * longest[-2]   # an idle's one long pause: left out; an
-                or 0 < longest[-1] <= key)                            # action's one held key too
-        seq = [h for h in holds if not (rest and h == longest[-1])]
+                or 0 < longest[-1] <= key)                            # action's held key too
+        second = (key and len(longest) > 3 and 0 < longest[-2] <= key   # an action's second held key
+                  and longest[-2] >= 2 * statistics.median(longest[:-2]))
+        seq = [h for h in holds if not (rest and h == longest[-1]) and not (second and h == longest[-2])]
         abrupt = sum(1 for p, q in zip(seq, seq[1:] + seq[:1]) if max(p, q) >= 2 * min(p, q) and abs(p - q) >= 2)
         if len(seq) >= 4 and abrupt >= len(seq) / 2:      # a cycle (a gesture of two or three moves is not); a
             # sway's ease doubling its hold at each turn is half less: ease at a stroke's turn lengthens holds gradually
@@ -894,7 +964,9 @@ def hop(loops, spec):
     stretch to keep it joined (a breath) shifts rigidly too, but it stays on its feet. Fault when lift < HOP_LIFT or
     share >= HOP_SHARE. The air test was added on this repo's showcase only (the wolf's breath, its legs stretching
     under a trunk risen whole, judged right by one person; the selftest's body lifted off its feet's row still
-    fails); not rerun on the private 39-creature set.
+    fails); not rerun on the private 39-creature set. What this no longer catches: a body rising whole a pixel over
+    its feet while its legs stretch to keep it joined, whatever the reason (the selftest's breath passes); a body
+    lifted off its feet's row, air opening above the contact, is still a hop (lift_off).
     Scope: the idle of any non-flier, and every loop of a legless body (gait False). A legged walk rises on purpose
     (rigid shares 0.14-0.35), a legged action may jump, and a flier is off the ground anyway."""
     if spec.flier:
@@ -1199,8 +1271,11 @@ def frozen(loops, spec):
     aligned away: a head carried whole on the body's rise and fall moves, and at 1-px steps carrying it whole is the
     right way (moved against the body by a pixel, a head that is cut from its neck opens a seam there). Changed from
     the bob-aligned reading on this repo's showcase only (the wolf's idle and walk, head and trunk one piece, were
-    judged smooth by one person); not rerun on the private 39-creature set. The eye is the piece _eye_piece reads, so
-    its colour used elsewhere on the body does not move the box."""
+    judged smooth by one person); not rerun on the private 39-creature set. What this no longer catches: a head that
+    never changes within itself but rides the body's bob or breath (the selftest's walker breathing whole, head
+    riding). It still catches a head pasted in place while the body moves under it (the selftest's mask, and the
+    same in relaxed_bounds). The eye is the piece _eye_piece reads, so its colour used elsewhere on the body does
+    not move the box."""
     got = _head(loops, spec)
     if got is None:
         return []
@@ -1229,7 +1304,8 @@ def parse_action(text, facing="right"):
     """'NAME[:KIND[:DIR]]' -> (NAME, (KIND, DIR)). KIND: strike (its anticipation, strike and recovery are judged),
     jump (it leaves the ground on purpose: ground is not asked), or any other word (a gesture: a breath, a spit, a
     bell). DIR: right, left, up or down; a strike's defaults to the facing, any other kind's to up. Every declared
-    action may hold one key up to ACTION_KEY frames outside choppy and uneven. ValueError on a bad form."""
+    action may hold up to two keys, each up to ACTION_KEY frames, outside choppy and uneven. ValueError on a bad
+    form."""
     name, _, rest = text.partition(":")
     kind, _, d = rest.partition(":")
     kind = kind or "other"
@@ -1742,7 +1818,8 @@ def parts(loops, spec, warns):
             by over a quarter of the loop. At 1-px steps a part joined to the body by a seam (a neck, a tail's root)
             rides it: a pixel's lag opens the seam, so the follow-through goes to a free tip, too small to move a
             part's centre. The step limit was added on this repo's showcase only (the wolf, judged smooth by one
-            person); not rerun on the private 39-creature set."""
+            person); not rerun on the private 39-creature set. What it no longer catches: a walk or idle bobbing 1
+            px whose parts all move on the body's frame (relaxed_bounds: no warning); at 2 px it still warns."""
     for a, labels in spec.parts.items():
         if a not in loops or len(labels) != len(loops[a]):
             continue
@@ -2266,7 +2343,7 @@ def hitch(loops, spec, warns):
     part of VOLUME_MIN+ px (its box's corner), per frame. Warn when it holds HITCH_HOLD+ frames (at 30 fps; 0.27 s),
     then steps a pixel or more as one block while little else in the figure changes on that frame (_hitches): the
     step reads as a jerk, not motion. A step back within 3 frames is tick's; a declared action's held key (its
-    single longest pose hold) may end in a step. A warning only."""
+    longest pose hold) may end in a step. A warning only."""
     need = max(2, round(HITCH_HOLD * spec.fps / 30))
     for a, frames in loops.items():
         n = len(frames)
@@ -2316,8 +2393,8 @@ def hitch(loops, spec, warns):
             warns.append(f"warn: hitch: {a} {what} steps {px} px alone after holding still {hold} frames "
                          f"({hold / spec.fps:.2f} s; the rest of the figure changes {rest} px against its {near}) "
                          f"{len(hits)} time(s) a loop ({at}; frame k is the change to the next): it reads as a jerk; "
-                         f"carry it on the neck as a chain on the body's beat, turn it a little over several "
-                         f"frames, or move other parts on the same pose")
+                         f"move it with the body on a pose the body moves on (head, neck and trunk together), "
+                         f"or move other parts on the same pose")
     return []
 
 
@@ -2627,7 +2704,7 @@ def _wide_strip(src):
 
 VALUED = {"--loop", "--frame", "--frames", "--eye", "--facing", "--ink", "--shadow", "--effects", "--allow",
           "--glows-eye", "--idle", "--move", "--out", "--fps", "--name", "--action", "--speed", "--parts", "--squash",
-          "--palette", "--glow", "--ref", "--mark", "--sheet", "--key"}
+          "--palette", "--glow", "--ref", "--mark", "--sheet", "--key", "--min-rate"}
 FLAGS = {"--flier", "--legless", "--selftest", "--help", "-h"}
 
 
@@ -2772,6 +2849,13 @@ def main(argv):
             raise ValueError(f"--speed must be a number, not {speed!r}") from None
         if speed is not None and not math.isfinite(speed):
             raise ValueError("--speed must be finite")
+        min_rate = opt("--min-rate")
+        try:
+            min_rate = float(min_rate) if min_rate is not None else None
+        except ValueError:
+            raise ValueError(f"--min-rate must be a number, not {min_rate!r}") from None
+        if min_rate is not None and (not math.isfinite(min_rate) or min_rate <= 0):
+            raise ValueError("--min-rate must be finite and over 0")
 
         def image(name):
             p = opt(name)
@@ -2789,7 +2873,7 @@ def main(argv):
                     parts=part_strips, squash=cols(opt("--squash")),
                     palette={v for r in pal for v in r if v is not None} if pal else None,
                     glow=cols(opt("--glow")), ref=image("--ref"), marks=sorted(cols(opt("--mark"))),
-                    sheets=opt("--sheet", many=True))
+                    sheets=opt("--sheet", many=True), min_rate=min_rate)
     except ValueError as e:
         print(f"error: {e}  (--help lists the options)", file=sys.stderr)
         return 2

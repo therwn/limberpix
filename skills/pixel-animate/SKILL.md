@@ -219,11 +219,11 @@ for the loops); where only `skills/` was copied, it is at https://github.com/the
    - **Fins and sails standing on a back:** shear them from their base (the base row stays on the back). Turned,
      they break off the back at their root.
    - **Heads:** turn them on the neck. Nod on each step of the walk, look about in the idle, rise for the action.
-     Eyes and features move with the head. Carry a rise or a bow down the neck as a chain on the body's beat (the
-     neck first, the head a pose later, the ears a pose after it), turning the head a little so the change spreads
-     over its pixels and frames. Never step the head as a rigid block by a lone pixel after a long hold while the
-     rest stands still: it reads as a jerk (`hitch`).
-   - **Ears, crests, whiskers, antennae:** they follow the head a beat late and flick now and then in the idle.
+     Eyes and features move with the head. At 1-px steps carry a rise or a bow with the body: the trunk, the neck
+     and the head on the same pose (MOTION.md 3.0; a chain taking it a pose a part reads as a shiver). Never step the
+     head alone by a lone pixel after a long hold while the rest stands still: it reads as a jerk (`hitch`).
+   - **Ears, crests, whiskers, antennae:** they ride the head; a flick now and then in the idle rides a pose on which
+     the body moves too.
 4. **Hide the seams:**
    - A child gets a strip of overlap past its cut, drawn under its parent, so no gap opens when the two turn apart.
    - Where a part reveals body the drawing never showed, fill it with the body's shade up to a line, sparingly. A
@@ -266,37 +266,43 @@ for the loops); where only `skills/` was copied, it is at https://github.com/the
 The numbers are for loops played at 30 fps; scale the frame counts with the game's rate.
 
 **Default rules.** These come first, and nothing below loosens them:
-- **Move the body's mass on every pose; never one small part alone.** At sprite scale each whole-pixel step is seen.
-  A pose that moves only an ear or a muzzle on a beat of its own while the body holds reads as a click, and parts
-  that take a rise a pose apart (the trunk, then the neck, then the muzzle, then the ears) read as a shiver, not as
-  overlap. One exception: a free tip (a tail's end, a plume) may finish the body's move a pose late, as follow-through
-  (Slynyrd 8: the plume falls after the body). Slynyrd's idles
-  and walks move the whole figure every pose (MOTION.md 3.0).
-- **Further from the body, more pixels a pose:** the torso and head 1, the limbs 2, the tips 2-4. That spread is
-  what reads as weight and overlap.
-- **Move parts joined by a seam as one piece.** At 1-px steps a cut layer moved a pixel off its neighbour shows the
-  cut: a head off its neck, a neck off the chest it lies over, a back lifted over a still belly while the neck rides
-  the head. Lift the whole torso with its neck and head (the legs stretch under it), and give the lag to a free tip,
-  at most a pixel off its parent a pose.
-- **Ease with timing: slow over the top, quick on the drop.** An idle breath of 8 poses held 3 frames over the rise
-  and the top and 2 on the drop (Slynyrd 52), the body a pixel up, at rest, a pixel down.
-- **A planted foot moves with the ground every frame.** Over a road scrolling a pixel a frame, walk on ones; a foot
-  held two frames falls behind the road and catches up, and the feet judder.
-- **Move whole game pixels only.** A fractional move resamples the sprite every frame, and its texture crawls.
-- **Turn in steps of about 1.5° and hold each pose 2 frames.** Smaller turns every frame resample the art and crawl
-  the same way.
-- **No column waves.** Columns moved up and down read as hatching, scanlines sliding through the art.
-- **A tail moves as a chain; the head moves with the body.** A stiff tail reads as a board, a head pasted in place
-  while the body moves as a mask.
-- **A walker's body rises on each step.** Legs stepping under a body that never moves read as a board on wheels.
-- **Keep the usual hold under 4 frames, and never let an idle stop dead.** A tempo of 4+ frame holds (under 10
-  updates a second at 30 fps) reads as a dropped frame rate when only parts move, and a dead stop as a frozen
-  statue. An idle whose every pose moves the whole body may hold a pose up to 0.4 s (12 frames), and one pose twice
-  the others (Slynyrd 55: 200, 200, 400 ms): each step is the body's, so the eye reads a slow breath. One longer hold
-  belongs only where the motion stops: a sway's turn (a 1-2 frame base doubled, 4 at most), an idle's rest (3.3),
-  an action's held key (3.13). In a running motion it is a lost update, which the check misses among twos: the pose
-  list of section 5 catches it.
-- **Keep the creature's look exactly: do not redraw it.** A redrawn creature reads as a different one.
+- **Move the body's mass on every pose; never one small part alone.** At sprite scale each whole-pixel step is seen. A
+  pose that moves only an ear or a muzzle on a beat of its own while the body holds reads as a click, and parts that
+  take a rise a pose apart (the trunk, then the neck, then the muzzle, then the ears) read as a shiver, not as overlap.
+  A free tip (a tail's end, a plume) may finish the body's move a pose late, as follow-through. Slynyrd 52's idle moves
+  the torso on every frame (its head holds on two of them) and his walk cycles move the whole figure; the rule's general
+  form is this repo's, from its showcase (one person's judgment), and the blog does otherwise where it suits (MOTION.md
+  3.0).
+- **Further from the body, more pixels a pose** (Slynyrd 52): the torso and head 1, the limbs 2, the tips 2-4. That
+  spread is what reads as weight and overlap.
+- **Move parts joined by a seam as one piece** (this repo's showcase; the blog does not teach it). At 1-px steps a cut
+  layer moved a pixel off its neighbour shows the cut: a head off its neck, a neck off the chest it lies over, a back
+  lifted over a still belly while the neck rides the head. Lift the whole torso with its neck and head (the legs stretch
+  under it), and give the lag to a free tip, at most a pixel off its parent a pose.
+- **Ease with timing: slow over the top, quick on the drop.** An idle breath of 8 poses held 3 frames over the rise and
+  the top and 2 on the drop (Slynyrd 52), the body a pixel up, at rest, a pixel down.
+- **A planted foot moves with the ground every frame** (this repo's showcase). Over a road scrolling a pixel a frame,
+  walk on ones; a foot held two frames falls behind the road and catches up, and the feet judder.
+- **Move whole game pixels only** (the sub-pixel sources of MOTION.md 3.1). A fractional move resamples the sprite every
+  frame, and its texture crawls.
+- **Turn in steps of about 1.5° and hold each pose 2 frames** (this repo's practice, 3.1). Smaller turns every
+  frame resample the art and crawl the same way.
+- **No column waves** (this repo's practice, 3.7). Columns moved up and down read as hatching, scanlines sliding
+  through the art.
+- **A tail moves as a chain; the head moves with the body** (the chain sources of 3.10; Slynyrd 52). A stiff tail reads
+  as a board, a head pasted in place while the body moves as a mask.
+- **A walker's body rises on each step** (Slynyrd 50; saint11's walk, 3.8). Legs stepping under a body that never moves
+  read as a board on wheels.
+- **Keep the usual hold under 4 frames, and never let an idle stop dead.** A tempo of 4+ frame holds (under 10 updates a
+  second at 30 fps) reads as a dropped frame rate when only parts move (this repo's calibration set), and a dead stop as
+  a frozen statue (this repo's choice: Slynyrd 39 uses a still idle). Where every pose is the body's, the blog holds
+  longer, and so may you: a walk whose every pose is a new stride drawing up to 5 frames (the blog's walks 100-280 ms a
+  pose), an idle whose every pose moves the whole body up to 0.4 s (12 frames), one pose twice the others (Slynyrd 55,
+  measured: 200, 200, 400 ms). One longer hold belongs only where the motion stops: a sway's turn (a 1-2 frame base
+  doubled, 4 at most), an idle's rest (3.3), an action's held keys (two at most, 3.13). In a running motion it is a lost
+  update, which the check misses among twos: the pose list of section 5 catches it.
+- **Keep the creature's look exactly: do not redraw it** (the art owner's notes, section 1). A redrawn creature reads as
+  a different one.
 
 The thresholds in the motion guide say how to keep motion dense and smooth *inside* those limits. No source gives a pixel
 threshold for judder, so they were fitted to a private calibration set: 39 animated creatures, with 15 accept or
