@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pixel Anim Check"
+  short_description: "Check a sprite animation for broken motion"
+  default_prompt: "Use $pixel-anim-check to check this sprite animation before it is shown."

@@ -8,6 +8,14 @@ All notable changes to this project are listed here. The format follows
 
 ### Added
 
+- **Codex.** Both skills now carry `agents/openai.yaml` (name, one-line description, starting prompt) and say how
+  Codex reads the scripts' folder; they pass Codex's skill validator as they are. The README and docs/usage.md give
+  the install line for Codex's skill installer and the folder for a plain copy.
+- **A gallery.** `examples/showcase/make_gallery.py` builds `docs/img/gallery/`: each showcase loop and each
+  selftest creature as its own GIF, pixel-animate's four steps on the wolf (the drawing, the cut, a pose as parts,
+  the frame), and four faults made by breaking the wolf's frames, each with the line the check printed.
+  `examples/README.md` shows every example with its pictures and commands, and the README opens with them.
+
 - **pixel-anim-check** `--eye-at X,Y`: the eye's place on each loop's first frame, for a sprite whose eye colour is
   used elsewhere too. The eye was taken as the biggest piece of its colour; on a hand-drawn wizard sheet two eyes a
   pixel apart are two 1-px pieces and a 2-px bead on the staff won, so the eye track, `frozen` and `reshape` followed
@@ -66,6 +74,9 @@ All notable changes to this project are listed here. The format follows
   A value that is no number over 0 is a usage error.
 
 ### Changed
+
+- docs/usage.md: the showcase table had frame counts and a frame height the strips no longer have (beast 60/32/40 at
+  93x52, bird 72/32/54, lizard 60/32/34); the "not yet published" note is gone.
 
 - **Showcase** re-timed for smooth motion. The idles were a ripple of 1-px steps, one part a pose after another (the
   trunk, then the neck, then the muzzle, then the ears), so they read as clicks. Each idle is now one breath of 8

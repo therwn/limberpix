@@ -9,8 +9,9 @@ The goal is an animation that keeps the approved drawing's look and moves like a
 creature. A redrawn one that moves well but no longer looks like itself reads as a different creature, and a
 faithful one that moves like a cut-out reads as paper. Work from the approved drawing.
 
-**Paths.** The scripts sit next to this file. Inside Claude Code, `${CLAUDE_SKILL_DIR}` is that folder; outside Claude
-Code, read `${CLAUDE_SKILL_DIR}` as the folder holding this SKILL.md. Python 3.8+ with numpy and Pillow. The commands
+**Paths.** The scripts sit next to this file. Claude Code fills `${CLAUDE_SKILL_DIR}` with that folder. Codex and
+any other agent that leaves it as written read it as the folder this SKILL.md was loaded from (in Codex,
+`~/.codex/skills/pixel-animate`). Python 3.8+ with numpy and Pillow. The commands
 use `python -I` (isolated mode): it leaves the script's own folder, `PYTHON*` variables (such as a `PYTHONPATH` into
 the project) and the user's site-packages off the import path, so a stray file named like a standard module
 (`json.py`) cannot shadow it. It also hides packages installed with `pip install --user`: on `No module named 'numpy'`

@@ -6,6 +6,7 @@ Every command here runs from the repo root, and each is one line, so it pastes i
 - [Requirements](#requirements)
 - [Install](#install)
 - [In Claude Code](#in-claude-code)
+- [In Codex](#in-codex)
 - [pixel-anim-check](#pixel-anim-check)
   - [Command and exit codes](#command-and-exit-codes)
   - [Options](#options)
@@ -27,15 +28,11 @@ Every command here runs from the repo root, and each is one line, so it pastes i
 
 - Python 3.8 or newer (CI runs 3.8 on Ubuntu 22.04, and 3.9 and 3.12 on Ubuntu and Windows).
 - numpy >= 1.21 (1.x and 2.x) and Pillow >= 9: `python -m pip install -r requirements.txt`.
-- Claude Code, if you want Claude to use the skills. The scripts also run on their own.
+- Claude Code or Codex, if you want an agent to use the skills. The scripts also run on their own.
 
 Both skills work with any engine or art tool: they read and write plain PNGs and GIFs.
 
 ## Install
-
-> **Not yet published.** Until the `therwn/limberpix` repository and its v0.1.0 release are public, the GitHub
-> commands below (and the README's badges) do not resolve. Meanwhile, install from a local copy of this folder:
-> `/plugin marketplace add <path to this folder>`, then `/plugin install limberpix@limberpix`.
 
 **1. As a Claude Code plugin (recommended).** Inside Claude Code:
 
@@ -46,7 +43,16 @@ Both skills work with any engine or art tool: they read and write plain PNGs and
 
 Plugin skills are namespaced, so they show up as `limberpix:pixel-animate` and `limberpix:pixel-anim-check`.
 
-**2. As plain skills.** Copy the skill folders into your personal skills folder, or into one project's:
+**2. As Codex skills.** In Codex, ask its skill installer for the two folders, then start a new turn:
+
+```
+$skill-installer install https://github.com/therwn/limberpix/tree/main/skills/pixel-animate and https://github.com/therwn/limberpix/tree/main/skills/pixel-anim-check
+```
+
+They land in `~/.codex/skills/` (or `$CODEX_HOME/skills`). Or copy them there yourself:
+`cp -r limberpix/skills/* ~/.codex/skills/`.
+
+**3. As plain skills.** Copy the skill folders into your personal skills folder, or into one project's:
 
 ```bash
 git clone https://github.com/therwn/limberpix
@@ -56,7 +62,9 @@ cp -r limberpix/skills/* ~/.claude/skills/          # every project
 
 On Windows PowerShell: `Copy-Item -Recurse limberpix\skills\* $HOME\.claude\skills\`.
 
-**3. Only the command-line tools.** Clone the repo and run the scripts with Python:
+A copied skill does not update itself: copy again after every pull.
+
+**4. Only the command-line tools.** Clone the repo and run the scripts with Python:
 
 ```bash
 git clone https://github.com/therwn/limberpix
@@ -83,6 +91,15 @@ pictures they write.
   skill then has Claude inspect them by eye for what numbers cannot see: likeness, seams, life in every part, and
   rhythm. Claude uses it whenever a sprite animation is made or changed, and before one is shown to anyone. The
   steps are in [`skills/pixel-anim-check/SKILL.md`](../skills/pixel-anim-check/SKILL.md).
+
+## In Codex
+
+The same two skills, read from the same `SKILL.md` files. Ask for the work in words, or name a skill with `$`:
+`$pixel-animate animate this fox's idle and walk from fox.png`, `$pixel-anim-check check walk.png`. Each skill
+folder carries `agents/openai.yaml` (the name, the one-line description and the starting prompt Codex shows). The
+commands in the skills write the scripts' folder as `${CLAUDE_SKILL_DIR}`, which only Claude Code fills in: in Codex
+it is the folder the skill was installed to, `~/.codex/skills/<skill>`. Both skills pass Codex's own skill validator
+(`quick_validate.py`); their descriptions stay under its 1024 characters.
 
 ## pixel-anim-check
 
@@ -204,9 +221,9 @@ and `lizard_legs.py` for the lizard's legs), `animate.py`, which rebuilds the st
 
 | Creature | Frame | Idle | Move | Attack | Road speed |
 |---|---|---|---|---|---|
-| beast | 93x53 | 72 frames | 32 frames | 39 frames, a lunge and a bite | 1.0 px a frame |
-| bird | 86x69 | 72 frames | 32 frames | 56 frames, a dive strike | 1.0 px a frame |
-| lizard | 113x40 | 64 frames | 32 frames | 34 frames, a tongue strike | 0.5 px a frame |
+| beast | 93x52 | 60 frames | 32 frames | 40 frames, a lunge and a bite | 1.0 px a frame |
+| bird | 86x69 | 72 frames | 32 frames | 54 frames, a dive strike | 1.0 px a frame |
+| lizard | 113x40 | 60 frames | 32 frames | 34 frames, a tongue strike | 0.5 px a frame |
 
 The move is drawn in place, to be shown over a road scrolling at the road speed (`ROAD_SPEED` in each `animate.py`):
 a planted foot goes back at that speed (the check prints the two side by side). `animate.py` also writes the check's other inputs into the
@@ -255,7 +272,9 @@ head's box, so it is `inside head`: the overlay shows it hatched inside the head
 handed back: the rump's edge down the gap beside the tail, which the tail had reached round the gap, and the ruff's
 lower edge, which goes with the neck.
 
-`examples/showcase/make_showcase.py` draws the README's pictures from these files (see [Development](#development)).
+`examples/showcase/make_showcase.py` draws the README's pictures from these files (see [Development](#development)),
+and `examples/showcase/make_gallery.py` the gallery's: each loop as its own GIF, pixel-animate's four steps, and four
+faults the check names. [examples/README.md](../examples/README.md) shows every example with its pictures.
 
 [`examples/fighter/`](../examples/fighter) holds a fighter in a stance, drawn at game size (48x64) from a skeleton by
 `fighter.py`, and its idle built the Pixelblog 52 way: one bounce of 8 poses held 3 frames over the rise and the top

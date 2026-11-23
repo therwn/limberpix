@@ -18,8 +18,9 @@ hand-drawn idle it copied, which adds a `choppy` at the rate it was watched at; 
 to the hand-drawn one, added a `jump` and was judged worse again; and in `--style redrawn` all three get `stepped`
 alike, the accepted one too. Say what the run found, and leave the verdict on the motion to whoever plays it.
 
-**Paths.** The scripts sit next to this file. Inside Claude Code, `${CLAUDE_SKILL_DIR}` is that folder; outside Claude
-Code, read `${CLAUDE_SKILL_DIR}` as the folder holding this SKILL.md. Python 3.8+ with numpy and Pillow. The commands
+**Paths.** The scripts sit next to this file. Claude Code fills `${CLAUDE_SKILL_DIR}` with that folder. Codex and
+any other agent that leaves it as written read it as the folder this SKILL.md was loaded from (in Codex,
+`~/.codex/skills/pixel-anim-check`). Python 3.8+ with numpy and Pillow. The commands
 use `python -I` (isolated mode): it leaves the script's own folder, `PYTHON*` variables (such as a `PYTHONPATH` into
 the project) and the user's site-packages off the import path, so a stray file named like a standard module
 (`json.py`) cannot shadow it. It also hides packages installed with `pip install --user`: on `No module named 'numpy'`
