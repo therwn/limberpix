@@ -38,6 +38,7 @@ If you changed what the selftests draw, regenerate the examples and the README's
 
 ```bash
 python examples/make_examples.py --docs
+python examples/showcase/make_gallery.py      # the gallery in docs/img/gallery (not checked by CI)
 ```
 
 ## Writing

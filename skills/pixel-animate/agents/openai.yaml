@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pixel Animate"
+  short_description: "Animate a pixel-art creature from one drawing"
+  default_prompt: "Use $pixel-animate to animate this creature's idle and walk from its approved drawing."

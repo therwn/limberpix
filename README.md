@@ -5,7 +5,7 @@
 <h1 align="center">Limberpix</h1>
 
 <p align="center">
-  <b>Two Claude Code skills for pixel-art sprite animation.</b><br>
+  <b>Two agent skills for pixel-art sprite animation, for Claude Code and Codex.</b><br>
   Animate a creature from one drawing, then check every loop for broken motion before anyone sees it.
 </p>
 
@@ -14,6 +14,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-3776ab.svg" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin%20%2B%20skills-d97757.svg" alt="Claude Code plugin and skills">
+  <img src="https://img.shields.io/badge/Codex-skills-10a37f.svg" alt="Codex skills">
 </p>
 
 <p align="center">
@@ -21,19 +22,64 @@
 </p>
 
 <p align="center">
-  <sub>Three original creatures, each drawn once as data and animated from that drawing alone: an idle, a move over a
-  road scrolling at the creature's own speed, and an attack. Sources in <a href="examples/showcase"><code>examples/showcase/</code></a>.</sub>
-</p>
-
-<p align="center">
+  <a href="#what-it-does-in-pictures">In pictures</a> ·
   <a href="#try-it">Try it</a> ·
-  <a href="#the-skills">The skills</a> ·
+  <a href="#examples">Examples</a> ·
   <a href="#what-it-suits-and-what-it-does-not">Limits</a> ·
   <a href="#install">Install</a> ·
   <a href="docs/usage.md">Docs</a>
 </p>
 
 ---
+
+## What it does, in pictures
+
+### 1. pixel-animate: one drawing becomes every frame
+
+The approved drawing is cut into parts once, and every frame is those same pixels, posed. Nothing is redrawn, so the
+creature keeps its look.
+
+<p align="center">
+  <img src="docs/img/gallery/pipeline.png" width="860" alt="pixel-animate in four steps on a wolf: the drawing, the cut into eleven parts by body_parts.py, one walk pose shown as flat-coloured parts, and the same pose as the finished frame">
+</p>
+
+### 2. Three loops for each creature
+
+Each creature below was drawn once as data and animated from that drawing alone: an idle, a move and an attack.
+Sources and check options are in [`examples/showcase/`](examples/showcase).
+
+| | idle | move | attack |
+|---|:---:|:---:|:---:|
+| **Wolf** | <img src="docs/img/gallery/beast_idle.gif" alt="The wolf's idle"> | <img src="docs/img/gallery/beast_move.gif" alt="The wolf's walk in place"> | <img src="docs/img/gallery/beast_attack.gif" alt="The wolf's attack: a crouch, a lunge and a bite"> |
+| **Bird** | <img src="docs/img/gallery/bird_idle.gif" alt="The bird's idle"> | <img src="docs/img/gallery/bird_move.gif" alt="The bird's flight"> | <img src="docs/img/gallery/bird_attack.gif" alt="The bird's attack: a dive"> |
+| **Lizard** | <img src="docs/img/gallery/lizard_idle.gif" alt="The lizard's idle"> | <img src="docs/img/gallery/lizard_move.gif" alt="The lizard's walk in place"> | <img src="docs/img/gallery/lizard_attack.gif" alt="The lizard's attack: a tongue strike"> |
+
+### 3. pixel-anim-check: it names what is broken
+
+Each case below was made by breaking the wolf's own frames, then run through the real check. The line under each pair
+is what it printed.
+
+<p align="center">
+  <img src="docs/img/gallery/faults.png" width="820" alt="Four faults pixel-anim-check names, each shown as the pose as drawn and the pose broken, with the line the check printed: a pose knocked sideways gives jump, a stray speck gives apart, a colour off the palette gives palette, feet off the ground give ground">
+</p>
+
+<details>
+<summary><b>Everything it looks for</b></summary>
+
+<br>
+
+| Group | Faults (the run fails) | Warnings (look at them) |
+|---|---|---|
+| **The drawing** | a frame of another size, stray specks, a lost eye, open outlines, colours off the palette, lost marks | orphan pixels, doubled outlines, blends, drift from the approved drawing |
+| **Standing and moving** | feet off the ground, a hop off the contact, a frozen head, a body that never rises in the walk, shallow wing beats | sliding feet, the walk's bob, a head stepping alone, part volume and lag, a torso split in bands |
+| **Timing** | choppy or uneven holds, a dead stop then a burst, 1-px ticks, a pop or a pose knocked sideways, a part that vanishes | a repeated pose at the loop's seam, outline boil |
+| **Texture and face** | shimmer, a redrawn face | |
+| **Actions** | | anticipation, strike, recovery, jumps and landings |
+| **Redrawn frames** (`--style redrawn`) | slow and stepped motion, a mark gone in some poses, a broken outline, small marks missing | |
+
+Every fault's meaning and its usual fix: [skills/pixel-anim-check/SKILL.md](skills/pixel-anim-check/SKILL.md).
+
+</details>
 
 ## At a glance
 
@@ -43,7 +89,7 @@
 | **You give it** | One approved drawing of a side-view creature | Sprite strips, frame folders or GIFs, and the eye colour |
 | **You get** | An idle, a move and an action posed from the drawing's own pixels | Named faults, a contact sheet and a GIF to look at |
 | **Scripts** | `body_parts.py`, `shrink.py`, `creature_map.py` | `pixel_anim_check.py` |
-| **Ask Claude** | "animate this fox's idle and walk from fox.png" | "check walk.png before I put it in the game" |
+| **Ask the agent** | "animate this fox's idle and walk from fox.png" | "check walk.png before I put it in the game" |
 
 ## Try it
 
@@ -63,46 +109,15 @@ python skills/pixel-animate/body_parts.py examples/figure.png examples/marks.jso
 
 Each check also writes a contact sheet and a GIF to `out/`.
 
-## The skills
+## Examples
 
-### pixel-animate
-
-A written method, not a generator: cut the approved drawing into parts, pose them at full size, shrink every frame on
-one fixed grid, with the motion rules that read in pixels (whole-pixel steps, holds, wings, legs, tails, heads).
-Claude uses it to make or remake a sprite animation, or when one looks stiff, broken or unlike its drawing.
-`body_parts.py` cuts the drawing into parts, and `shrink.py` brings a frame posed on a large painted reference down
-to game size (a drawing already at game size is posed as it is).
-
-<p align="center">
-  <img src="docs/img/parts.png" width="760" alt="body_parts.py on the wolf's drawing: rough bones placed by eye, and the eleven parts it cut along the drawing's own ink and colour edges, each tinted and named">
-</p>
-
-### pixel-anim-check
-
-Measures every loop and names its faults. It writes a contact sheet and a GIF for a look by eye. Claude uses it
-whenever an animation is made or changed, and before one is shown.
-
-<p align="center">
-  <img src="docs/img/check.png" width="620" alt="pixel-anim-check on the wolf's walk: with the eye painted over on frame 6 it prints an eye fault and exits 1; the walk as drawn prints 0 faults and exits 0">
-</p>
-
-<details>
-<summary><b>What it looks for</b></summary>
-
-<br>
-
-| Group | Faults (the run fails) | Warnings (look at them) |
+| | What it is | Where |
 |---|---|---|
-| **The drawing** | a frame of another size, stray specks, a lost eye, open outlines, colours off the palette, lost marks | orphan pixels, doubled outlines, blends, drift from the approved drawing |
-| **Standing and moving** | feet off the ground, a hop off the contact, a frozen head, a body that never rises in the walk, shallow wing beats | sliding feet, the walk's bob, a head stepping alone, part volume and lag, a torso split in bands |
-| **Timing** | choppy or uneven holds, a dead stop then a burst, 1-px ticks, a pop or a pose knocked sideways, a part that vanishes | a repeated pose at the loop's seam, outline boil |
-| **Texture and face** | shimmer, a redrawn face | |
-| **Actions** | | anticipation, strike, recovery, jumps and landings |
-| **Redrawn frames** (`--style redrawn`) | slow and stepped motion, a mark gone in some poses, a broken outline, small marks missing | |
+| <img src="docs/img/gallery/walker_move.gif" width="120" alt="The selftest's walker, walking in place"> | **Walker and flier.** The two small creatures the selftest draws, and one walk broken on purpose. The quick start above runs on them | [`examples/`](examples/README.md#walker-and-flier) |
+| <img src="examples/fighter/fighter_idle_4x.gif" width="120" alt="A small fighter breathing in its idle"> | **Fighter.** A two-legged figure drawn at game size and posed there, with its part strip, palette and drawing given to the check | [`examples/fighter/`](examples/README.md#fighter) |
+| <img src="docs/img/gallery/beast_move.gif" width="120" alt="The wolf walking in place"> | **Showcase.** The wolf, the bird and the lizard: drawing, bones, rig, three loops each and the full check command | [`examples/showcase/`](examples/README.md#showcase) |
 
-Every fault's meaning and its usual fix: [skills/pixel-anim-check/SKILL.md](skills/pixel-anim-check/SKILL.md).
-
-</details>
+Every example, with its pictures and the commands that rebuild it: [examples/README.md](examples/README.md).
 
 ## What it suits, and what it does not
 
@@ -126,31 +141,40 @@ The full list is in [docs/usage.md](docs/usage.md#limitations).
 
 ## Install
 
-**Plugin** (inside Claude Code):
+**Claude Code** (plugin):
 
 ```
 /plugin marketplace add therwn/limberpix
 /plugin install limberpix@limberpix
 ```
 
-**Plain skills:** copy `skills/*` into `~/.claude/skills/` (or a project's `.claude/skills/`). A copy does not
-update itself: copy again after every pull, or a session runs the old rules and the old checks.
+**Codex:** ask it to install the two skills from this repo with its skill installer, then start a new turn:
+
+```
+$skill-installer install https://github.com/therwn/limberpix/tree/main/skills/pixel-animate and https://github.com/therwn/limberpix/tree/main/skills/pixel-anim-check
+```
+
+Then call them by name: `$pixel-animate`, `$pixel-anim-check`.
+
+**Plain skills, any agent:** copy `skills/*` into the agent's skills folder (`~/.claude/skills/` for Claude Code,
+`~/.codex/skills/` for Codex, or a project's `.claude/skills/`). A copy does not update itself: copy again after
+every pull, or a session runs the old rules and the old checks.
 
 **Command-line tools only:** `git clone https://github.com/therwn/limberpix`, then run the scripts with Python.
 
-**Requirements:** Python 3.8+ with numpy and Pillow (`python -m pip install -r requirements.txt`); Claude Code to use
-the skills. The skills run their scripts with `python -I`, which does not see a `pip install --user`: install the
-two in a virtual environment or for the whole system (see [Troubleshooting](docs/usage.md#troubleshooting)).
+**Requirements:** Python 3.8+ with numpy and Pillow (`python -m pip install -r requirements.txt`). The skills run
+their scripts with `python -I`, which does not see a `pip install --user`: install the two in a virtual environment
+or for the whole system (see [Troubleshooting](docs/usage.md#troubleshooting)).
 
 ## Docs
 
 | | |
 |---|---|
 | [docs/usage.md](docs/usage.md) | Every option, the sample output explained, use from code, limitations, troubleshooting, development |
-| [pixel-animate/SKILL.md](skills/pixel-animate/SKILL.md) | The method Claude follows, step by step |
+| [examples/README.md](examples/README.md) | Every example with its pictures and commands |
+| [pixel-animate/SKILL.md](skills/pixel-animate/SKILL.md) | The method the agent follows, step by step |
 | [pixel-animate/MOTION.md](skills/pixel-animate/MOTION.md) | The motion rules: steps, cadence, wings, gaits, heads, attacks |
 | [pixel-anim-check/SKILL.md](skills/pixel-anim-check/SKILL.md) | Every fault, what it means and its usual fix |
-| [examples/showcase/](examples/showcase) | The three creatures: drawing, rig, loops and their check options |
 | [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTING.md](CONTRIBUTING.md) | Changes, and how to change it |
 
 ## Licence
