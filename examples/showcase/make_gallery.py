@@ -34,15 +34,24 @@ import showcase_stills as st                              # noqa: E402
 GROUND = (54, 48, 70)
 
 
-def tile(frame_rgba, pad=3, ground=True):
-    """A frame on the gallery's tile ground, as an RGB array at game px."""
+def tile(frame_rgba, pad=3, ground=True, size=None):
+    """A frame on the gallery's tile ground, as an RGB array at game px. With size=(w, h) the tile is that size
+    (pad included), the frame centred across it and standing on its bottom edge, so loops of creatures of different
+    sizes come out as tiles of one size."""
     h, w = frame_rgba.shape[:2]
-    t = np.zeros((h + 2 * pad, w + 2 * pad, 3), np.uint8)
+    tw, th = size if size else (w + 2 * pad, h + 2 * pad)
+    t = np.zeros((th, tw, 3), np.uint8)
     t[:] = st.TILE
+    x, y = (tw - w) // 2, th - pad - h
     if ground:
-        t[pad + h:] = GROUND
-    ms.paste(t, frame_rgba, pad, pad)
+        t[y + h:] = GROUND
+    ms.paste(t, frame_rgba, x, y)
     return t
+
+
+def common(sizes, pad=3):
+    """One tile size (w, h) holding every frame size given, with pad round the biggest."""
+    return max(w for w, _ in sizes) + 2 * pad, max(h for _, h in sizes) + 2 * pad
 
 
 def rounded(img_rgb, radius=14):
@@ -56,19 +65,25 @@ def rounded(img_rgb, radius=14):
 
 # ---- loop GIFs ----------------------------------------------------------------------------------------------------
 def loop_gifs(out):
+    """Every showcase loop on one tile size, and every selftest loop on another: the GIFs sit in tables, where
+    tiles of different sizes read as untidy. Each creature keeps its own scale (2x, 4x): a pixel-art frame is only
+    ever scaled by whole numbers, so the tiles are padded, not stretched."""
     done = []
+    show = {k: ms.loops(k) for k in ms.CREATURES}
+    size = common([(len(L["idle"][0][0]), len(L["idle"][0])) for L in show.values()])
     for key, c in ms.CREATURES.items():
-        L = ms.loops(key)
         for a in ms.LOOPS:
-            frames = [tile(ms.rgba(f), ground=not c.get("flier", False)) for f in L[a]]
-            size, n, ms_total = ms.write_gif(os.path.join(out, f"{key}_{a}.gif"), frames, 2)
-            done.append((f"{key}_{a}.gif", size, n, ms_total))
-    for name, fw, flier in (("walker_idle", 34, False), ("walker_move", 34, False), ("broken_move", 34, False),
-                            ("flier_idle", 30, True), ("flier_move", 30, True)):
-        fr = pac.load(os.path.join(ROOT, "examples", f"{name}.png"), frame=fw)
-        frames = [tile(ms.rgba(f), ground=not flier) for f in fr]
-        size, n, ms_total = ms.write_gif(os.path.join(out, f"{name}.gif"), frames, 4)
-        done.append((f"{name}.gif", size, n, ms_total))
+            frames = [tile(ms.rgba(f), ground=not c.get("flier", False), size=size) for f in show[key][a]]
+            px, n, ms_total = ms.write_gif(os.path.join(out, f"{key}_{a}.gif"), frames, 2)
+            done.append((f"{key}_{a}.gif", px, n, ms_total))
+    small = [(name, fw, flier, pac.load(os.path.join(ROOT, "examples", f"{name}.png"), frame=fw))
+             for name, fw, flier in (("walker_idle", 34, False), ("walker_move", 34, False),
+                                     ("broken_move", 34, False), ("flier_idle", 30, True), ("flier_move", 30, True))]
+    size = common([(len(fr[0][0]), len(fr[0])) for _, _, _, fr in small])
+    for name, fw, flier, fr in small:
+        frames = [tile(ms.rgba(f), ground=not flier, size=size) for f in fr]
+        px, n, ms_total = ms.write_gif(os.path.join(out, f"{name}.gif"), frames, 4)
+        done.append((f"{name}.gif", px, n, ms_total))
     return done
 
 
