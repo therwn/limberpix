@@ -40,6 +40,20 @@ that deliver it, the *recovery* the way back to rest.
 - **Every key pose of an action changes that silhouette.** Filled flat, with its effects, a key (the strike, the
   crouch, the apex) overlaps the rest pose by under 90 % (IoU). Push a key that fails: a longer reach, a lower
   crouch, a higher jump, about 30 % past what feels right. An idle keeps its silhouette.
+- **Check that the drawing holds what the loop needs, and say so first when it does not.** This method moves the
+  drawing's own pixels: it cannot show a side the drawing does not show. A figure drawn standing, turned to the
+  viewer, has no side-on stride and no arm raised overhead in it; a closed cloak has no lining to show when it
+  opens. Such a loop needs new drawings (section 4), and no amount of posing the cut makes them. Tell whoever asked
+  before building, and offer what the cut can do (a breath, a sway, a lean) or key poses drawn or generated anew.
+  - What this cost when it was skipped (one character, a cloaked wizard with a staff, against the hand-drawn sheet of
+    the same figure): in the hand-drawn 10-frame idle, 16 % of each frame's pixels on average, 30 % at the deepest
+    pose, matched no part of the first frame however it was shifted; thirteen cut parts fitted to every frame by
+    pixel difference (a whole-pixel shift and a row shear each) still left 29-39 % of the pixels wrong at the
+    deepest poses; and the cut-out walk and attack were nowhere near the drawn ones, whose poses the first frame
+    does not hold. Three cut-out versions were judged worse than the hand-drawn loops by the one viewer who played
+    them.
+  - Cloth that changes shape (a cloak opening, a robe swinging round the legs) and a body that turns are the usual
+    cases. A rigid body with limbs, a tail and wings (the showcase's creatures) is what the cut suits.
 
 ## 1b. Map the body first: `body_parts.py` (landmarks by eye, edges by measure)
 
@@ -92,6 +106,10 @@ python -I ${CLAUDE_SKILL_DIR}/body_parts.py --selftest
   - **A body part with no ink between it and the next** (head and chest in one black, a whale's head and back):
     the line is placed by eye, where the colour or the form changes. Add a bone piece on each side near the line.
   - **Near and far** come from shading, overlap and size: the brighter, overlapping, larger limb is near.
+  - **A hand gripping a prop:** a prop's bone run through the fist takes the fingers with it, and they part from the
+    arm as soon as the two move differently. Carry the arm's bone on to the fingers and break the prop's bone
+    (`null`) across the grip. On a wizard's staff hand this moved all 24 hand pixels to the arm, where 10 had gone
+    to the staff.
 - **Out:**
   - `<name>_parts.png`: each part tinted, with its outline, bone and name;
   - `<name>_patches.png`: the patches and ink the cut follows;
@@ -377,6 +395,10 @@ reshapes.
    `hop`, `vanish`, `shallow`, `reshape` and the older ones). Give it every input it takes (its SKILL.md lists
    them): which actions are strikes and their direction, the part strip (2, step 6), and the approved drawing at
    game size with its palette, so it can compare the rest pose and the colours with it.
+   - A clean run is a floor, not the result. Do not tune a loop toward a number in place of the look: not the fault
+     count, and not a pixel match with a reference animation either. A cut-out idle brought 40 % nearer a hand-drawn
+     one by pixel difference was judged worse, played, than the version before it. If a change is meant to make the
+     motion better, the person who plays it says whether it did.
 4. Read the eye's row track and the per-step change list. A 2-3-frame excursion, or a long hold followed by a big
    step, shows there before it shows in a GIF.
 5. Look at the part strip, then the contact sheet and the GIF yourself, zoomed and at 1×:

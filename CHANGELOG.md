@@ -8,6 +8,19 @@ All notable changes to this project are listed here. The format follows
 
 ### Added
 
+- **pixel-anim-check** `--eye-at X,Y`: the eye's place on each loop's first frame, for a sprite whose eye colour is
+  used elsewhere too. The eye was taken as the biggest piece of its colour; on a hand-drawn wizard sheet two eyes a
+  pixel apart are two 1-px pieces and a 2-px bead on the staff won, so the eye track, `frozen` and `reshape` followed
+  the bead. The note naming the piece now says how to name another. With a selftest case.
+- **Docs, from a test against a hand-drawn sheet** (a cloaked wizard; cut-out loops made from its first frame and
+  judged by one viewer against the sheet's own): both skills now say that a fault count is not a verdict on the
+  motion; pixel-animate says to check first whether the drawing holds what the loop needs (cloth that changes shape
+  and a body that turns need new drawings) and how to mark a hand gripping a prop; pixel-anim-check says what
+  `--effects` does to a colour the figure wears, that a one-shot is read as a cycle, that `choppy` and `stepped` turn
+  on the assumed frame rate, that a partly lined drawing fails `outline` on every frame, and that a hand-drawn idle
+  its viewer accepted gets `stepped`. docs/usage.md lists these under Limitations and Troubleshooting, and the README
+  says a copied skill does not update itself.
+
 - **pixel-anim-check** `--style redrawn`, for animations whose every pose is a new drawing of the whole figure (frame
   by frame, or generated). `stepped` replaces `choppy`, `uneven` and `lurch`: the whole body must move at least 6
   times a second, a new pose changing 40 % of the figure's tiles. `shimmer` is off and `reshape` and `outline` only

@@ -27,7 +27,8 @@ two in a virtual environment or for the whole system (see [Troubleshooting](docs
 /plugin install limberpix@limberpix
 ```
 
-**Plain skills:** copy `skills/*` into `~/.claude/skills/` (or a project's `.claude/skills/`).
+**Plain skills:** copy `skills/*` into `~/.claude/skills/` (or a project's `.claude/skills/`). A copy does not
+update itself: copy again after every pull, or a session runs the old rules and the old checks.
 
 **Command-line tools only:** `git clone https://github.com/therwn/limberpix`, then run the scripts with Python.
 

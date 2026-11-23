@@ -831,7 +831,23 @@ def eye_cases(walker):
         ok &= bool(hit)
     notes = pac._eye_pieces(_flank_eye(copy.deepcopy(walker)), spec)
     print("cli      a note names the piece read as the eye" + ("" if len(notes) == 2 else f": NO ({notes})"))
-    return ok and len(notes) == 2
+    ok &= len(notes) == 2
+    # A piece of the eye colour bigger than the eye (a bead on a staff: two eye pixels wide on the flank). The
+    # biggest piece is then not the eye; eye_at (the eye's place on the first frame) names the right one.
+    bead = copy.deepcopy(walker)
+    for frames in bead.values():
+        for fr in frames:
+            y = next(y for y in range(len(fr)) if fr[y][12] in (FUR, BELLY))
+            fr[y + 4][12] = fr[y + 4][13] = fr[y + 5][12] = fr[y + 5][13] = EYE
+    ey, ex = pac._eye_piece(walker["idle"][0], spec)
+    wrong = pac._eye_piece(bead["idle"][0], spec)
+    at = pac.Spec(eye=EYE, eye_at=(round(ex), round(ey)))
+    right = pac._eye_piece(bead["idle"][0], at)
+    f = pac.check(bead, at)
+    good = abs(wrong[1] - ex) > 4 and abs(right[0] - ey) < 1 and abs(right[1] - ex) < 1 and not f
+    print("eye      a bigger piece of the eye colour: eye_at names the eye, and the walker passes"
+          + ("" if good else f": NO (without {wrong}, with {right}, eye {(ey, ex)}, {f[:2]})"))
+    return ok and good
 
 
 def later_cases():

@@ -110,6 +110,7 @@ cut into whole frames).
 | `--effects #hex,...` | colours of effects drawn apart from the figure on purpose |
 | `--allow LOOP=N` | pieces up to N px may sit apart from the figure in that loop (a thrown coin) |
 | `--glows-eye LOOP` | the eye is recoloured by a glow in that loop, so it is not checked there |
+| `--eye-at X,Y` | the eye's column and row on each loop's first frame, when the eye colour is used elsewhere too: the piece nearest that place is the eye (without it, the biggest piece, and a `note:` says which) |
 | `--idle NAME --move NAME` | which loops are the rest and the travel loop (default `idle`, `move`). A name given here must match a `--loop`, or it is a usage error. With no loop of the default name, a `note:` line says which checks do not run: `snap`, `hop`, `shallow` and `drift` need the idle; `still`, `stiff`, `skate` and `gait` need the move; and without a move a walker's `ground` judges every loop |
 | `--legless` | a snake or slug: no body rise asked of its move |
 | `--facing right\|left` | which way the head faces (default right) |
@@ -472,6 +473,23 @@ colour there, or else to the first tied colour in the palette's order.
   moves a fifth of a cell, so parts are moved by whole game pixels: look at the shrunk frames side by side.
 - **The check does not judge taste.** It cannot see likeness, appeal or whether an attack reads. That is why the skill
   ends with a look by eye.
+- **A fault count is not a score of the motion.** On one character judged by one viewer (a cloaked wizard: a
+  hand-drawn sheet, and cut-out loops made from its first frame; the partly lined drawing gives `outline` on every
+  frame of all of them) the count did not follow the verdict: a cut-out idle with no other fault was judged worse
+  than the hand-drawn idle, which adds a `choppy` at the rate it was watched at; a second cut-out idle, closer to
+  the hand-drawn one by pixel difference, added a `jump` and was judged worse still; and in `--style redrawn` all
+  three get `stepped` alike.
+- **A cut-out cannot show what the drawing does not show.** On that same character, 16 % of each hand-drawn idle
+  frame's pixels (30 % at the deepest pose) matched no part of the first frame however shifted, and thirteen parts
+  fitted to each frame by pixel difference left 29-39 % of the pixels wrong at the deepest poses: the cloak opens on
+  a lining, the legs bend, the walk and the attack are other poses. pixel-animate suits a rigid body with limbs, a
+  tail or wings; cloth that changes shape and a body that turns need new drawings.
+- **Every loop is read as a cycle.** A one-shot that does not end where it began (a death) gets a `jump` and a
+  `vanish` at its last-to-first step. There is no option to say a loop plays once.
+- **`choppy` and `stepped` need the real frame rate.** They are counted in time. A sheet that comes with no rate has
+  none to check: one hand-drawn 10-frame idle fails `stepped` at 8.3 and at 10 fps and passes at 12.
+- **A drawing lined only in places fails `outline` on every frame** in the default style, the approved drawing with
+  it; there is no switch for a partly lined style short of `--style redrawn`, where it only warns.
 - **`creature_map.py` is a first look only.** It reads the silhouette, and a silhouette cannot tell a bow from an arm
   or a cape from a tail. On a second private set, 38 hand-drawn reference drawings (humanoids, quadrupeds, fliers,
   serpents, insects and others; not included), it got 13 body plans right and named most parts wrong. The example
@@ -494,6 +512,9 @@ colour there, or else to the first tied colour in the palette's order.
 | Exit 2, `has no transparent pixel in any frame` | The strip has a flat background and no alpha, so the whole frame would read as the figure (a run gives an `outline` fault on every frame). Export it with a transparent background, or name the background with `--key #rrggbb`. `--key` removes that exact colour only: an anti-aliased fringe round the figure must be cleaned first. |
 | An effect (a spark, a thrown coin) reported as `apart` | Name its colours with `--effects`, or allow small pieces with `--allow LOOP=N`. |
 | `eye` faults in a loop where a glow recolours the eye | Pass `--glows-eye LOOP`. |
+| A `note:` says the eye colour shows in several pieces, and names a piece that is not the eye | Give the eye's place on the first frame with `--eye-at X,Y`. Until then the eye track, `frozen`, `tick` and `reshape` follow the wrong piece. |
+| `apart` on every frame after naming `--effects` | A colour named there is one the figure wears too, so its own parts are taken for effects. Name only colours the figure does not use, and use `--allow LOOP=N` for the rest. |
+| A session follows rules or misses options this page describes | The skills were copied into `~/.claude/skills/` and the copy is older than the repo. Copy `skills/*` again after every pull. |
 | `TypeError` from the module | Your pixels are not `"#rrggbb"` keys. Pass `lum` and `rgb` to `Spec` (see [From code](#from-code)). |
 | `No module named 'numpy'` (or `'PIL'`) though both are installed | The skills run the scripts with `python -I`, isolated mode: it leaves the script's own folder, `PYTHON*` variables (such as a `PYTHONPATH` into the project) and the user's site-packages off the import path, so a stray file named like a standard module (`json.py`) cannot shadow it. Packages from `pip install --user` (where pip also falls back when it cannot write elsewhere) are not seen then. Install numpy and Pillow in a virtual environment or for the whole system, or run the command without `-I`. |
 | `--selftest` says its test file is missing | Copy the matching `*_selftest.py` beside the script. |

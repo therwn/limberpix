@@ -14,6 +14,9 @@ optional. Options:
   --frame W           a strip's frame width in px          --frames N   how many frames each strip holds
   --eye #rrggbb       the eye's colour: checked on every frame, the head round it must move (frozen), its row track
                       must not tick (tick), and the face round it must keep its shape (reshape)
+  --eye-at X,Y        where the eye is on each loop's first frame (column, row), when the eye colour is used
+                      elsewhere too (a gem, a bead, a glow): the piece nearest that place is the eye. Without it
+                      the biggest piece is taken, and a note says which
   --flier             it flies: its shadow (--shadow colours, anywhere in the frame) must not slide; its body
                       height track is read for ticks; its idle wing stroke is judged against its move (shallow)
   --facing right|left which way the head faces (default right): where the face window of reshape lies
@@ -226,8 +229,10 @@ class Spec:
     def __init__(self, ink=None, shadow=(), effects=(), eye=None, flier=False, idle="idle", move="move",
                  allow=None, glows_eye=(), lum=lum_hex, rgb=hexrgb, gait=True, fps=30, facing="right",
                  actions=None, speed=None, parts=None, squash=(), palette=None, glow=(), ref=None, marks=(),
-                 sheets=(), min_rate=None, style="pixel", spots=None):
+                 sheets=(), min_rate=None, style="pixel", spots=None, eye_at=None):
         self.ink, self.shadow, self.effects = ink, set(shadow), set(effects)
+        self.eye_at = tuple(eye_at) if eye_at else None   # (column, row) of the eye on a loop's first frame: which
+                                                          # piece of the eye colour is the eye (see _eye_piece)
         self.eye, self.flier, self.idle, self.move = eye, flier, idle, move
         self.allow, self.glows_eye, self.lum, self.rgb = allow or {}, set(glows_eye), lum, rgb
         self.gait = gait                                  # it walks on legs (a snake or a slug does not: no stiff;
@@ -870,14 +875,18 @@ def snap(loops, spec):
 
 def _eye_piece(f, spec, last=None):
     """Where the eye is on frame f, as (row, column) floats: the centroid of one 8-connected piece of the eye colour.
-    With no last place, the biggest piece (the frontmost on a tie); after that, the piece nearest the last place, so
-    the eye is followed from frame to frame and not confused with the same colour used elsewhere. None if f has no
-    pixel of the eye colour. Every check that reads the eye finds it here; a one-piece eye gives its plain
-    centroid."""
+    With no last place, the biggest piece (the frontmost on a tie), or with spec.eye_at the piece nearest that
+    place; after that, the piece nearest the last place, so the eye is followed from frame to frame and not confused
+    with the same colour used elsewhere. None if f has no pixel of the eye colour. Every check that reads the eye
+    finds it here; a one-piece eye gives its plain centroid. The biggest piece is a guess: two eyes drawn a pixel
+    apart are two 1-px pieces, and a 2-px bead of the same colour on a staff was read as the eye (a hand-drawn
+    wizard sheet: its eye track, frozen and reshape then followed the bead). eye_at settles it."""
     pcs = _blobs(np.array([[v == spec.eye for v in r] for r in f]))
     if not pcs:
         return None
     cents = [(float(ys.mean()), float(xs.mean()), len(ys)) for ys, xs in pcs]
+    if last is None and spec.eye_at:
+        last = (spec.eye_at[1], spec.eye_at[0])
     if last is None:
         front = 1 if spec.facing != "left" else -1
         c = max(cents, key=lambda t: (t[2], front * t[1]))
@@ -3170,7 +3179,7 @@ def _wide_strip(src):
         return im.format != "GIF" and getattr(im, "n_frames", 1) == 1 and im.width > im.height
 
 
-VALUED = {"--loop", "--frame", "--frames", "--eye", "--facing", "--ink", "--shadow", "--effects", "--allow",
+VALUED = {"--loop", "--frame", "--frames", "--eye", "--eye-at", "--facing", "--ink", "--shadow", "--effects", "--allow",
           "--glows-eye", "--idle", "--move", "--out", "--fps", "--name", "--action", "--speed", "--parts", "--squash",
           "--palette", "--glow", "--ref", "--mark", "--sheet", "--key", "--min-rate", "--style", "--spots"}
 FLAGS = {"--flier", "--legless", "--selftest", "--help", "-h"}
@@ -3223,7 +3232,8 @@ def _unnamed(loops, spec, idle_given, move_given):
 
 def _eye_pieces(loops, spec):
     """A note per loop whose first frame shows the eye colour in more than one piece: which piece is read as the eye
-    (_eye_piece: the biggest, the frontmost on a tie), so a wrong pick shows before its faults are trusted."""
+    (_eye_piece: the biggest, the frontmost on a tie, or the nearest to --eye-at), so a wrong pick shows before its
+    faults are trusted."""
     out = []
     for a, frames in loops.items():
         if not spec.eye or a in spec.glows_eye or not frames:
@@ -3231,8 +3241,9 @@ def _eye_pieces(loops, spec):
         n = len(_blobs(np.array([[v == spec.eye for v in r] for r in frames[0]])))
         if n > 1:
             y, x = _eye_piece(frames[0], spec)
+            how = "the nearest to --eye-at" if spec.eye_at else                 "the biggest, the frontmost on a tie: name another with --eye-at X,Y"
             out.append(f"note: {a}[0] shows the eye colour {spec.eye} in {n} pieces; the eye is read as the one at "
-                       f"row {y:g}, column {x:g} (the biggest, the frontmost on a tie) and followed from there")
+                       f"row {y:g}, column {x:g} ({how}) and followed from there")
     return out
 
 
@@ -3353,6 +3364,16 @@ def main(argv):
             if not spot_groups or not all(spot_groups.values()):
                 raise ValueError("--spots: every group needs one mark or more")
         eye = opt("--eye")
+        eye_at = None
+        if opt("--eye-at"):
+            try:
+                ex, ey = (int(v) for v in opt("--eye-at").split(","))
+            except ValueError:
+                raise ValueError(f"--eye-at takes X,Y (a column and a row of the first frame), not "
+                                 f"{opt('--eye-at')!r}") from None
+            if not eye:
+                raise ValueError("--eye-at needs --eye: it says which piece of the eye colour is the eye")
+            eye_at = (ex, ey)
         spec = Spec(ink=cols(opt("--ink")) or None, shadow=cols(opt("--shadow")), effects=cols(opt("--effects")),
                     eye=hexcol(eye) if eye else None, flier="--flier" in got, idle=opt("--idle", "idle"),
                     move=opt("--move", "move"), allow=allow, glows_eye=opt("--glows-eye", many=True),
@@ -3360,7 +3381,8 @@ def main(argv):
                     parts=part_strips, squash=cols(opt("--squash")),
                     palette={v for r in pal for v in r if v is not None} if pal else None,
                     glow=cols(opt("--glow")), ref=image("--ref"), marks=sorted(cols(opt("--mark"))),
-                    sheets=opt("--sheet", many=True), min_rate=min_rate, style=style, spots=spot_groups)
+                    sheets=opt("--sheet", many=True), min_rate=min_rate, style=style, spots=spot_groups,
+                    eye_at=eye_at)
     except ValueError as e:
         print(f"error: {e}  (--help lists the options)", file=sys.stderr)
         return 2

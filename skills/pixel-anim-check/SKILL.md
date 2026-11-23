@@ -11,6 +11,13 @@ find, so catch those first.
 
 The check is itself tested (step 4). A check that is run only for show, or that cries wolf, is worse than none.
 
+**0 faults means no listed defect was found, not that the motion is good.** Never report a fault count, or a count
+going down, as the animation's quality. In one test (one viewer, one character: a cloaked wizard whose partly lined
+drawing gives `outline` on every frame) a cut-out idle with no other fault was judged worse, played, than the
+hand-drawn idle it copied, which adds a `choppy` at the rate it was watched at; a second cut-out idle, moved closer
+to the hand-drawn one, added a `jump` and was judged worse again; and in `--style redrawn` all three get `stepped`
+alike, the accepted one too. Say what the run found, and leave the verdict on the motion to whoever plays it.
+
 **Paths.** The scripts sit next to this file. Inside Claude Code, `${CLAUDE_SKILL_DIR}` is that folder; outside Claude
 Code, read `${CLAUDE_SKILL_DIR}` as the folder holding this SKILL.md. Python 3.8+ with numpy and Pillow. The commands
 use `python -I` (isolated mode): it leaves the script's own folder, `PYTHON*` variables (such as a `PYTHONPATH` into
@@ -41,7 +48,7 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
        [--glows-eye attack] [--idle idle --move move] [--facing left] [--legless] [--fps 30] \
        [--action bite:strike:right] [--speed 0.5] [--parts move=move_parts.png --squash "#ff0000"] \
        [--palette approved.png] [--ref approved.png] [--glow "#fff4c8"] [--mark "#5ad1e0"] [--sheet move] \
-       [--key "#ff00ff"] --out check --name fox
+       [--key "#ff00ff"] [--eye-at 20,9] --out check --name fox
 ```
 
 - A loop is a horizontal strip PNG, a folder of frame PNGs, or a GIF.
@@ -57,10 +64,23 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
   checked as one solid figure, so it is refused unless `--key #rrggbb` names the background colour; `--key` also
   applies to `--parts`, `--ref` and `--palette`. It removes that exact colour only: clean a key's anti-aliased fringe
   before, or the fringe reads as specks and open outline.
+- The eye is found by its colour. When that colour is used elsewhere too (a gem, a bead, a glow), the run prints a
+  `note:` naming the piece it took: the biggest. That guess can be wrong: two eyes drawn a pixel apart are two 1-px
+  pieces, and a 2-px bead of the same red on a staff was taken for the eye, so the eye track, `frozen` and `reshape`
+  followed the bead. Read the note, and give `--eye-at X,Y` (the eye's column and row on each loop's first frame)
+  when it names the wrong piece.
+- `--effects` is for colours the figure itself does not use: they are taken out of the figure before `apart` is
+  judged. Name a colour the figure also wears (a white burst on a white-haired figure) and its own hair and skull
+  become stray pieces on every frame. Use `--allow LOOP=N` for an effect in the figure's colours.
 - A flier's ground-shadow colours must be given with `--shadow`, or the shadow counts as a stray piece (`apart`).
-- The outline is every colour darker than lightness 40, unless `--ink` names it.
+- The outline is every colour darker than lightness 40, unless `--ink` names it. A drawing lined only in places (lit
+  edges and pale limbs with no line) gives `outline` on every frame in the default style. Run the approved drawing
+  alone first: if it shows the same count, the fault is the drawing's style and not a pose's.
 - `--facing left` for a creature whose head faces left (where `reshape` reads the face); `--legless` for a snake or
   slug (no body rise asked of its move, and `hop` judges every loop); `--fps` the rate the game plays the loops at.
+  `choppy` and `stepped` are counted in time, so they turn on that rate: a sheet that comes with no rate has none
+  to check, and the rate you assume decides them (one hand-drawn 10-frame idle fails `stepped` at 8.3 and at 10 fps
+  and passes at 12). Say which rate you assumed.
 - Name the rest and travel loops `idle` and `move`, or give `--idle NAME --move NAME`. Several checks are tied to
   those two loops (`snap`, `hop`, `shallow` and `drift` to the idle; `still`, `stiff`, `skate` and `gait` to the
   move), so under other names they do not run and the result looks cleaner than it is. The run prints a `note:` line
@@ -72,6 +92,9 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
   `strike` judges its phases (DIR the way it strikes: right, left, up or down; default the facing). KIND `jump` may
   leave the ground (`ground` is not asked). Any other word (`breath`, `spit`, `bell`) is a gesture: no phase checks,
   since a breath or a bell has no counter-move.
+  - Every loop is read as a cycle, a declared action too. A one-shot that does not end where it began (a death
+    ending on the ground) has its last-to-first step read as a `jump` and its fallen figure as a `vanish`: at the
+    seam those two are the loop's end, not faults.
 - `--speed PX` is the road's scroll in game px a frame, for a walker drawn walking in place. The planted feet's speed
   is printed beside it, and the GIF scrolls a ground line under the move. The road may ease, so it is a read-out.
 - `--parts LOOP=PATH` gives a part strip: the same frames with each rig part filled in one flat colour (the cut's
@@ -106,7 +129,9 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
   on one character only.
   - Its margins are a guess from three idles of one character judged by playing them (one generated idle accepted,
     two cut-out idles rejected as slow and stepped), not a fitted margin: rerun the check on every redrawn animation
-    you have judged whenever they change.
+    you have judged whenever they change. A fourth sample already speaks against `stepped`'s 6 a second: a
+    hand-drawn 10-frame idle, accepted by its viewer played at 120 ms a frame, moves its whole body 4.2 times a
+    second and gets the fault.
 - In a project with its own pipeline, call `pixel_anim_check.check(loops, Spec(...))` from a small adapter.
   - Pixels may be any colour key; pass `lum` and `rgb` to read them.
   - Import the module from the skill folder, or vendor a copy of `pixel_anim_check.py` and `pixel_anim_selftest.py`
