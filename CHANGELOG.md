@@ -20,6 +20,9 @@ All notable changes to this project are listed here. The format follows
   on the assumed frame rate, that a partly lined drawing fails `outline` on every frame, and that a hand-drawn idle
   its viewer accepted gets `stepped`. docs/usage.md lists these under Limitations and Troubleshooting, and the README
   says a copied skill does not update itself.
+- **README** laid out as the repo's front page: a header with the icon and badges, the two skills side by side at a
+  glance, the faults in one folded table, and a section on what the method suits and what it does not. The "not yet
+  published" note is gone: the plugin install lines need the repo public.
 
 - **pixel-anim-check** `--style redrawn`, for animations whose every pose is a new drawing of the whole figure (frame
   by frame, or generated). `stepped` replaces `choppy`, `uneven` and `lurch`: the whole body must move at least 6
