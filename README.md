@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/therwn/limberpix/actions/workflows/selftest.yml"><img src="https://github.com/therwn/limberpix/actions/workflows/selftest.yml/badge.svg" alt="selftest"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/python-3.8%2B-3776ab.svg" alt="Python 3.8+">
+  <img src="https://img.shields.io/badge/python-3.11%2B-3776ab.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin%20%2B%20skills-d97757.svg" alt="Claude Code plugin and skills">
   <img src="https://img.shields.io/badge/Codex-skills-10a37f.svg" alt="Codex skills">
 </p>
@@ -32,10 +32,10 @@
 
 ## What it does, in pictures
 
-### 1. pixel-animate: one drawing becomes every frame
+### 1. pixel-animate: pose parts of a drawing
 
-The approved drawing is cut into parts once, and every frame is those same pixels, posed. Nothing is redrawn, so the
-creature keeps its look.
+Cut the approved drawing into parts and pose them over the loop. Draw extra keys when a pose needs a new view of a
+part, such as the bird's turning head and folded wings. The wolf animation starts from layers prepared by hand.
 
 <p align="center">
   <img src="docs/img/gallery/workflow.gif" width="912" alt="The wolf's drawing and rig at rest, then the same rig colours moving in sync with the finished walk. A second panel shows pixel-anim-check flagging a frame shifted four pixels sideways and reporting zero faults after the frame is restored.">
@@ -43,11 +43,13 @@ creature keeps its look.
 
 The two middle tiles use the same rig colours. The green shape includes the near hind leg's thigh at the hip.
 See the [four steps as a still](docs/img/gallery/pipeline.png) and the
-[measured cut from body_parts.py](docs/img/parts.png).
+[measured cut from body_parts.py](docs/img/parts.png). The [cut idle example](examples/README.md#cut-idle) builds a
+checked animation from a flat PNG and bone marks using the exported label mask.
 
 ### 2. Three loops for each creature
 
-Each creature below was drawn once as data and animated from that drawing alone: an idle, a move and an attack.
+Each creature has a layered drawing and an idle, a move and an attack. The bird also uses separately drawn head and
+wing poses.
 Sources and check options are in [`examples/showcase/`](examples/showcase).
 
 | | idle | move | attack |
@@ -95,7 +97,7 @@ Every fault's meaning and its usual fix: [skills/pixel-anim-check/SKILL.md](skil
 
 ## Try it
 
-From the repo root, on the files in [`examples/`](examples). Python 3.8+ with numpy and Pillow
+From the repo root, on the files in [`examples/`](examples). Python 3.11+ with NumPy and Pillow
 (`python -m pip install -r requirements.txt`).
 
 ```sh
@@ -164,7 +166,7 @@ every pull, or a session runs the old rules and the old checks.
 
 **Command-line tools only:** `git clone https://github.com/therwn/limberpix`, then run the scripts with Python.
 
-**Requirements:** Python 3.8+ with numpy and Pillow (`python -m pip install -r requirements.txt`). The skills run
+**Requirements:** Python 3.11+ with NumPy and Pillow (`python -m pip install -r requirements.txt`). The skills run
 their scripts with `python -I`, which does not see a `pip install --user`: install the two in a virtual environment
 or for the whole system (see [Troubleshooting](docs/usage.md#troubleshooting)).
 

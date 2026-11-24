@@ -35,6 +35,7 @@ import json
 import math
 import os
 import sys
+import tempfile
 from collections import deque
 
 try:
@@ -451,7 +452,23 @@ def analyse(im, eye=None, floating=False, eye_at=None):
         rgb = np.asarray(im.convert("RGB")).astype(int)
         e = eye.strip().lstrip("#")
         t = np.array([int(e[0:2], 16), int(e[2:4], 16), int(e[4:6], 16)])
-        hit = full & (np.abs(rgb - t).sum(2) < 40)
+        delta = np.abs(rgb - t).sum(2)
+        hit = full & (delta == 0)
+        if not hit.any():
+            hit = full & (delta < 40)
+            if hit.any():
+                candidates = set(zip(*np.nonzero(hit)))
+                stack = [candidates.pop()]
+                while stack:
+                    y, x = stack.pop()
+                    for dy in (-1, 0, 1):
+                        for dx in (-1, 0, 1):
+                            q = (y + dy, x + dx)
+                            if q in candidates:
+                                candidates.remove(q)
+                                stack.append(q)
+                if candidates or hit.sum() > full.sum() / 4:
+                    raise ValueError(f"eye colour {eye!r} has ambiguous matches; give --eye-at X,Y")
         if hit.any():
             ys, xs = np.nonzero(hit)
             eyexy = (xs.mean() / k, ys.mean() / k)
@@ -626,20 +643,32 @@ def overlay(im, res, aux, path):
 
 
 def _looks_like_strip(im):
-    """A wide sheet with at least three silhouettes spaced one cell apart."""
+    """A wide sheet with repeated silhouettes at a regular cell pitch, including detached effects."""
     if im.width <= 3 * im.height:
         return False
     mask = silhouette(im)
     occupied = mask.any(axis=0)
     edges = np.diff(np.r_[False, occupied, False].astype(int))
     starts, ends = np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)
-    if len(starts) < 3 or im.width % len(starts):
-        return False
-    width = im.width // len(starts)
-    cells = np.arange(len(starts))
-    if not (np.array_equal(starts // width, cells) and np.array_equal((ends - 1) // width, cells)):
-        return False
-    return bool(mask.reshape(im.height, len(cells), width).all(axis=1).any())
+    if len(starts) >= 3 and im.width % len(starts) == 0:
+        width = im.width // len(starts)
+        cells = np.arange(len(starts))
+        if np.array_equal(starts // width, cells) and np.array_equal((ends - 1) // width, cells):
+            if mask.reshape(im.height, len(cells), width).all(axis=1).any():
+                return True
+    # The wolf and bird attacks have effects beside some bodies. Their adjacent cells still share a large body
+    # footprint, and their boundaries (unlike slices through a single snake) do not cut connected pixels.
+    for width in range(max(2, im.height // 2), min(3 * im.height, im.width // 3) + 1):
+        if im.width % width:
+            continue
+        cells = mask.reshape(im.height, -1, width).transpose(1, 0, 2)
+        if np.any(cells[:-1, :, -1] & cells[1:, :, 0]):
+            continue
+        areas = cells.sum(axis=(1, 2))
+        common = (cells[:-1] & cells[1:]).sum(axis=(1, 2))
+        if areas.min() > 0 and np.all(2 * common >= np.minimum(areas[:-1], areas[1:])):
+            return True
+    return False
 
 
 def main(argv):
@@ -677,7 +706,7 @@ def main(argv):
         at = opts.get("--eye-at")
         try:
             at = tuple(int(round(float(v))) for v in at.split(",")) if at else None
-        except ValueError:
+        except (ValueError, OverflowError):
             at = ()
         if at is not None and len(at) != 2:
             raise ValueError(f"--eye-at takes X,Y, not {opts['--eye-at']!r}")
@@ -685,22 +714,47 @@ def main(argv):
         print(f"error: {e}  (--help lists the options)", file=sys.stderr)
         return 2
     src = pos[0]
-    im = Image.open(src)
+    name = opts.get("--name", os.path.splitext(os.path.basename(src))[0])
+    out = os.path.realpath(opts.get("--out", "."))
+    filenames = (f"{name}_map.json", f"{name}_map.png")
+    try:
+        if not name or name in (".", "..") or any(c in '/\\:<>"|?*' or ord(c) < 32 for c in name):
+            raise ValueError(f"--name must be a file name, not {name!r}")
+        for filename in filenames:
+            target = os.path.join(out, filename)
+            if os.path.isdir(target):
+                raise ValueError(f"output {target} is a directory")
+            resolved = os.path.realpath(target)
+            if os.path.normcase(os.path.dirname(resolved)) != os.path.normcase(out):
+                raise ValueError(f"output {target} resolves outside {out}")
+            if (os.path.normcase(resolved) == os.path.normcase(os.path.realpath(src))
+                    or os.path.exists(target) and os.path.samefile(target, src)):
+                raise ValueError(f"output {target} would overwrite source {src}; choose a different --out or --name")
+        with Image.open(src) as image:
+            im = image.convert("RGBA")
+    except (OSError, ValueError, Image.DecompressionBombError) as e:
+        print(f"error: {src}: {e}", file=sys.stderr)
+        return 2
     if _looks_like_strip(im):
         print(f"error: {src} is {im.width}x{im.height}: one drawing, not a strip (crop one frame)  "
               "(--help lists the options)", file=sys.stderr)
         return 2
     try:
         res, aux = analyse(im, eye, "--floating" in opts, at)
-    except ValueError as e:                               # no body found: an empty or one-pixel drawing
+    except ValueError as e:
         print(f"error: {src}: {e}", file=sys.stderr)
-        return 1
-    out = opts.get("--out", ".")
-    os.makedirs(out, exist_ok=True)
-    name = opts.get("--name", os.path.splitext(os.path.basename(src))[0])
-    with open(os.path.join(out, f"{name}_map.json"), "w", encoding="utf-8") as fh:
-        json.dump(res, fh, indent=1)
-    overlay(im, res, aux, os.path.join(out, f"{name}_map.png"))
+        return 1 if str(e) == "no body found" else 2
+    try:
+        os.makedirs(out, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=out) as stage:
+            with open(os.path.join(stage, filenames[0]), "w", encoding="utf-8") as fh:
+                json.dump(res, fh, indent=1)
+            overlay(im, res, aux, os.path.join(stage, filenames[1]))
+            for filename in filenames:
+                os.replace(os.path.join(stage, filename), os.path.join(out, filename))
+    except OSError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     print(f"{name}: {res['plan']}; facing {res['facing']}, trunk {res['trunk_width']} px")
     for p in res["parts"]:
         print(f"  {p['name']:14s} {p['kind']:28s} {p['zone']:5s} share {p['area_share']:.3f} root {p['root']} "

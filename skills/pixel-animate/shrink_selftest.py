@@ -128,6 +128,14 @@ def run():
     p2 = sh.ordered([FUR, BELLY])
     case("a cell 40 % covered is air at the default cover (0.42)", sh.shrink(ref, p2, (2, 1))[0, 0] == -1)
     case("and is drawn with --cover 0.3", sh.shrink(ref, p2, (2, 1), cover=0.3)[0, 0] == 0)
+    ref = np.zeros((3, 7, 4), np.uint8)
+    ref[:, 0] = FUR + (255,)
+    left = sh.shrink(ref, p2, (3, 3))
+    right = sh.shrink(ref[:, ::-1], p2, (3, 3))
+    bottom = sh.shrink(ref.transpose(1, 0, 2)[::-1], p2, (3, 3))
+    case("fractional cells preserve opposite edge columns and rows",
+         (left >= 0).sum() == 3 and np.array_equal(right, left[:, ::-1]) and np.array_equal(bottom, left.T[::-1]),
+         (left.tolist(), right.tolist(), bottom.tolist()))
 
     # the contour read apart: a dark line 3 px wide over fur, across two 8-px cells, 6 game px long
     ref = block([[FUR] * 4] * 6)
@@ -141,6 +149,18 @@ def run():
     ref[:, 12:20, :3] = INK                               # a line one cell wide, half in cell 1 and half in cell 2
     wide = sh.shrink(ref, p3, (4, 6))
     case("a line a whole cell wide across two cells does not vanish", (wide == 0).sum(1).min() >= 1, wide.tolist())
+    ref = np.empty((11, 44, 4), np.uint8)
+    widths = []
+    for start, width in ((17, 10), (18, 10), (11, 11), (11, 22)):
+        ref[:] = FUR + (255,)
+        ref[:, start:start + width] = INK + (255,)
+        widths.append(int((sh.shrink(ref, p3, (4, 1)) == 0).sum()))
+    case("thin contour stays one pixel thick when shifted", widths == [1, 1, 1, 2], widths)
+    dark2 = (24, 20, 21)
+    tones = sh.ordered([INK, dark2])
+    ref[:, :22] = tuple(tones[0]) + (255,)
+    ref[:, 22:] = tuple(tones[1]) + (255,)
+    case("a contour tie uses the matching rest tone", sh.shrink(ref, tones, (1, 1), rest=np.array([[1]])).item() == 1)
 
     # a tie: the left half of the cell one colour, the right half another
     ref = np.zeros((8, 8, 4), np.uint8)

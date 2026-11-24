@@ -15,7 +15,7 @@
 It first checks every loop of every creature with pixel_anim_check, with the options each animate.py's docstring
 gives (the part strips, the palette and the drawing included), and stops unless each has 0 faults. It reads the
 strips as they are on disk (run a creature's animate.py first to rebuild them and its check/ files). Needs Python
-3.8+, numpy and Pillow; every word in the pictures is pixfont.py, the pixel font beside this script, so they come out
+3.11+, NumPy and Pillow; every word in the pictures is pixfont.py, the pixel font beside this script, so they come out
 the same on every machine. check.png and parts.png are drawn by showcase_stills.py."""
 import argparse
 import os

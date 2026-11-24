@@ -18,7 +18,7 @@ Written here:
   figure.png, marks.json             a standing figure and the rough bones placed on it, for body_parts.py
 
 The creatures are drawn by pixel_anim_selftest.py and body_parts_selftest.py; this script only writes them out.
-Needs Python 3.8+, numpy and Pillow."""
+Needs Python 3.11+, NumPy and Pillow."""
 import argparse
 import json
 import os

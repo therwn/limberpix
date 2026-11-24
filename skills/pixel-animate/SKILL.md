@@ -11,7 +11,7 @@ faithful one that moves like a cut-out reads as paper. Work from the approved dr
 
 **Paths.** The scripts sit next to this file. Claude Code fills `${CLAUDE_SKILL_DIR}` with that folder. Codex and
 any other agent that leaves it as written read it as the folder this SKILL.md was loaded from (in Codex,
-`~/.codex/skills/pixel-animate`). Python 3.8+ with numpy and Pillow. The commands
+`~/.codex/skills/pixel-animate`). Python 3.11+ with NumPy 1.24.3+ and Pillow 13.0.0+. The commands
 use `python -I` (isolated mode): it leaves the script's own folder, `PYTHON*` variables (such as a `PYTHONPATH` into
 the project) and the user's site-packages off the import path, so a stray file named like a standard module
 (`json.py`) cannot shadow it. It also hides packages installed with `pip install --user`: on `No module named 'numpy'`

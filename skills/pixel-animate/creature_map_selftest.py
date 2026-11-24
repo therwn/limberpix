@@ -10,6 +10,7 @@ import io
 import json
 import math
 import os
+from pathlib import Path
 import sys
 import tempfile
 
@@ -237,6 +238,23 @@ def cli(case):
         round_body.save(src)
         code, msg = run_main([src, "--eye", "000000", "--out", out, "--name", "round"])
         case("cli: a round body with a black eye faces right", code == 0 and "blob" in msg and "facing right" in msg, msg)
+        amber = Image.new("RGBA", (48, 24))
+        d = ImageDraw.Draw(amber)
+        d.ellipse((4, 5, 42, 19), fill="#d59c33")
+        d.point((38, 12), fill="#e6a036")
+        amber_path = os.path.join(tmp, "amber.png")
+        amber.save(amber_path)
+        for args in (["--eye", "e6a036"], ["--eye-at", "38,12"]):
+            got, text = run_main([amber_path, "--out", out] + args)
+            case("cli: amber eye faces right with " + args[0], got == 0 and "facing right" in text, text)
+        got, text = run_main([amber_path, "--out", out, "--eye", "d69d34"])
+        case("cli: ambiguous near-colour match asks for a coordinate",
+             got == 2 and "ambiguous" in text and "--eye-at" in text, text)
+        examples = Path(__file__).resolve().parents[2] / "examples" / "showcase"
+        for key in ("beast", "bird"):
+            path = str(examples / key / f"{key}_attack.png")
+            got, text = run_main([path, "--out", out])
+            case(f"cli: {key} attack with detached effects is rejected", got == 2 and "crop one frame" in text, text)
         if code == 0:
             with open(os.path.join(out, "round_map.json"), encoding="utf-8") as fh:
                 res = json.load(fh)

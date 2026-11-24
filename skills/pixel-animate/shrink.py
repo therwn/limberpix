@@ -45,6 +45,7 @@ of a cell; averaging each cell left 42 % and 67 %, one sample at the cell's cent
 contour apart kept it on 25 % of the figure; the same vote without it kept 9 %, and the outlines broke."""
 import os
 import sys
+import tempfile
 
 try:
     import numpy as np
@@ -56,8 +57,7 @@ except ImportError as e:                                  # python -I does not s
 
 COVER = 0.42                                              # a game pixel is drawn when this share of its cell is figure
 CONTOUR = 70                                              # red + green + blue under this is the drawing's contour
-LINE_SOLID, LINE_LOW = 0.45, 0.12                         # a cell this much contour is a line; this much, when no
-                                                          # less than the cells either side of it
+LINE_SOLID, LINE_LOW = 0.50, 0.12                         # over half is solid; a thinner, centred crest also counts
 KMEANS_ROUNDS, KMEANS_SAMPLE = 16, 40000                  # --colours: k-means rounds, and the most pixels it reads
 
 
@@ -140,30 +140,41 @@ def shrink(ref, pal, size, rest=None, cover=COVER, contour=CONTOUR):
     dark = fig & (rgb.astype(int).sum(-1) < contour) if contour else np.zeros(fig.shape, bool)
     idx = snap(rgb, pal)
     n = len(pal)
-    xs = [int(x * W / w) for x in range(w)] + [W]         # a cell's columns run from xs[x] to xs[x + 1], rows alike
-    ys = [int(y * H / h) for y in range(h)] + [H]
+    def spans(source, target):
+        # In units of 1 / target source pixels, all edges and intersection weights are exact integers.
+        for a in range(target):
+            start, end = a * source, (a + 1) * source
+            lo, hi = start // target, (end + target - 1) // target
+            p = np.arange(lo, hi, dtype=np.int64) * target
+            yield slice(lo, hi), np.minimum(end, p + target) - np.maximum(start, p)
+
+    def vote(v, weights, prior):
+        cnt = np.bincount(v, weights=weights, minlength=n)
+        winner = int(cnt.argmax())
+        return prior if 0 <= prior < n and cnt[prior] == cnt[winner] else winner
+
+    xs = list(spans(W, w))
     covered = np.zeros((h, w))
     share = np.zeros((h, w))                              # the contour's share of the cell's figure
     fill = np.full((h, w), -1)
     line = np.full((h, w), -1)                            # the contour's own colour there
-    for y in range(h):
-        for x in range(w):
-            sl = (slice(ys[y], max(ys[y] + 1, ys[y + 1])), slice(xs[x], max(xs[x] + 1, xs[x + 1])))
+    for y, (ys, wy) in enumerate(spans(H, h)):
+        for x, (xslice, wx) in enumerate(xs):
+            sl = (ys, xslice)
             f, d, i = fig[sl], dark[sl], idx[sl]
-            m = int(f.sum())
-            covered[y, x] = m / f.size
+            weights = wy[:, None] * wx[None, :]
+            m = int(weights[f].sum())
+            covered[y, x] = m / (W * H)
             if not m:
                 continue
-            k = int(d.sum())
+            k = int(weights[d].sum())
             share[y, x] = k / m
+            prior = rest[y, x] if rest is not None else -1
             if k:
-                line[y, x] = np.bincount(i[d], minlength=n).argmax()
+                line[y, x] = vote(i[d], weights[d], prior)
             if m > k:
-                cnt = np.bincount(i[f & ~d], minlength=n)
-                top = cnt.max()
-                fill[y, x] = cnt.argmax()                 # the first of the tied, in the palette's order
-                if rest is not None and rest[y, x] >= 0 and cnt[rest[y, x]] == top:
-                    fill[y, x] = rest[y, x]
+                coloured = f & ~d
+                fill[y, x] = vote(i[coloured], weights[coloured], prior)
     # a line's crest, read across the line. Along a line the cells hold the same contour; across it the contour
     # falls away on both sides. So the pair of neighbours with the larger fall (how much less they hold than the
     # cell, summed; at the frame's edge the cell stands in for its missing neighbour) lies across the line, and
@@ -177,7 +188,8 @@ def shrink(ref, pal, size, rest=None, cover=COVER, contour=CONTOUR):
     crest_h = (mid > z[1:-1, :-2]) & (mid >= z[1:-1, 2:])
     crest_v = (mid > z[:-2, 1:-1]) & (mid >= z[2:, 1:-1])
     ridge = np.where(fall_h > fall_v, crest_h, np.where(fall_v > fall_h, crest_v, crest_h & crest_v))
-    is_line = (line >= 0) & ((share >= LINE_SOLID) | ((share >= LINE_LOW) & ridge) | (fill < 0))
+    # A 10-px stroke in 11-px cells passes as one pixel even at a 5+5 split. A full cell or wider still has a solid core.
+    is_line = (line >= 0) & ((share > LINE_SOLID) | ((share >= LINE_LOW) & ridge) | (fill < 0))
     return np.where(covered >= cover, np.where(is_line, line, fill), -1)
 
 
@@ -191,7 +203,8 @@ def to_image(idx, pal):
 
 def read(path, key=None):
     """An image as H x W x 4 uint8; key (r, g, b), if given, is read as air."""
-    a = np.asarray(Image.open(path).convert("RGBA")).copy()
+    with Image.open(path) as im:
+        a = np.array(im.convert("RGBA"))
     if key is not None:
         a[(a[..., :3] == np.array(key, np.uint8)).all(-1), 3] = 0
     return a
@@ -233,7 +246,8 @@ def main(argv):
                 i += 1
         if len(pos) != 1:
             raise ValueError("give one reference image" if not pos else f"one reference image only, not {pos}")
-        for p in [pos[0]] + [opts[o] for o in ("--palette", "--rest") if o in opts]:
+        sources = [pos[0]] + [opts[o] for o in ("--palette", "--rest") if o in opts]
+        for p in sources:
             if not os.path.isfile(p):
                 raise ValueError(f"no such file: {p}")
 
@@ -295,21 +309,38 @@ def main(argv):
                                  f"{size[0]}x{size[1]}")
             rest = np.where(r[..., 3] >= 128, snap(r[..., :3], pal), -1)
         out = shrink(ref, pal, size, rest, cover, contour)
-    except ValueError as e:
+        name = opts.get("--name", os.path.splitext(os.path.basename(pos[0]))[0])
+        if not name or name in (".", "..") or any(c in '/\\:<>"|?*' or ord(c) < 32 for c in name):
+            raise ValueError(f"--name must be a file name, not {name!r}")
+        folder = os.path.realpath(opts.get("--out", os.path.dirname(os.path.abspath(pos[0]))))
+        filenames = [f"{name}_shrunk.png"] + ([f"{name}_palette.png"] if n is not None else [])
+        for filename in filenames:
+            target = os.path.join(folder, filename)
+            if os.path.isdir(target):
+                raise ValueError(f"output {target} is a directory")
+            resolved = os.path.realpath(target)
+            if os.path.normcase(os.path.dirname(resolved)) != os.path.normcase(folder):
+                raise ValueError(f"output {target} resolves outside {folder}")
+            for source in sources:
+                if (os.path.normcase(resolved) == os.path.normcase(os.path.realpath(source))
+                        or os.path.exists(target) and os.path.samefile(target, source)):
+                    raise ValueError(f"output {target} would overwrite source {source}; choose a different --out or --name")
+        os.makedirs(folder, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=folder) as stage:
+            to_image(out, pal).save(os.path.join(stage, filenames[0]))
+            if n is not None:
+                colours = np.concatenate([pal, np.full((len(pal), 1), 255, np.uint8)], 1)
+                Image.fromarray(colours[None]).save(os.path.join(stage, filenames[1]))
+            for filename in filenames:
+                os.replace(os.path.join(stage, filename), os.path.join(folder, filename))
+    except (OSError, ValueError, Image.DecompressionBombError) as e:
         print(f"error: {e}  (--help lists the options)", file=sys.stderr)
         return 2
-    name = opts.get("--name", os.path.splitext(os.path.basename(pos[0]))[0])
-    folder = opts.get("--out", os.path.dirname(os.path.abspath(pos[0])))
-    os.makedirs(folder, exist_ok=True)
-    target = os.path.join(folder, f"{name}_shrunk.png")
-    to_image(out, pal).save(target)
     print(f"{name}: {out.shape[1]}x{out.shape[0]} px, {int((out >= 0).sum())} drawn, "
           f"{len(np.unique(out[out >= 0]))} of {len(pal)} palette colours used")
     if n is not None:
-        swatch = os.path.join(folder, f"{name}_palette.png")
-        Image.fromarray(np.concatenate([pal, np.full((len(pal), 1), 255, np.uint8)], 1)[None]).save(swatch)
-        print("palette:", swatch)
-    print("shrunk:", target)
+        print("palette:", os.path.join(folder, filenames[1]))
+    print("shrunk:", os.path.join(folder, filenames[0]))
     return 0
 
 

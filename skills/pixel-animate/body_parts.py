@@ -61,6 +61,7 @@ import json
 import math
 import os
 import sys
+import tempfile
 from collections import deque
 
 try:
@@ -100,7 +101,7 @@ PALETTE = [(255, 99, 132), (54, 162, 235), (255, 206, 86), (75, 192, 120), (153,
 # ---- the drawing ------------------------------------------------------------------------------------------------
 def silhouette(rgba):
     a = rgba.astype(int)
-    if (a[..., 3] < 250).any() and (a[..., 3] > 5).any():
+    if (a[..., 3] < 250).any():
         return a[..., 3] >= 128
     rgb = a[..., :3]
     border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
@@ -389,7 +390,6 @@ def fences(marks, names, k, shape, mask=None, ink=None):
         if par not in names or len(bone) < 2 or None in bone:
             continue
         p = names.index(par)
-        bone = joint_first(bone, dist[p], k)
         (px, py), (qx, qy) = [(x / k, y / k) for x, y in bone[:2]]
         L = math.hypot(qx - px, qy - py)
         if not L:
@@ -622,6 +622,14 @@ def simplify(pts, eps):
 
 def analyse(im, marks):
     k, mask, lab, full = load(im)
+    original = marks["parts"]
+    oriented = {}
+    for name, spec in original.items():
+        bone, parent = spec["bone"], spec.get("parent")
+        if parent in original and len(bone) > 1 and None not in bone:
+            bone = joint_first(bone, _bone_dist(original[parent]["bone"], k, mask.shape), k)
+        oriented[name] = dict(spec, bone=bone)
+    marks = dict(marks, parts=oriented)
     ink = ink_lines(lab, mask)
     flat = lab * np.array([L_WEIGHT, 1.0, 1.0])           # patches of one material, not of one shading band
     patch, _ = patches(flat, mask, ink)
@@ -639,6 +647,7 @@ def analyse(im, marks):
     aux = dict(k=k, mask=mask, ink=ink, patch=patch, label=label, names=names, full=full)
     labels_full = full_labels(aux, im.size)
     aux["labels_full"] = labels_full
+    total_full = int((labels_full >= 0).sum())
     parts, warn = [], []
     for i, n in enumerate(names):
         spec = marks["parts"][n]
@@ -671,9 +680,11 @@ def analyse(im, marks):
                 warn.append(f"{n}: {alien:.0%} of it is a colour not under its bone: a piece of another part seen "
                             "apart (a cape either side of a leg) may lack a bone, or this bone misses a colour")
         poly = [(int(x * k), int(y * k)) for x, y in simplify(outline(sel), 1.2)] if area else []
-        bbox = Image.fromarray(labels_full == i).getbbox()
+        full_sel = labels_full == i
+        bbox = Image.fromarray(full_sel).getbbox()
         parts.append(dict(name=n, label=i + 1, kind=spec.get("kind", n), parent=spec.get("parent"),
-                          pivot=bone[0], bone=spec["bone"], area_share=round(area / max(1, total), 4), pieces=len(ps),
+                          pivot=bone[0], bone=spec["bone"], area_share=round(int(full_sel.sum()) / max(1, total_full), 4),
+                          pieces=len(pieces(full_sel)),
                           bbox=list(bbox) if bbox else None, poly=poly))
     for p in parts:                                       # a part inside its parent (a jaw in the head)
         par = next((q for q in parts if q["name"] == p["parent"]), None)
@@ -688,12 +699,14 @@ def analyse(im, marks):
     for pname, pt in marks.get("points", {}).items():      # the eye in the head
         if pname != "eye" or pt is None:
             continue
-        x, y = int(round(pt[0] / k)), int(round(pt[1] / k))
-        if 0 <= y < label.shape[0] and 0 <= x < label.shape[1] and label[y, x] >= 0:
-            kind = marks["parts"][names[label[y, x]]].get("kind", "")
-            if kind not in ("head", "face", "skull"):
-                warn.append(f"the eye lies in {names[label[y, x]]} ({kind}), not in a head: the head's bone may miss "
-                            "the skull (run it through the skull's middle)")
+        x, y = map(round, pt)
+        if not (0 <= x < im.width and 0 <= y < im.height) or labels_full[y, x] < 0:
+            warn.append(f"the eye at {pt} is outside the labelled figure")
+            continue
+        owner = parts[labels_full[y, x]]
+        if owner["kind"] not in ("head", "face", "skull"):
+            warn.append(f"the eye lies in {owner['name']} ({owner['kind']}), not in a head: the head's bone may miss "
+                        "the skull (run it through the skull's middle)")
     if loose > 0.02 * total:
         warn.append(f"{loose} figure pixels reached by no part, given to the nearest: a piece apart from the body "
                     "with no bone in it (give it one if it is a part of its own)")
@@ -845,6 +858,16 @@ def check_marks(marks):
         par = spec.get("parent")
         if par is not None and (not isinstance(par, str) or par == n or par not in parts):
             raise ValueError(f'part {n!r}: "parent" {par!r} names no other part (the parts are {", ".join(parts)})')
+    done = set()
+    for n in parts:
+        chain = {}
+        while n is not None and n not in done:
+            if n in chain:
+                cycle = list(chain)[chain[n]:] + [n]
+                raise ValueError('parent cycle: ' + ' -> '.join(cycle))
+            chain[n] = len(chain)
+            n = parts[n].get("parent")
+        done.update(chain)
     points = marks.get("points", {})
     if not isinstance(points, dict):
         raise ValueError('"points" must be an object')
@@ -898,13 +921,40 @@ def main(argv):
         print(f"error: {e}  (--help lists the options)", file=sys.stderr)
         return 2
     src = pos[0]
-    im = Image.open(src)
     name = opts.get("--name", os.path.splitext(os.path.basename(src))[0])
     out = opts.get("--out", os.path.dirname(os.path.abspath(src)))
-    os.makedirs(out, exist_ok=True)
+    suffixes = ("_grid.png",) if grid_only else ("_parts.png", "_patches.png", "_labels.png", "_parts.json")
+    try:
+        if not name or name in (".", "..") or any(c in '/\\:<>"|?*' or ord(c) < 32 for c in name):
+            raise ValueError(f"--name must be a file name, not {name!r}")
+        folder = os.path.realpath(out)
+        for suffix in suffixes:
+            target = os.path.join(folder, name + suffix)
+            if os.path.isdir(target):
+                raise ValueError(f"output {target} is a directory")
+            resolved = os.path.realpath(target)
+            if os.path.normcase(os.path.dirname(resolved)) != os.path.normcase(folder):
+                raise ValueError(f"output {target} resolves outside {out}")
+            for source in pos:
+                if (os.path.normcase(resolved) == os.path.normcase(os.path.realpath(source))
+                        or os.path.exists(target) and os.path.samefile(target, source)):
+                    raise ValueError(f"output {target} would overwrite source {source}; choose a different --out or --name")
+        with Image.open(src) as image:
+            im = image.convert("RGBA")
+    except (ValueError, OSError, Image.DecompressionBombError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     if grid_only:
         p = os.path.join(out, f"{name}_grid.png")
-        grid(im, p, int(step))
+        try:
+            os.makedirs(out, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir=out) as stage:
+                ready = os.path.join(stage, os.path.basename(p))
+                grid(im, ready, int(step))
+                os.replace(ready, p)
+        except OSError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
         print(p)
         return 0
     try:
@@ -913,11 +963,20 @@ def main(argv):
         if not isinstance(marks, dict) or not isinstance(marks.get("parts"), dict) or not marks["parts"]:
             raise ValueError('no "parts" in it')
         check_marks(marks)
-    except ValueError as e:
+    except (ValueError, OSError) as e:
         print(f"error: {pos[1]}: not a landmarks file ({e})", file=sys.stderr)
         return 2
     res, aux = analyse(im, marks)
-    draw(im, res, aux, out, name)
+    try:
+        os.makedirs(out, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=out) as stage:
+            draw(im, res, aux, stage, name)
+            for suffix in suffixes:
+                filename = name + suffix
+                os.replace(os.path.join(stage, filename), os.path.join(out, filename))
+    except OSError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     for p in res["parts"]:
         print(f"{p['name']:14s} {p['kind']:10s} share {p['area_share']:.3f} pieces {p['pieces']} bbox {p['bbox']}"
               + (f" inside {p['inside']}" if p.get("inside") else ""))

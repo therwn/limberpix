@@ -5,6 +5,9 @@ the figure) as eye-placed ones are; a part seen in two pieces (the cape either s
 each, as the method asks. Every part must come out matching its true pixels (IoU >= 0.8, measured off the ink:
 which side an outline goes to is a matter of taste). And a cape marked on one side only must be flagged."""
 import contextlib
+import hashlib
+from pathlib import Path
+import shutil
 import inspect
 import io
 import json
@@ -268,10 +271,39 @@ def run():
     d.rectangle((30, 30, 70, 70), fill="green")
     d.line((71, 50, 370, 50), fill="green")
     d.point((400, 50), fill="gold")
-    _, detail_aux = bp.analyse(detail, {"parts": {"body": {"bone": [[50, 50]]}}})
+    detail_result, detail_aux = bp.analyse(detail, {"parts": {"body": {"bone": [[50, 50]]}}})
     all_pixels = np.array_equal(bp.full_labels(detail_aux, detail.size) == 0, np.asarray(detail.getchannel("A")) != 0)
     print("full-size mask keeps a thin tail and a detached spark:", "ok" if all_pixels else "WRONG")
     ok &= all_pixels
+    part = detail_result["parts"][0]
+    detail_ok = part["pieces"] == 2 and part["area_share"] == 1 and part["bbox"] == [30, 30, 401, 71]
+    print("full-size part statistics include the detached spark:", "ok" if detail_ok else f"WRONG {part}")
+    ok &= detail_ok
+    small = Image.new("RGBA", (36, 20))
+    pen = ImageDraw.Draw(small)
+    pen.rectangle((3, 5, 17, 15), fill=(136, 98, 50, 255))
+    pen.rectangle((17, 8, 31, 12), fill=(45, 150, 110, 255))
+    hinge = {"parts": {"head": {"bone": [[6, 10], [15, 10]]},
+                       "arm": {"parent": "head", "bone": [[17, 10], [29, 10]]}}, "points": {"eye": [8, 8]}}
+    forward, forward_aux = bp.analyse(small, hinge)
+    hinge["parts"]["arm"]["bone"].reverse()
+    reverse, reverse_aux = bp.analyse(small, hinge)
+    same = (forward["parts"][1]["pivot"] == reverse["parts"][1]["pivot"] == [17, 10]
+            and np.array_equal(forward_aux["labels_full"], reverse_aux["labels_full"]))
+    print("reversed arm keeps the shoulder pivot and labels:", "ok" if same else f"WRONG {reverse['parts'][1]['pivot']}")
+    ok &= same
+    eyes = not any("eye" in w for w in forward["warnings"])
+    for eye in ([0, 0], [-1, 8]):
+        hinge["points"]["eye"] = eye
+        eyes &= any("eye" in w for w in bp.analyse(small, hinge)[0]["warnings"])
+    print("eye ownership uses default head kind and visible pixels:", "ok" if eyes else "WRONG")
+    ok &= eyes
+    empty = Image.new("RGBA", (16, 16))
+    ImageDraw.Draw(empty).rectangle((4, 4, 11, 11), fill=(255, 155, 40, 0))
+    _, hidden_aux = bp.analyse(empty, {"parts": {"body": {"bone": [[6, 8], [9, 8]]}}})
+    hidden = int((hidden_aux["labels_full"] >= 0).sum())
+    print("fully transparent RGB has no visible labels:", "ok" if not hidden else f"WRONG {hidden}")
+    ok &= hidden == 0
     ok &= creatures()
     ok &= cli()
     print("selftest:", "all hold" if ok else "FAILED")
@@ -295,6 +327,29 @@ def cli():
             return bp.main(args), buf.getvalue()
     case("--help exits 0", run_main(["--help"])[0] == 0 and run_main(["-h"])[0] == 0)
     case("no arguments exit 2", run_main([])[0] == 2)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        drawing, marks = root / "small.png", root / "cycle.json"
+        Image.new("RGBA", (10, 10), (100, 50, 80, 255)).save(drawing)
+        marks.write_text(json.dumps({"parts": {"a": {"bone": [[2, 2]], "parent": "b"},
+                                                "b": {"bone": [[7, 7]], "parent": "a"}}}), encoding="utf-8")
+        code, report = run_main([str(drawing), str(marks)])
+        case("parent cycles are usage errors", code == 2 and "cycle" in report and "a" in report and "b" in report,
+             (code, report))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        examples = Path(__file__).resolve().parents[2] / "examples"
+        drawing, marks = root / "figure.png", root / "figure_parts.json"
+        shutil.copyfile(examples / "figure.png", drawing)
+        shutil.copyfile(examples / "marks.json", marks)
+        before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in root.iterdir()}
+        code, report = run_main([str(drawing), str(marks)])
+        after = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in root.iterdir()}
+        case("source marks cannot be overwritten", code == 2 and marks.name in report and before == after,
+             (code, before[marks.name] == after[marks.name], sorted(after)))
+        shutil.copyfile(examples / "marks.json", marks)
+        code, report = run_main([str(drawing), str(marks), "--out", str(root / "cut")])
+        case("the same sources cut into a separate folder", code == 0, report)
     with tempfile.TemporaryDirectory() as tmp:
         src = os.path.join(tmp, "fig.png")
         figure()[0].resize((150, 200)).save(src)

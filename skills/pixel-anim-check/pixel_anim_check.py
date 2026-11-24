@@ -32,6 +32,7 @@ optional. Options:
                       second, a decimal allowed (default 30: used to sample a GIF input and play the GIF, and by
                       choppy, boil's rates, snap, hitch, the eye tick's dwell and an action's held keys)
   --name NAME         the stem of the written files (default anim)
+  --no-preview        print the same checks and motion tracks without rendering a PNG or GIF
   --action NAME[:KIND[:DIR]]  that loop is an action: it may hold up to two keys (a wind-up and a follow-through),
                       each up to 13 frames (at 30 fps), outside choppy and uneven. KIND strike (its phases are
                       judged; DIR right|left|up|down, default the facing), jump (it leaves the ground: ground is
@@ -141,10 +142,11 @@ Warnings (lines "warn: ...", not faults; look at them): the eye tick, reshape an
   hitch    the head (the eye's track), or a --parts part, steps alone after holding still 10+ frames at 30 fps
 After the faults it prints read-outs: per loop the steps, the eye's rows, the update and real-pose rates, the box and
 its anchor, rare colours; the move's bob, leg band and planted-foot speed; each action's phases and staging; parts.
-Writes <out>/<name>_check.png (each distinct pose zoomed, at most 12 a loop plus any a fault names, labelled with the
-frames it holds, "4-7", and under it the pixels changed from the one before, in red; the poses a fault names are
-outlined in red) and <out>/<name>_check.gif
-(the loops side by side, at --fps). Look at both: the numbers do not see likeness or taste.
+Unless --no-preview is given, writes <name>_check.png and <name>_check.gif in the folder printed as "sheets".
+The PNG shows up to 12 distinct poses per loop plus any pose named in a fault, with frame labels and changes
+from the last pose. The GIF plays the loops side by side at --fps. <out>/<name>_check.json points to the latest
+complete pair. When --out is a frame input folder, look under its anim-previews subfolder. Look at both previews:
+the numbers do not see likeness or taste.
 --selftest draws a small walker and flier, checks they pass, then breaks them on purpose in every way above and
 checks each break is caught. Run it after changing this file.
 
@@ -157,13 +159,15 @@ import json
 import math
 import os
 import re
+import shutil
 import statistics
 import sys
+import tempfile
 from fractions import Fraction
 
 try:
     import numpy as np
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFont
 except ImportError as e:                                  # python -I does not see a pip install --user
     raise type(e)(f"{e}: {os.path.basename(__file__)} needs numpy and Pillow. python -I (isolated mode) does "
                   "not see packages installed with pip install --user: install them in a virtual "
@@ -212,6 +216,11 @@ SPOT_PX, SPOT_HUE, SPOT_SAT, SPOT_INK = 3, 1 / 8, 0.15, 45   # spots: a mark's m
 SPOT_PAD, SPOT_REACH, SPOT_TOL, SPOT_DROP = 8, 12, 1, 0.4    # the circle), least saturation; ink's lightness; the
                                                              # window round a group, its search, a mark's slack in
                                                              # px, the share of a tone mark's lightness step
+MAX_INPUT_FRAMES = 2048
+MAX_INPUT_PIXELS = 8_000_000
+MAX_CLIP_SECONDS = 120
+MAX_PREVIEW_PIXELS = 80_000_000          # the 144-image bird preview is 72,532,800 pixels at the default zoom
+MAX_PREVIEW_SIDE = 32_768
 
 
 def hexrgb(v):
@@ -474,35 +483,42 @@ def _shadow_pixels(f, colours):
 def check(loops, spec, warns=None):
     """loops: {name: [frame, ...]}, a frame a list of rows of colour keys or None. Returns fault lines; warns, if a
     list, receives the warning lines (looked at, not counted as faults)."""
+    return [str(line) for line in _check(loops, spec, warns)]
+
+
+def _check(loops, spec, warns=None):
     faults, warns = [], (warns if warns is not None else [])
     allf = [(a, i, f) for a, v in loops.items() for i, f in enumerate(v)]
     sizes = {_frame_size(f) for _, _, f in allf}
     if len(sizes) > 1:
         return [f"size: frames differ {sorted(sizes)}"]
-    fx = spec.effects
+    skip = spec.effects | spec.shadow
+    unavailable = set()
     for a, i, f in allf:
-        drawn = [(x, y) for y, r in enumerate(f) for x, v in enumerate(r) if v is not None]
+        drawn = [(x, y) for y, r in enumerate(f) for x, v in enumerate(r) if v is not None and v not in skip]
         if not drawn:
             faults.append(f"empty: {a}[{i}]")
+            unavailable.add(a)
             continue
-        stray = [s for s in _pieces(f, fx | spec.shadow)[:-1] if s > spec.allow.get(a, 0)]
+        stray = [s for s in _pieces(f, skip)[:-1] if s > spec.allow.get(a, 0)]
         if stray:
             faults.append(f"apart: {a}[{i}] {len(stray)} piece(s) of {stray} px apart from the figure")
-        if spec.eye and a not in spec.glows_eye and not any(v == spec.eye for r in f for v in r):
+        if spec.eye is not None and a not in spec.glows_eye and not any(f[y][x] == spec.eye for x, y in drawn):
             faults.append(f"eye: {a}[{i}] has no eye ({spec.eye})")
         h, w = len(f), len(f[0])
-        open_edge = sum(1 for x, y in drawn if not spec.is_ink(f[y][x]) and f[y][x] not in spec.shadow
-                        and f[y][x] not in fx and any(not (0 <= x + dx < w and 0 <= y + dy < h)
+        open_edge = sum(1 for x, y in drawn if not spec.is_ink(f[y][x])
+                        and any(not (0 <= x + dx < w and 0 <= y + dy < h)
                                                       or f[y + dy][x + dx] is None
                                                       for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))))
         if open_edge > 2:                                 # a redrawn style may line its edges in colour (selout)
             line = f"outline: {a}[{i}] {open_edge} coloured edge pixel(s) with no ink"
             (faults.append(line) if spec.style == "pixel" else warns.append("warn: " + line))
-    if any(not any(v is not None for r in f for v in r) for _, _, f in allf):
+    loops = {a: frames for a, frames in loops.items() if frames and a not in unavailable}
+    if not loops:
         return faults
     for a, frames in loops.items():
         kind = spec.actions.get(a, (None, None))[0]
-        figs = [[[None if v in fx else v for v in r] for r in f] for f in frames]   # the creature alone
+        figs = [[[None if v in skip else v for v in r] for r in f] for f in frames]
         if spec.flier:
             if spec.shadow:
                 rest_shadow = _shadow_pixels(frames[0], spec.shadow)
@@ -523,7 +539,7 @@ def check(loops, spec, warns=None):
         faults += _jump(a, steps, figs, kind)
         faults += _knocked(a, frames, spec)
 
-        body = sum(1 for r in _figure(frames[0], spec) for v in r if v is not None)
+        body = sum(v is not None for r in figs[0] for v in r)
         if a == spec.move and body and mean / body < STILL:
             faults.append(f"still: {a} changes {mean / body:.1%} of the figure a frame")
         if spec.style == "pixel":                         # a redrawn pose redraws its texture on purpose
@@ -581,7 +597,7 @@ def _knocked(a, frames, spec):
     one of them moved 2 px or more with almost nothing else changed (3 % of the figure). On ones the neighbours are
     the frames either side; on twos they are the poses either side of the hold, not the hold's own twin. The whole
     run is reported: "move[6-7] (a held pose)"."""
-    arr, _ = _arrays(frames, Spec(ink=spec.ink, lum=spec.lum))   # one key table, everything drawn kept
+    arr, _ = _arrays(frames, spec)
     runs, n, out = _same_runs(arr), len(arr), []
     P = len(runs)
     if P < 2:
@@ -829,7 +845,11 @@ def cadence(loops, spec):
                 or 0 < longest[-1] <= key)                            # action's held key too
         second = (key and len(longest) > 3 and 0 < longest[-2] <= key   # an action's second held key
                   and longest[-2] >= 2 * statistics.median(longest[:-2]))
-        seq = [h for h in holds if not (rest and h == longest[-1]) and not (second and h == longest[-2])]
+        ranked = sorted(range(len(holds)), key=holds.__getitem__, reverse=True)
+        exempt = {ranked[0]} if rest else set()
+        if second:
+            exempt.add(ranked[1])
+        seq = [h for i, h in enumerate(holds) if i not in exempt]
         abrupt = sum(1 for p, q in zip(seq, seq[1:] + seq[:1]) if max(p, q) >= 2 * min(p, q) and abs(p - q) >= 2)
         if len(seq) >= 4 and abrupt >= len(seq) / 2:      # a cycle (a gesture of two or three moves is not); a
             # sway's ease doubling its hold at each turn is half less: ease at a stroke's turn lengthens holds gradually
@@ -978,7 +998,7 @@ def tick(loops, spec, warns):
         n = len(frames)
         if n < 4:
             continue
-        if spec.eye and a not in spec.glows_eye:
+        if spec.eye is not None and a not in spec.glows_eye:
             ys = _eye_rows(frames, spec)
             R = _runs(ys) if ys else []
             bad = _pulse(R, spec.fps)
@@ -1197,7 +1217,7 @@ def reshape(loops, spec, warns):
         x0, x1 = int(xs.min()), int(xs.max())
         left = spec.facing == "left"
         eye = None
-        c = _eye_piece(f0, spec) if spec.eye else None
+        c = _eye_piece(f0, spec) if spec.eye is not None else None
         if c:
             eye = (round(c[1]), round(c[0]))
         else:
@@ -1352,6 +1372,16 @@ def _pose_ref(a, runs, i, n):
     return f"{a}[{k0}]" if ln == 1 else f"{a}[{k0}-{(k0 + ln - 1) % n}]"
 
 
+class _PoseFault(str):
+    """A diagnostic carrying the original pose runs for the contact sheet."""
+
+    def __new__(cls, text, loop, runs):
+        line = super().__new__(cls, text)
+        line.loop = loop
+        line.runs = tuple(runs)
+        return line
+
+
 def lostmark(loops, spec):
     """The redrawn style: marks drawn inside a patch of one colour (a mouth on a face, a stud on a coat) that vanish
     in some poses. Every patch of one colour of PATCH_MIN px and PATCH_FRAC of the figure or more in the first pose
@@ -1410,10 +1440,11 @@ def lostmark(loops, spec):
                 gone = [i for i, m in enumerate(marks) if not m]
                 times = sum(1 for i in gone if (i - 1) % len(P) not in gone)
                 if gone and len(P) - len(gone) >= LOST_HAVE * len(P) and times >= LOST_RUNS:
-                    out.append(f"lostmark: {a} the marks inside a patch at row {round(cen[0])}, column "
-                               f"{round(cen[1])} (a mouth on a face, a stud on a coat: {marks[0]} px in the first "
-                               f"pose) vanish in {', '.join(_pose_ref(a, runs, i, n) for i in gone)}: a generated "
-                               f"frame dropping them. Draw them on every pose")
+                    line = (f"lostmark: {a} the marks inside a patch at row {round(cen[0])}, column "
+                            f"{round(cen[1])} (a mouth on a face, a stud on a coat: {marks[0]} px in the first "
+                            f"pose) vanish in {', '.join(_pose_ref(a, runs, i, n) for i in gone)}: a generated "
+                            f"frame dropping them. Draw them on every pose")
+                    out.append(_PoseFault(line, a, (runs[i] for i in gone)))
     return out
 
 
@@ -1455,9 +1486,10 @@ def gaps(loops, spec):
         rate = 100 * total / max(1, edges)
         if rate > GAP_RATE:
             top = sorted(worst, reverse=True)[:3]
-            out.append(f"gaps: {a} the outline breaks in short stretches, {rate:.1f} per 100 edge px (most in "
-                       f"{', '.join(f'{_pose_ref(a, runs, i, len(frames))} ({g})' for g, i in top)}): coloured "
-                       f"pixels of 1-{GAP_LEN} px between ink on the edge. Ink the edge on every pose")
+            line = (f"gaps: {a} the outline breaks in short stretches, {rate:.1f} per 100 edge px (most in "
+                    f"{', '.join(f'{_pose_ref(a, runs, i, len(frames))} ({g})' for g, i in top)}): coloured "
+                    f"pixels of 1-{GAP_LEN} px between ink on the edge. Ink the edge on every pose")
+            out.append(_PoseFault(line, a, (runs[i] for _, i in top)))
     return out
 
 
@@ -1663,11 +1695,13 @@ def spots(loops, spec, warns):
             for name, (pts, hue, kind, drop, n_ref) in groups.items():
                 n = _matched(pts, _marks_found(pr, pd, hue, kind, drop), _group_shift(pts, rc, pc, prior))
                 if n < n_ref:
-                    lost[name].append(f"{_pose_ref(a, runs, i, len(frames))} {n}")
+                    lost[name].append((i, n))
         for name, where in lost.items():
             if where:
-                out.append(f"spots: {a} the marks {name!r} ({groups[name][4]} in the approved drawing) are fewer in "
-                           f"{', '.join(where)}: draw every one on every pose, in its place")
+                poses = ', '.join(f"{_pose_ref(a, runs, i, len(frames))} {n}" for i, n in where)
+                line = (f"spots: {a} the marks {name!r} ({groups[name][4]} in the approved drawing) are fewer in "
+                        f"{poses}: draw every one on every pose, in its place")
+                out.append(_PoseFault(line, a, (runs[i] for i, _ in where)))
     return out
 
 
@@ -1677,11 +1711,14 @@ def _tops(frames, spec):
     for f in frames:
         fig = [[None if v in spec.effects or v in spec.shadow else v for v in r] for r in f]
         xs = [x for r in fig for x, v in enumerate(r) if v is not None]
+        if not xs:
+            tops.append(None)
+            continue
         x0, x1 = min(xs), max(xs)
         cols = range(x0 + (x1 - x0) // 3, x0 + 2 * (x1 - x0) // 3 + 1)
         t = [next((y for y in range(len(fig)) if fig[y][x] is not None), None) for x in cols]
         t = [v for v in t if v is not None]
-        tops.append(sum(t) / len(t))
+        tops.append(sum(t) / len(t) if t else None)
     return tops
 
 
@@ -1691,21 +1728,24 @@ def stiff(loops, spec):
     if spec.flier or not spec.gait or spec.move not in loops:
         return []
     tops = _tops(loops[spec.move], spec)
-    if max(tops) - min(tops) < STIFF:
+    if tops and None not in tops and max(tops) - min(tops) < STIFF:
         return [f"stiff: {spec.move} the body never rises or falls ({max(tops) - min(tops):.1f} px): lift it on "
                 f"each step"]
     return []
 
 
-def _head(loops, spec):
+def _head(frames, spec):
     """The first frame showing the eye, the eye's place on it (_eye_piece: (row, column)) and hr, the half side of
     the head's box round the eye: max(3, round(0.12 * the figure's width)) on that frame. None with no eye."""
     eye = spec.eye
-    f0 = next((f for v in loops.values() for f in v if any(eye in r for r in f)), None) if eye else None
+    if eye is None or eye in spec.effects or eye in spec.shadow:
+        return None
+    f0 = next((f for f in frames if any(eye in r for r in f)), None)
     if f0 is None:
         return None
-    xs = [x for r in f0 for x, v in enumerate(r) if v is not None and v not in spec.shadow]
-    return f0, _eye_piece(f0, spec), max(3, round(0.12 * (max(xs) - min(xs))))
+    skip = spec.shadow | spec.effects
+    xs = [x for r in f0 for x, v in enumerate(r) if v is not None and v not in skip]
+    return _eye_piece(f0, spec), max(3, round(0.12 * (max(xs) - min(xs))))
 
 
 def eye_jumps(loops, spec, warns):
@@ -1718,13 +1758,14 @@ def eye_jumps(loops, spec, warns):
     idles and moves jump 1-2 px a frame against limits of 7 (walker, flier) and 17-19 (showcase); the showcase's
     attacks 3-15 px against 17-19 (they would only warn); a walk frame mirrored 21 px against 7; the broken example
     (a frame knocked 4 px) 4 against 7, so it does not fire there."""
-    got = _head(loops, spec)
-    if got is None:
-        return []
-    lim, out = 2 * got[2] + 1, []
+    out = []
     for a, frames in loops.items():
         if a in spec.glows_eye or len(frames) < 2:
             continue
+        head = _head(frames, spec)
+        if head is None:
+            continue
+        lim = 2 * head[1] + 1
         tr, n, worst = _eye_track(frames, spec), len(frames), None
         for k in range(n):
             p, q = tr[k], tr[(k + 1) % n]
@@ -1753,15 +1794,15 @@ def frozen(loops, spec):
     riding). It still catches a head pasted in place while the body moves under it (the selftest's mask, and the
     same in relaxed_bounds). The eye is the piece _eye_piece reads, so its colour used elsewhere on the body does
     not move the box."""
-    got = _head(loops, spec)
-    if got is None:
-        return []
-    f0, (ey, ex), hr = got
     out = []
     for a in (spec.idle, spec.move):
-        if a not in loops:
+        if a not in loops or a in spec.glows_eye:
             continue
         fr = loops[a]                                     # as drawn: a head riding the body's bob is alive
+        head = _head(fr, spec)
+        if head is None:
+            continue
+        (ey, ex), hr = head
         h, w = len(fr[0]), len(fr[0][0])
         box = [(x, y) for y in range(max(0, int(ey - hr)), min(h, int(ey + hr) + 1))
                for x in range(max(0, int(ex - hr)), min(w, int(ex + hr) + 1))]
@@ -2239,7 +2280,7 @@ def gait(loops, spec, warns):
         return []
     a, frames = spec.move, loops[spec.move]
     tops = _tops(frames, spec)
-    if max(tops) - min(tops) >= STIFF:
+    if None not in tops and max(tops) - min(tops) >= STIFF:
         k, s = _dom(tops), _spectrum(tops)
         if k != 2 and max((v for i, v in enumerate(s) if i != k - 1), default=0.0) < GAIT_CLEAR * s[k - 1]:
             warns.append(f"warn: gait: {a} the body bobs {k} time(s) a loop: a two-step walk rises and sinks twice, "
@@ -2729,8 +2770,9 @@ def split(loops, spec, warns):
     read: its back carries its wings. A warning only."""
     if not loops or spec.flier:
         return []
-    src = spec.ref if spec.ref is not None else (loops.get(spec.idle) or next(iter(loops.values())))[0]
-    R = _arrays([src], spec)[0][0]
+    src = spec.ref if spec.ref is not None else (loops.get(spec.idle) or loops[min(loops)])[0]
+    keys = {}
+    R = _arrays([src], spec, keys)[0][0]
     if not R.any():
         return []
     got = _torso(R, _eye_at(src, spec), spec.facing)
@@ -2745,7 +2787,7 @@ def split(loops, spec, warns):
     blocks = (slice(max(0, min(rt[x] for x in X) - 2), mid + 1),   # middle, or the middle down to the belly
               slice(mid, max([rb[x] for x in X if rb[x] is not None], default=band[1]) + 3))
     for a, frames in loops.items():
-        figs, _ = _arrays(frames, spec)
+        figs, _ = _arrays(frames, spec, keys)
         if figs[0].shape != R.shape:
             continue
         runs = _same_runs(figs)
@@ -2835,7 +2877,7 @@ def hitch(loops, spec, warns):
             key = {(r[0] + j) % n for j in range(r[1])}
         h, w = figs[0].shape
         found = []
-        if spec.eye and a not in spec.glows_eye:
+        if spec.eye is not None and a not in spec.glows_eye:
             tr = _eye_track(frames, spec)
             if all(tr) and len(set(tr)) > 1:
                 xs = np.nonzero(np.any([f > 0 for f in figs], 0).any(0))[0]
@@ -2890,8 +2932,9 @@ def readouts(loops, spec):
             continue
         if n >= 4:
             runs, flags = _boil(figs)
-            lines.append(f"{a}: {len(runs)} poses: updates {len(runs) * spec.fps / n:.1f}/s, real poses "
-                         f"{(len(runs) - sum(flags)) * spec.fps / n:.1f}/s")
+            changes = len(runs) if len(runs) > 1 else 0
+            lines.append(f"{a}: {len(runs)} poses: updates {changes * spec.fps / n:.1f}/s, real poses "
+                         f"{(changes - sum(flags)) * spec.fps / n:.1f}/s")
         B = [b for b in (_box(f) for f in figs) if b]
         if B:
             hs, ws = [b[1] - b[0] + 1 for b in B], [b[3] - b[2] + 1 for b in B]
@@ -2901,7 +2944,7 @@ def readouts(loops, spec):
         rare = _rare(frames, spec) if n >= 4 else {}
         if rare:
             lines.append(f"{a}: rare colours " + ", ".join(f"{c} ({len(k)} frames)" for c, k in list(rare.items())[:6]))
-        if spec.eye and a in (spec.idle, spec.move) and a not in spec.glows_eye and n >= 4:
+        if spec.eye is not None and a in (spec.idle, spec.move) and a not in spec.glows_eye and n >= 4:
             ys = _eye_rows(frames, spec)
             if ys and len(set(ys)) > 1:
                 tops = [b[0] for b in (_box(f) for f in figs)]
@@ -2913,8 +2956,8 @@ def readouts(loops, spec):
             if mv:
                 lines.append(f"{a}: the closing step (frame {n - 1} to 0) is {st[-1] / statistics.median(mv):.2f} "
                              f"times the median moving step (clean walks and beats 0.78-1.32; a read-out)")
-        if a == spec.move and not spec.flier and spec.gait and n >= 4:
-            tops = _tops(frames, spec)
+        tops = _tops(frames, spec) if a == spec.move and not spec.flier and spec.gait and n >= 4 else []
+        if tops and None not in tops:
             u = np.any([f > 0 for f in figs], 0)
             rows = np.nonzero(u.any(1))[0]
             H = int(rows.max() - rows.min() + 1)
@@ -2947,7 +2990,7 @@ def readouts(loops, spec):
             got = _part_lags(spec.parts[a]) if n >= 4 else None
             lags = got[1] if got else {}
             lines.append(f"{a}: parts " + "; ".join(
-                f"{c} area {min(t[0] for t in tr if t)}-{max(t[0] for t in tr if t)}"
+                f"{c} area {min(t[0] if t else 0 for t in tr)}-{max(t[0] for t in tr if t)}"
                 + (f" lag {lags[c]}" if c in lags else "") for c, tr in T.items() if any(tr)))
     return lines
 
@@ -2967,25 +3010,46 @@ def fault_frames(lines, loops):
     may wrap past the loop's end: "move[15-0]") and "loop ... (frame k)". Frame indices are 0-based; a jump's or a
     snap's "frame k" is the change from frame k to the next, so both frames are named."""
     out = {}
+    if not loops:
+        return out
+    names = "|".join(re.escape(a) for a in sorted(loops, key=len, reverse=True))
+    starts = re.compile(rf"^\s*(?:warn: )?\w+: ({names})(?=\[|\s|$)")
+    refs = re.compile(rf"(?<!\w)({names})\[(\d+)(?:-(\d+))?\]")
     for line in lines:
-        m = re.match(r"\s*\w+: (\S+?)(?:\[(\d+)(?:-(\d+))?\])?\s", line + " ")
-        if not m or m.group(1) not in loops:
+        if isinstance(line, _PoseFault):
+            n = len(loops.get(line.loop, ()))
+            if n:
+                out.setdefault(line.loop, set()).update((k + i) % n for k, hold in line.runs for i in range(hold))
             continue
-        ks = out.setdefault(m.group(1), set())
-        n = len(loops[m.group(1)])
-        if m.group(2):
-            k, k1 = int(m.group(2)), int(m.group(3) or m.group(2))
-            ks.add(k)
-            for _ in range(n):
-                if k == k1:
-                    break
-                k = (k + 1) % n
-                ks.add(k)
-        for k in map(int, re.findall(r"\bframe (\d+)", line)):
-            ks.add(k)
-            if line.lstrip().startswith(("jump:", "snap:")):      # a step: the frame after it too
-                ks.add((k + 1) % n if n else k + 1)
+        for name, first, last in refs.findall(line):
+            k, k1, n = int(first), int(last or first), len(loops[name])
+            if k < n and k1 < n:
+                out.setdefault(name, set()).update((k + i) % n for i in range((k1 - k) % n + 1))
+        m = starts.match(line)
+        if m:
+            a = m[1]
+            ks, n = out.setdefault(a, set()), len(loops[a])
+            for k in map(int, re.findall(r"\bframe (\d+)", line)):
+                if k < n:
+                    ks.add(k)
+                    if line.lstrip().startswith(("jump:", "snap:")):
+                        ks.add((k + 1) % n)
     return out
+
+
+def _preview_font():
+    for family in ("segoeui.ttf", "Arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf"):
+        try:
+            return ImageFont.truetype(family, 12)
+        except OSError:
+            pass
+    return ImageFont.load_default()
+
+
+def _preview_size(width, height, frames=1):
+    if max(width, height) > MAX_PREVIEW_SIDE or width * height * frames > MAX_PREVIEW_PIXELS:
+        raise ValueError(f"preview needs {width}x{height} pixels over {frames} image(s); use --no-preview "
+                         f"or reduce the input (limit {MAX_PREVIEW_PIXELS:,} pixels, {MAX_PREVIEW_SIDE:,} per side)")
 
 
 def sheet(loops, path, rgb=hexrgb, Z=6, faults=None):
@@ -2994,7 +3058,8 @@ def sheet(loops, path, rgb=hexrgb, Z=6, faults=None):
     pose just before it (shown or not), in red.
     faults: fault lines (check's result); the tiles of the frames they name are outlined in red."""
     marked = fault_frames(faults or [], loops)
-    rows = []
+    rows, width, height = [], 0, 0
+    gap, head = 8, 28
     for a, frames in loops.items():
         keys = []                                         # [first frame, last frame, the pose]
         for k, f in enumerate(frames):
@@ -3008,7 +3073,21 @@ def sheet(loops, path, rgb=hexrgb, Z=6, faults=None):
             keep = sorted(pick)
         else:
             keep = list(range(len(keys)))
-        tiles = []
+        tile_width = sum(len(keys[i][2][0]) * Z + gap for i in keep) + gap
+        width = max(width, tile_width)
+        height += 2 * len(keys[0][2]) * Z + head + 10
+        rows.append((a, keys, hit, keep))
+    _preview_size(width, height)
+    out = Image.new("RGB", (width, height), (16, 13, 20))
+    d, y0 = ImageDraw.Draw(out), 0
+    font = _preview_font()
+    for a, keys, hit, keep in rows:
+        try:
+            d.text((4, y0 + 2), a, fill=(240, 230, 200), font=font)
+        except UnicodeEncodeError:                       # legacy Pillow bitmap when no system font is available
+            d.text((4, y0 + 2), a.encode("ascii", "backslashreplace").decode("ascii"),
+                   fill=(240, 230, 200), font=font)
+        x0 = gap // 2
         for i in keep:
             k0, k1, f = keys[i]
             before = keys[i - 1][2]                         # the pose just before it, shown or not
@@ -3019,25 +3098,16 @@ def sheet(loops, path, rgb=hexrgb, Z=6, faults=None):
                         diff.putpixel((x, y), (230, 60, 60))
                     elif v is not None:
                         diff.putpixel((x, y), (90, 84, 100))
-            tiles.append((_img(f, rgb, Z), diff.resize((diff.width * Z, diff.height * Z), Image.NEAREST),
-                          f"{k0}" if k0 == k1 else f"{k0}-{k1}", hit[i]))
-        rows.append((a, tiles))
-    gap, head = 8, 28
-    W = max(sum(t.width + gap for t, *_ in tiles) for _, tiles in rows) + gap
-    out = Image.new("RGB", (W, sum(2 * t[0][0].height + head + 10 for _, t in rows)), (16, 13, 20))
-    d, y = ImageDraw.Draw(out), 0
-    for a, tiles in rows:
-        d.text((4, y + 2), a, fill=(240, 230, 200))
-        x = gap // 2
-        for top, diff, label, bad in tiles:
-            d.text((x, y + 15), label, fill=(255, 120, 120) if bad else (170, 160, 150))
-            out.paste(top, (x, y + head))
-            out.paste(diff, (x, y + head + 2 + top.height))
-            if bad:
-                d.rectangle((x - 3, y + head - 3, x + top.width + 2, y + head + 4 + 2 * top.height),
+            top = _img(f, rgb, Z)
+            label = str(k0) if k0 == k1 else f"{k0}-{k1}"
+            d.text((x0, y0 + 15), label, fill=(255, 120, 120) if hit[i] else (170, 160, 150))
+            out.paste(top, (x0, y0 + head))
+            out.paste(diff.resize(top.size, Image.NEAREST), (x0, y0 + head + 2 + top.height))
+            if hit[i]:
+                d.rectangle((x0 - 3, y0 + head - 3, x0 + top.width + 2, y0 + head + 4 + 2 * top.height),
                             outline=(255, 70, 70), width=2)
-            x += top.width + gap
-        y += 2 * tiles[0][0].height + head + 10
+            x0 += top.width + gap
+        y0 += 2 * len(keys[0][2]) * Z + head + 10
     out.save(path)
 
 
@@ -3061,6 +3131,10 @@ def gif(loops, path, rgb=hexrgb, fps=30, Z=5, speed=None, move=None, facing="rig
     names = list(loops)
     W, H = len(loops[names[0]][0][0]), len(loops[names[0]][0])
     n, repeat = _preview_span(loops, move, speed)
+    if not math.isfinite(fps) or fps <= 0 or n / fps > MAX_CLIP_SECONDS:
+        raise ValueError(f"GIF preview exceeds {MAX_CLIP_SECONDS} seconds at {fps:g} fps; use --no-preview")
+    count = min(n, max(1, math.floor(n * 100 / fps + 0.5)))
+    _preview_size(len(names) * (W + 6) * Z, (H + 4) * Z, count)
     frames, durations = [], []
     elapsed_cs = 0
     for t in range(n):
@@ -3095,7 +3169,7 @@ def tracks(loops, spec):
         n, area = len(figs), max(1.0, _area(figs))
         steps = [_chg(figs[k], figs[(k + 1) % n]) / area for k in range(n)]
         lines.append(f"{a}: steps " + " ".join(f"{s * 100:.0f}" for s in steps) + " (% of the figure)")
-        if spec.eye and a not in spec.glows_eye:
+        if spec.eye is not None and a not in spec.glows_eye:
             ys = _eye_rows(frames, spec)
             if ys:
                 lines.append(f"{a}: eye rows {[tuple(r) for r in _runs(ys)] or [(ys[0], n)]}")
@@ -3136,39 +3210,86 @@ def load(src, frame=None, frames=None, fps=None, key=None):
     file-name order (zero-pad the numbers: f00.png, f01.png, ...). For a GIF, round cumulative presentation times
     to game-frame boundaries. Without fps or a stored duration, count one game frame per image. key, a "#rrggbb",
     reads that exact colour as air (a strip with a flat background instead of transparency)."""
+    return _load(src, frame, frames, fps, key, _InputBudget())
+
+
+class _InputBudget:
+    def __init__(self):
+        self.frames = self.pixels = 0
+
+    def add(self, width, height, count=1):
+        self.frames += count
+        self.pixels += width * height * count
+        if self.frames > MAX_INPUT_FRAMES or self.pixels > MAX_INPUT_PIXELS:
+            raise ValueError(f"input exceeds {MAX_INPUT_FRAMES:,} frames or {MAX_INPUT_PIXELS:,} frame-pixels")
+
+
+def _png_paths(folder):
+    return [os.path.join(folder, n) for n in sorted(os.listdir(folder)) if n.lower().endswith(".png")
+            and os.path.isfile(os.path.join(folder, n))]
+
+
+def _image_grid(src, key, budget):
+    try:
+        with Image.open(src) as im:
+            budget.add(*im.size)
+            return _grid(im, key)
+    except (ValueError, OSError, SyntaxError, Image.DecompressionBombError) as e:
+        raise ValueError(f"{src}: {e}") from None
+
+
+def _load(src, frame, frames, fps, key, budget):
     if os.path.isdir(src):
-        return [_grid(Image.open(os.path.join(src, n)), key) for n in sorted(os.listdir(src))
-                if n.lower().endswith(".png")]
-    im = Image.open(src)
-    if im.format == "GIF" or getattr(im, "n_frames", 1) > 1:
-        out = []
-        elapsed_ms = previous_tick = 0
-        with im:
-            for k in range(im.n_frames):
-                im.seek(k)
-                ms = im.info.get("duration")
-                hold = 1
-                if fps and ms:
-                    elapsed_ms += ms
-                    end_tick = math.floor(elapsed_ms * fps / 1000 + 0.5)
-                    hold = end_tick - previous_tick
-                    previous_tick = end_tick
-                if hold:
-                    out.extend([_grid(im, key)] * hold)
-            if not out:
-                im.seek(0)
-                out.append(_grid(im, key))
-        return out
-    if frames:
-        if im.width % frames:
-            raise ValueError(f"{src}: {im.width} px wide does not split into {frames} frames")
-        fw = im.width // frames
-    else:
-        fw = frame or im.height
-        if fw <= 0 or im.width % fw:
-            raise ValueError(f"{src}: {im.width} px wide is not a whole number of {fw}-px frames"
-                             + ("" if frame else " (square frames assumed): pass --frame W or --frames N"))
-    return [_grid(im.crop((k * fw, 0, (k + 1) * fw, im.height)), key) for k in range(im.width // fw)]
+        return [_image_grid(p, key, budget) for p in _png_paths(src)]
+    try:
+        with Image.open(src) as im:
+            if im.format == "GIF" or getattr(im, "is_animated", False):
+                return _load_timed(im, fps, key, budget)
+            if frames:
+                if im.width % frames:
+                    raise ValueError(f"{im.width} px wide does not split into {frames} frames")
+                fw = im.width // frames
+            else:
+                fw = frame or im.height
+                if fw <= 0 or im.width % fw:
+                    raise ValueError(f"{im.width} px wide is not a whole number of {fw}-px frames"
+                                     + ("" if frame else " (square frames assumed): pass --frame W or --frames N"))
+            count = im.width // fw
+            budget.add(fw, im.height, count)
+            return [_grid(im.crop((k * fw, 0, (k + 1) * fw, im.height)), key) for k in range(count)]
+    except (ValueError, OSError, SyntaxError, Image.DecompressionBombError) as e:
+        raise ValueError(f"{src}: {e}") from None
+
+
+def _load_timed(im, fps, key, budget):
+    out, elapsed_ms, previous_tick, index = [], 0, 0, 0
+    decoded = _InputBudget()
+    while True:
+        try:
+            im.seek(index)
+        except EOFError:
+            break
+        index += 1
+        decoded.add(*im.size)
+        ms = im.info.get("duration") or 0
+        elapsed_ms += ms
+        if elapsed_ms > MAX_CLIP_SECONDS * 1000:
+            raise ValueError(f"image duration exceeds {MAX_CLIP_SECONDS} seconds")
+        hold = 1
+        if fps and ms:
+            if fps >= (MAX_INPUT_FRAMES + 0.5) * 1000 / elapsed_ms:
+                raise ValueError(f"timed image expands beyond {MAX_INPUT_FRAMES:,} frames at {fps:g} fps")
+            end_tick = math.floor(elapsed_ms * fps / 1000 + 0.5)
+            hold = end_tick - previous_tick
+            previous_tick = end_tick
+        if hold:
+            budget.add(*im.size, hold)
+            out.extend([_grid(im, key)] * hold)
+    if not out:
+        im.seek(0)
+        budget.add(*im.size)
+        out.append(_grid(im, key))
+    return out
 
 
 def _wide_strip(src):
@@ -3182,7 +3303,7 @@ def _wide_strip(src):
 VALUED = {"--loop", "--frame", "--frames", "--eye", "--eye-at", "--facing", "--ink", "--shadow", "--effects", "--allow",
           "--glows-eye", "--idle", "--move", "--out", "--fps", "--name", "--action", "--speed", "--parts", "--squash",
           "--palette", "--glow", "--ref", "--mark", "--sheet", "--key", "--min-rate", "--style", "--spots"}
-FLAGS = {"--flier", "--legless", "--selftest", "--help", "-h"}
+FLAGS = {"--flier", "--legless", "--no-preview", "--selftest", "--help", "-h"}
 
 
 def _args(argv):
@@ -3236,7 +3357,7 @@ def _eye_pieces(loops, spec):
     faults are trusted."""
     out = []
     for a, frames in loops.items():
-        if not spec.eye or a in spec.glows_eye or not frames:
+        if spec.eye is None or a in spec.glows_eye or not frames:
             continue
         n = len(_blobs(np.array([[v == spec.eye for v in r] for r in frames[0]])))
         if n > 1:
@@ -3245,6 +3366,53 @@ def _eye_pieces(loops, spec):
             out.append(f"note: {a}[0] shows the eye colour {spec.eye} in {n} pieces; the eye is read as the one at "
                        f"row {y:g}, column {x:g} ({how}) and followed from there")
     return out
+
+
+def _preview_folder(out, name, sources):
+    root = os.path.realpath(out)
+    folder = root
+    if any(os.path.isdir(p) and os.path.samefile(root, p) for p in sources if os.path.exists(root)):
+        folder = os.path.join(root, "anim-previews")
+        if os.path.normcase(os.path.realpath(folder)) != os.path.normcase(folder):
+            raise ValueError(f"preview folder {folder} must not redirect to another path")
+    inputs = [p for p in sources if not os.path.isdir(p)]
+    for src in sources:
+        if os.path.isdir(src):
+            inputs.extend(_png_paths(src))
+    for suffix in ("_check.png", "_check.gif", "_check.json"):
+        target = os.path.join(folder, name + suffix)
+        resolved = os.path.realpath(target)
+        if os.path.normcase(os.path.dirname(resolved)) != os.path.normcase(folder):
+            raise ValueError(f"output {target} resolves outside {folder}")
+        for source in inputs:
+            if (os.path.normcase(resolved) == os.path.normcase(os.path.realpath(source))
+                    or os.path.exists(target) and os.path.samefile(target, source)):
+                raise ValueError(f"output {target} conflicts with source {source}; choose a different --out or --name")
+    if os.path.isdir(os.path.join(folder, name + "_check.json")):
+        raise ValueError(f"preview manifest path is a directory in {folder}; choose a different --out or --name")
+    return folder
+
+
+def _publish_previews(loops, spec, faults, out, name):
+    os.makedirs(out, exist_ok=True)
+    generation = tempfile.mkdtemp(prefix=".limberpix-preview-", dir=out)
+    png, animated = f"{name}_check.png", f"{name}_check.gif"
+    pending = os.path.join(generation, "manifest.json")
+    try:
+        sheet(loops, os.path.join(generation, png), faults=faults)
+        gif(loops, os.path.join(generation, animated), fps=spec.fps, speed=spec.speed, move=spec.move, facing=spec.facing)
+        with open(pending, "w", encoding="utf-8") as fh:
+            folder = os.path.basename(generation)
+            json.dump({"png": f"{folder}/{png}", "gif": f"{folder}/{animated}"}, fh)
+    except BaseException:
+        shutil.rmtree(generation, ignore_errors=True)
+        raise
+    try:
+        os.replace(pending, os.path.join(out, f"{name}_check.json"))
+    except OSError:
+        shutil.rmtree(generation, ignore_errors=True)
+        raise
+    return generation
 
 
 def main(argv):
@@ -3272,15 +3440,19 @@ def main(argv):
         frame, frames = count("--frame"), count("--frames")
         if frame and frames:
             raise ValueError("give --frame or --frames, not both")
-        loops = {}
+        srcs = {}
         for spec_ in opt("--loop", many=True):
             if "=" not in spec_:
                 raise ValueError(f"--loop takes NAME=PATH, not {spec_!r}")
             name, src = spec_.split("=", 1)
+            if not name:
+                raise ValueError(f"--loop needs a name in {spec_!r}")
+            if name in srcs:
+                raise ValueError(f"duplicate loop {name!r}: {srcs[name]} and {src}")
             if not os.path.exists(src):
                 raise ValueError(f"no such file or folder: {src}")
-            loops[name] = (name, src)
-        if not loops:
+            srcs[name] = src
+        if not srcs:
             print(__doc__)
             return 2
         facing = opt("--facing", "right")
@@ -3302,8 +3474,8 @@ def main(argv):
         if not math.isfinite(fps) or fps <= 0:
             raise ValueError("--fps must be finite and over 0")
         key = hexcol(opt("--key")) if opt("--key") else None
-        srcs = {name: src for name, (_, src) in loops.items()}
-        loops = {name: load(src, frame, frames, fps, key) for name, src in srcs.items()}
+        budget = _InputBudget()
+        loops = {name: _load(src, frame, frames, fps, key, budget) for name, src in srcs.items()}
         for name, poses in loops.items():
             if not poses:
                 raise ValueError(f"no frames in loop {name!r}")
@@ -3313,15 +3485,17 @@ def main(argv):
                                  f"or name the background colour with --key #rrggbb")
         actions = dict(parse_action(t, facing) for t in opt("--action", many=True))
         named = [opt(o) for o in ("--idle", "--move") if opt(o) is not None]
-        for a in list(actions) + opt("--sheet", many=True) + named:
+        for a in list(actions) + list(allow) + opt("--glows-eye", many=True) + opt("--sheet", many=True) + named:
             if a not in loops:
                 raise ValueError(f"no loop named {a!r} (give it with --loop)")
         part_strips = {}
+        sources = list(srcs.values()) + [opt(o) for o in ("--palette", "--ref", "--spots") if opt(o)]
         for t in opt("--parts", many=True):
             a, _, src = t.partition("=")
             if a not in loops or not os.path.exists(src):
                 raise ValueError(f"--parts takes LOOP=PATH for a given loop and an existing file, not {t!r}")
-            part_strips[a] = load(src, frame, frames, fps, key)
+            sources.append(src)
+            part_strips[a] = _load(src, frame, frames, fps, key, budget)
             if list(map(_frame_size, part_strips[a])) != list(map(_frame_size, loops[a])):
                 raise ValueError(f"--parts {a}: the part strip must hold the loop's frames at the loop's size")
         speed = opt("--speed")
@@ -3345,8 +3519,9 @@ def main(argv):
                 return None
             if not os.path.isfile(p):
                 raise ValueError(f"no such file: {p}")
-            return _grid(Image.open(p), key)
+            return _image_grid(p, key, budget)
         pal = image("--palette")
+        ref = image("--ref")
         spot_groups = None
         if opt("--spots"):
             if not opt("--ref"):
@@ -3363,6 +3538,11 @@ def main(argv):
                                  "approved drawing's pixels") from None
             if not spot_groups or not all(spot_groups.values()):
                 raise ValueError("--spots: every group needs one mark or more")
+            w, h = _frame_size(ref)
+            for group, coords in spot_groups.items():
+                for y, x in coords:
+                    if not (0 <= y < h and 0 <= x < w and round(y) < h and round(x) < w):
+                        raise ValueError(f"--spots group {group!r}: ({y:g}, {x:g}) is outside the {w}x{h} reference")
         eye = opt("--eye")
         eye_at = None
         if opt("--eye-at"):
@@ -3380,31 +3560,40 @@ def main(argv):
                     gait="--legless" not in got, fps=fps, facing=facing, actions=actions, speed=speed,
                     parts=part_strips, squash=cols(opt("--squash")),
                     palette={v for r in pal for v in r if v is not None} if pal else None,
-                    glow=cols(opt("--glow")), ref=image("--ref"), marks=sorted(cols(opt("--mark"))),
+                    glow=cols(opt("--glow")), ref=ref, marks=sorted(cols(opt("--mark"))),
                     sheets=opt("--sheet", many=True), min_rate=min_rate, style=style, spots=spot_groups,
                     eye_at=eye_at)
-    except ValueError as e:
+        name = opt("--name", "anim")
+        if not name or name in (".", "..") or any(c in '/\\:<>"|?*' or ord(c) < 32 for c in name):
+            raise ValueError(f"--name must be a file name, not {name!r}")
+        out = None if "--no-preview" in got else _preview_folder(opt("--out", "."), name, sources)
+        square = not frame and not frames and any(_wide_strip(src) for src in srcs.values())
+    except (ValueError, OSError, Image.DecompressionBombError) as e:
         print(f"error: {e}  (--help lists the options)", file=sys.stderr)
         return 2
-    if not frame and not frames and any(_wide_strip(s.split("=", 1)[1]) for s in opt("--loop", many=True)):
+    if square:
         print("note: strips cut into square frames (no --frame or --frames given)")
     for line in _unnamed(loops, spec, "--idle" in got, "--move" in got) + _eye_pieces(loops, spec):
         print(line)
     warns = []
-    faults = check(loops, spec, warns)
-    name = opt("--name", "anim")
+    faults = _check(loops, spec, warns)
     print(f"{name}: {len(faults)} fault(s)")
     for f in faults + warns:
         print("  " + f)
     if any(f.startswith("size:") for f in faults):
+        for a, src in srcs.items():
+            if os.path.isdir(src) and len({_frame_size(f) for f in loops[a]}) > 1:
+                print(f"  {a}: {src} has differently sized PNGs; move any old contact sheet out of the frame folder")
         return 1                                          # the pictures and motion tracks compare pixels by position
-    out = opt("--out", ".")
-    os.makedirs(out, exist_ok=True)
-    sheet(loops, os.path.join(out, f"{name}_check.png"), faults=faults)
-    gif(loops, os.path.join(out, f"{name}_check.gif"), fps=fps, speed=spec.speed, move=spec.move, facing=spec.facing)
     for line in tracks(loops, spec):                     # read these before the GIF (the eye's rows, the steps)
         print("  " + line)
-    print("sheets:", os.path.abspath(out))
+    if out is not None:
+        try:
+            generation = _publish_previews(loops, spec, faults, out, name)
+        except (OSError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        print("sheets:", generation)
     return 1 if faults else 0
 
 

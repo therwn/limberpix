@@ -5,6 +5,7 @@ play at 30 fps. Run the commands from the repo root.
 
 - [Walker and flier](#walker-and-flier): the two small creatures the selftest draws, and a walk broken on purpose
 - [Figure](#figure): a drawing and its bones, for `body_parts.py`
+- [Cut idle](#cut-idle) starts with a flat PNG and bones and poses the exported layers
 - [Fighter](#fighter): a two-legged figure drawn and posed at game size
 - [Showcase](#showcase): the wolf, the bird and the lizard, three loops each
 
@@ -29,8 +30,9 @@ python skills/pixel-anim-check/pixel_anim_check.py --loop idle=examples/walker_i
 python skills/pixel-anim-check/pixel_anim_check.py --loop idle=examples/flier_idle.png --loop move=examples/flier_move.png --frame 30 --eye "#ffcc33" --flier --shadow "#2b2430" --out out --name flier
 ```
 
-Each run writes a contact sheet (`out/<name>_check.png`) and a GIF (`out/<name>_check.gif`). Without `--shadow` the
-flier's run reports 41 faults: the shadow counts as a stray piece.
+Each run prints the folder holding the contact sheet and GIF. The `png` and `gif` paths in
+`out/<name>_check.json` point to the latest complete pair. Without `--shadow`, the checker counts the flier's shadow
+as a stray piece.
 
 ## Figure
 
@@ -48,6 +50,13 @@ python skills/pixel-animate/body_parts.py examples/figure.png examples/marks.jso
 
 It writes `out/figure_parts.png` (each part tinted, with its bone and name), `out/figure_patches.png`,
 `out/figure_labels.png` (the cutting mask) and `out/figure_parts.json`.
+
+## Cut idle
+
+Run `python -I examples/cut_idle.py --out out/cut-idle` to build and check a hovering beacon. The script writes
+`beacon.png` and `beacon-marks.json`, runs `body_parts.py`, and reads `beacon_labels.png` and `beacon_parts.json` to
+extract the two layers from the flat drawing. It builds `beacon_idle.png` from the layers and runs the checker,
+which reports zero faults and prints the preview directory.
 
 ## Fighter
 

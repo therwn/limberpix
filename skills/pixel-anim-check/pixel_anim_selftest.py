@@ -5,13 +5,18 @@ A new check comes with its own case here.
     python pixel_anim_selftest.py [--verbose] [--sheets DIR]   # --verbose: the numbers behind the clean cases;
                                                                # --sheets: the test creatures as GIFs in DIR"""
 import contextlib
+from concurrent.futures import ThreadPoolExecutor
 import copy
+import hashlib
 import io
+import json
 import math
 import os
+from pathlib import Path
 import random
 import sys
 import tempfile
+from unittest.mock import patch
 
 from PIL import Image, ImageSequence
 
@@ -383,6 +388,8 @@ def run(verbose=False):
     ok &= relaxed_bounds(walker)
     ok &= edge_band()
     ok &= redrawn_cases()
+    ok &= audit_structure(walker, flier)
+    ok &= audit_readouts(walker)
     cases += later_cases()
     for kind, who, fn in cases:
         L = copy.deepcopy(walker if who == "walker" else flier)
@@ -1130,6 +1137,103 @@ def _strip(frames, path):
     im.save(path)
 
 
+def audit_structure(walker, flier):
+    ok = True
+
+    def case(name, cond, got):
+        nonlocal ok
+        print(f"audit    {name:48s} {'ok' if cond else 'WRONG'}" + ("" if cond else f"  ({got})"))
+        ok &= bool(cond)
+
+    shadow_only = [[[v if v == SHADOW else None for v in row] for row in f] for f in flier["idle"][:4]]
+    fs = pac.Spec(flier=True, shadow={SHADOW})
+    faults = pac.check({"flight": shadow_only}, fs)
+    case("shadow alone is empty in all four frames", faults == [f"empty: flight[{i}]" for i in range(4)], faults)
+    case("steady shadow and a flying body pass", not pac.check(flier, fs), pac.check(flier, fs))
+    broken = pac.load(str(Path(__file__).resolve().parents[2] / "examples" / "broken_move.png"), frame=34)
+    fx = [row[:] for row in walker["idle"][0]]
+    fx = [[GEM if v == EYE else None for v in row] for row in fx]
+    try:
+        faults = pac.check({"idle": [walker["idle"][0], fx], "move": broken}, pac.Spec(effects={GEM}))
+        result = "empty: idle[1]" in faults and sum(line.startswith("jump:") for line in faults) == 2
+    except (ValueError, ZeroDivisionError) as exc:
+        result, faults = False, repr(exc)
+    case("effect alone is empty and broken move is checked", result, faults)
+    pose = [walker_frame(0, "idle", lunge=(-10, 4))]
+    outcomes = []
+    for pairs in ([('idle', walker['idle']), ('prep', pose)], [('prep', pose), ('idle', walker['idle'])]):
+        warns = []
+        faults = pac.check(dict(pairs), pac.Spec(eye=EYE), warns)
+        outcomes.append((set(faults), set(warns)))
+    case("idle head decision is independent of loop order",
+         outcomes[0] == outcomes[1] and not any(f.startswith("frozen:") for f in outcomes[0][0]), outcomes)
+    colours = {INK: 1, FUR: 2, BELLY: 3, MID: 4}
+    numeric = [[[colours.get(v, 2) if v not in (None, EYE) else None for v in row] for row in f] for f in walker['idle']]
+    for eye in (0, 9):
+        spec = pac.Spec(eye=eye, lum=lambda v: 20 if v == 1 else 100, rgb=lambda v: (v, v, v))
+        faults = pac.check({"idle": numeric}, spec)
+        case(f"missing numeric eye {eye} in all 24 frames", sum(f.startswith("eye:") for f in faults) == 24, faults)
+    stable = walker["idle"][0]
+    fx0, fx1 = copy.deepcopy(stable), copy.deepcopy(stable)
+    fx0[0][0] = fx1[0][3] = GEM
+    faults = pac.check({"idle": [fx0, fx1]}, pac.Spec(effects={GEM}))
+    case("independent effect does not knock a fixed body", not faults, faults)
+    detached = [[INK if y in (4, 5) and x in (0, 1, 18, 19) else None for x in range(20)] for y in range(10)]
+    try:
+        faults = pac.check({"move": [detached] * 4}, pac.Spec())
+        result = any(f.startswith("apart:") for f in faults) and pac.tracks({"move": [detached] * 4}, pac.Spec())
+    except (ValueError, ZeroDivisionError) as exc:
+        result, faults = False, repr(exc)
+    case("disconnected body reports apart without a height", result, faults)
+    return ok
+
+
+def audit_readouts(walker):
+    ok = True
+
+    def case(name, cond, got):
+        nonlocal ok
+        print(f"audit    {name:48s} {'ok' if cond else 'WRONG'}" + ("" if cond else f"  ({got})"))
+        ok &= bool(cond)
+
+    poses = [walker["move"][k] for k in range(0, 16, 2)]
+    frames = [f for i, f in enumerate(poses) for _ in range(1 + 2 * (i % 2))]
+    for options in ({}, {"actions": {"move": "strike:right"}}):
+        faults = pac.cadence({"move": frames}, pac.Spec(**options))
+        case(f"alternating holds are uneven with action={bool(options)}",
+             any(f.startswith("uneven:") for f in faults), faults)
+    photos = {"idle": [walker_frame(k / 24, "idle", band=1 if 6 <= k < 18 else 0) for k in range(24)]}
+    ref = copy.deepcopy(photos["idle"][0])
+    changed = copy.deepcopy(ref)
+    points = [(x, y) for y, row in enumerate(ref) for x, value in enumerate(row) if value is not None and x >= 23]
+    for (x, y), colour in zip(points, (GEM, PATCH)):
+        changed[y][x] = colour
+    warns = [[], []]
+    for target, image in zip(warns, (ref, changed)):
+        pac.split(photos, pac.Spec(eye=EYE, ref=image), target)
+    case("unrelated head colours keep both torso seams", warns[0] == warns[1] and any("2 pose change" in x for x in warns[0]), warns)
+    frame = walker["idle"][0]
+    area = [[INK if x < 10 and y < 6 else None for x in range(34)] for y in range(22)]
+    empty = [[None] * 34 for _ in range(22)]
+    report = pac.tracks({"idle": [frame] * 8, "sample": [frame] * 4},
+                        pac.Spec(parts={"sample": [area] * 3 + [empty]}))
+    case("one held pose has zero updates per second", any("1 poses: updates 0.0/s" in line for line in report), report)
+    case("missing part contributes zero area", any("area 0-60" in line for line in report), report)
+    for rule in ("spots", "lostmark", "gaps"):
+        marks = pac.fault_frames([f"{rule}: idle fewer marks in idle[4], idle[9-11]"], walker)
+        case(f"{rule} marks indices inside the message", marks == {"idle": {4, 9, 10, 11}}, marks)
+    wrapped = pac.fault_frames(["jump: move[15-0] held"], walker)
+    case("preview marks fold across the seam", wrapped == {"move": {15, 0}}, wrapped)
+    poses = _redrawn_idle(16)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "sheet.png"
+        pac.sheet({"idle": poses}, path, faults=["spots: idle misses marks in idle[2]"])
+        with Image.open(path) as preview:
+            colors = preview.getcolors(maxcolors=preview.width * preview.height)
+            case("a normally sampled-out pose gets a red frame", any(c == (255, 70, 70) for _, c in colors), preview.size)
+    return ok
+
+
 def cli(walker):
     """The command line: colour options in any case with or without '#', a decimal --fps, a strip whose frames are
     not square refused unless --frame or --frames cuts it, --help exiting 0 and a usage error exiting 2."""
@@ -1150,6 +1254,132 @@ def cli(walker):
             nonlocal ok
             print(f"cli      {name:48s} {'ok' if cond else 'WRONG'}" + ("" if cond else f"  ({got})"))
             ok &= bool(cond)
+        root = Path(tmp)
+        source_dir = root / "collision"
+        source_dir.mkdir()
+        collision = source_dir / "anim_check.png"
+        _strip(walker["idle"], str(collision))
+        args = ["--loop", "idle=" + str(collision), "--frame", "34", "--eye", EYE]
+        original = collision.read_bytes()
+        before = hashlib.sha256(original).hexdigest()
+        code, report = run_main(args + ["--out", str(source_dir)])
+        after = hashlib.sha256(collision.read_bytes()).hexdigest()
+        case("a source strip cannot become its own preview",
+             code == 2 and collision.name in report and before == after and list(source_dir.iterdir()) == [collision],
+             (code, before == after, sorted(p.name for p in source_dir.iterdir())))
+        collision.write_bytes(original)
+        code, report = run_main(args + ["--out", str(root / "safe")])
+        case("the same strip passes with a separate output", code == 0, report)
+        alias = source_dir / "alias.png"
+        os.link(collision, alias)
+        code, report = run_main(["--loop", "idle=" + str(alias), "--frame", "34", "--out", str(source_dir)])
+        case("a different path to the same file is protected", code == 2 and alias.name in report
+             and hashlib.sha256(alias.read_bytes()).hexdigest() == before, (code, report))
+        code, report = run_main(args + ["--out", str(source_dir), "--name", "../escape"])
+        case("a preview stem cannot escape the output folder", code == 2 and "--name" in report, (code, report))
+        examples = Path(__file__).resolve().parents[2] / "examples"
+        broken, clean = (str(examples / file) for file in ("broken_move.png", "walker_move.png"))
+        opts = ["--frame", "34", "--eye", EYE, "--out", str(root / "duplicates")]
+        for first, second in ((broken, clean), (clean, broken)):
+            code, report = run_main(["--loop", "move=" + first, "--loop", "move=" + second] + opts)
+            case("duplicate move rejected: " + Path(first).name,
+                 code == 2 and "move" in report and first in report and second in report, (code, report[:240]))
+        code, report = run_main(["--loop", "move=" + broken] + opts)
+        case("broken move alone still reports two jumps", code == 1 and report.count("jump:") == 2, report)
+        code, report = run_main(["--loop", "move=" + clean] + opts)
+        case("clean move alone passes", code == 0, report)
+        folder = root / "frames"
+        folder.mkdir()
+        for k, f in enumerate(walker["idle"]):
+            _strip([f], str(folder / f"{k:02}.png"))
+        folder_args = ["--loop", "idle=" + str(folder), "--eye", EYE, "--out", str(folder)]
+        first, second = run_main(folder_args), run_main(folder_args)
+        case("two runs keep the same 24 input frames", first[0] == second[0] == 0
+             and first[1].split("sheets:")[0] == second[1].split("sheets:")[0]
+             and len(pac.load(str(folder))) == 24 and "anim-previews" in first[1], (first[0], second[0]))
+        Image.new("RGB", (100, 60)).save(folder / "old_check.png")
+        code, report = run_main(folder_args)
+        case("an old flat contact sheet has a size diagnostic", code == 1 and "size:" in report
+             and "old contact sheet" in report, (code, report))
+        for option, value in (("--allow", "moev=2"), ("--glows-eye", "idel")):
+            code, report = run_main(base + ["--frame", "34", option, value])
+            case(f"{option} rejects unknown loop", code == 2 and value.split("=")[0] in report, (code, report[:160]))
+        ref = root / "spots-ref.png"
+        _strip([walker["idle"][0]], str(ref))
+        spots = root / "spots.json"
+        for point, expected in (([22, 4], 2), ([-1, 4], 2), ([float("nan"), 4], 2), ([21, 33], 0), ([0, 0], 0)):
+            spots.write_text(json.dumps({"dots": [point]}), encoding="utf-8")
+            try:
+                code, report = run_main(base + ["--frame", "34", "--ref", str(ref), "--spots", str(spots)])
+            except (IndexError, ValueError) as exc:
+                code, report = None, repr(exc)
+            case(f"spot coordinate {point} exits {expected}", code == expected and (code == 0 or "dots" in report),
+                 (code, report[:200]))
+        bad = root / "text.png"
+        bad.write_text("plain text", encoding="utf-8")
+        code, report = run_main(["--loop", "idle=" + str(bad)])
+        case("a text file is a path-specific usage error", code == 2 and bad.name in report, (code, report))
+        fx = [[GEM if v == EYE else None for v in row] for row in walker["idle"][0]]
+        fade = root / "fade.png"
+        _strip([walker["idle"][0], fx], str(fade))
+        code, report = run_main(["--loop", "idle=" + str(fade), "--loop", "move=" + broken,
+                                 "--effects", GEM] + opts)
+        case("empty body can be tracked and previewed", code == 1 and "empty: idle[1]" in report
+             and report.count("jump:") == 2 and "sheets:" in report, (code, report))
+        try:
+            code, report = run_main(["--loop", "koşu=" + str(root / "move.png"), "--move", "koşu",
+                                     "--name", "turkish"] + opts)
+        except UnicodeEncodeError as exc:
+            code, report = None, repr(exc)
+        preview_root = root / "duplicates"
+
+        def preview_pair(folder, name):
+            manifest = folder / f"{name}_check.json"
+            if not manifest.exists():
+                return ()
+            pair = json.loads(manifest.read_text(encoding="utf-8"))
+            return tuple(folder / pair[k] for k in ("png", "gif"))
+
+        turkish = preview_pair(preview_root, "turkish")
+        case("Turkish name is usable in both previews", code == 0 and "koşu" in report and len(turkish) == 2,
+             (code, report, turkish))
+        for path in turkish:
+            with Image.open(path) as img:
+                img.load()
+        for path, expected in ((clean, 0), (broken, 1)):
+            args = ["--loop", "move=" + path] + opts
+            normal = run_main(args)
+            with patch.object(pac, "sheet", side_effect=AssertionError), patch.object(pac, "gif", side_effect=AssertionError):
+                batch = run_main(args + ["--no-preview"])
+            case(f"no-preview keeps the same exit {expected} and report",
+                 normal[0] == batch[0] == expected and normal[1].split("sheets:")[0].rstrip() == batch[1].rstrip(),
+                 (normal[0], batch[0]))
+        paths = preview_pair(preview_root, "anim")
+        before = [p.read_bytes() for p in paths]
+        with patch.object(pac, "gif", side_effect=OSError("injected GIF write failure")):
+            try:
+                code, report = run_main(["--loop", "move=" + clean] + opts)
+            except OSError as exc:
+                code, report = None, repr(exc)
+        case("failed GIF leaves the last PNG/GIF pair intact", code == 2 and "injected GIF" in report
+             and len(paths) == 2 and preview_pair(preview_root, "anim") == paths
+             and [p.read_bytes() for p in paths] == before, (code, report[-180:]))
+        tiny = [{"sample": [[[INK] + [None] * w]]} for w in (1, 3)]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            jobs = [pool.submit(pac._publish_previews, item, pac.Spec(), [], str(preview_root), "race") for item in tiny]
+            generations = [Path(job.result()) for job in jobs]
+        paths = preview_pair(preview_root, "race")
+        same_run = len(paths) == 2 and paths[0].parent == paths[1].parent and paths[0].parent in generations
+        if same_run:
+            with Image.open(paths[0]) as png, Image.open(paths[1]) as gif:
+                same_run = (png.width - 16) // 6 == gif.width // 5 - 6
+        case("concurrent previews select one complete generation", same_run, paths)
+        for limit, value, probe in (("MAX_INPUT_FRAMES", 1, ["--no-preview"]),
+                                    ("MAX_INPUT_PIXELS", 1, ["--no-preview"]),
+                                    ("MAX_PREVIEW_PIXELS", 1, [])):
+            with patch.object(pac, limit, value):
+                code, report = run_main(["--loop", "move=" + clean] + opts + probe)
+            case(f"{limit} refuses the clip with exit 2", code == 2 and "error:" in report, (code, report[-180:]))
         code, text = run_main(base + ["--frame", "34", "--eye", "#ffcc33"])
         case("the clean walker passes from strips", code == 0, text)
         code, text = run_main(base + ["--frame", "34", "--eye", "FFCC33"])
@@ -1161,7 +1391,8 @@ def cli(walker):
                                "--out", os.path.join(tmp, "out")])
         case("--frames 24 cuts the idle strip into 24", code == 0, text)
         code, text = run_main(base + ["--frame", "34", "--fps", "12.5", "--name", "slow"])
-        case("--fps 12.5 runs", code in (0, 1) and os.path.exists(os.path.join(tmp, "out", "slow_check.gif")), text)
+        case("--fps 12.5 runs", code in (0, 1) and all(p.is_file() for p in preview_pair(root / "out", "slow"))
+             and len(preview_pair(root / "out", "slow")) == 2, text)
         code, text = run_main(base)
         case("a non-square strip with no --frame is refused", code == 2 and "--frame" in text, (code, text[-200:]))
         code, text = run_main(base + ["--frames", "7"])
@@ -1214,6 +1445,9 @@ def cli(walker):
         case("sub-frame GIF poses fit the available ticks", len(pac.load(timed, fps=30)) == 3, "")
         poses[0].save(timed, duration=500)
         case("a one-image GIF keeps its canvas and duration", pac.load(timed, fps=30) == [raw[0]] * 15, "")
+        with patch.object(pac, "MAX_INPUT_FRAMES", 4):
+            code, text = run_main(["--loop", "idle=" + timed, "--no-preview", "--key", "ffffff"])
+            case("a timed GIF is bounded before holds are expanded", code == 2 and "expands beyond" in text, text)
         for fps, total_ms in ((30, 670), (60, 330), (120, 170)):
             pac.gif({"idle": raw}, timed, fps=fps, Z=1)
             with Image.open(timed) as preview:

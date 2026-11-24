@@ -16,7 +16,7 @@ the most useful kind.
    one, write in the function's docstring what it was fitted on (how many animations, of what kind, judged by whom)
    and the margin it keeps on each side. "Looked right to me on one sprite" is honest and allowed. An unexplained
    number is not.
-4. **No new dependencies.** Python 3.8+, numpy and Pillow only. The scripts must stay single files that can be
+4. **No new dependencies.** Python 3.11+, NumPy and Pillow only. The scripts must stay single files that can be
    copied into another project's folder and run there (their `--selftest` needs the matching `*_selftest.py`
    beside them, and says so when it is missing).
 5. **Keep the API stable.** Projects import `pixel_anim_check` from their own adapters. Do not rename or remove

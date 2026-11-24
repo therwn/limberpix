@@ -20,7 +20,7 @@ alike, the accepted one too. Say what the run found, and leave the verdict on th
 
 **Paths.** The scripts sit next to this file. Claude Code fills `${CLAUDE_SKILL_DIR}` with that folder. Codex and
 any other agent that leaves it as written read it as the folder this SKILL.md was loaded from (in Codex,
-`~/.codex/skills/pixel-anim-check`). Python 3.8+ with numpy and Pillow. The commands
+`~/.codex/skills/pixel-anim-check`). Python 3.11+ with NumPy 1.24.3+ and Pillow 13.0.0+. The commands
 use `python -I` (isolated mode): it leaves the script's own folder, `PYTHON*` variables (such as a `PYTHONPATH` into
 the project) and the user's site-packages off the import path, so a stray file named like a standard module
 (`json.py`) cannot shadow it. It also hides packages installed with `pip install --user`: on `No module named 'numpy'`
@@ -147,7 +147,9 @@ real-pose rate, the box's height, width and anchor (a sheet's scale drifting sho
 bob and leg band and planted-foot speed, the eye's lag behind the figure's top, each action's phases and staging,
 and each part's area and lag. The exit code is 0 for no fault, 1 for one or more, 2 for a usage
 error. Frame numbers are 0-based: `move[3]` is the move's fourth frame, and "frame k" in a `jump` or `snap` is the
-change from frame k to the next. It writes:
+change from frame k to the next. Open the folder printed after `sheets:` for both previews. The
+`<name>_check.json` file in the output folder gives their paths. Use `--no-preview` for checks and tracks only.
+
 - `<name>_check.png`: the contact sheet, each distinct pose zoomed (at most 12 a loop, plus any a fault names) and
   labelled with the frames it holds (`4-7`), and under each the pixels changed from the pose before, in red. The
   poses a fault names are outlined in red.

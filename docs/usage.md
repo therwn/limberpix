@@ -26,8 +26,10 @@ Every command here runs from the repo root, and each is one line, so it pastes i
 
 ## Requirements
 
-- Python 3.8 or newer (CI runs 3.8 on Ubuntu 22.04, and 3.9 and 3.12 on Ubuntu and Windows).
-- numpy >= 1.21 (1.x and 2.x) and Pillow >= 9: `python -m pip install -r requirements.txt`.
+- Python 3.11 or newer, NumPy 1.24.3 or newer, and Pillow 13.0.0 or newer. Install with
+  `python -m pip install -r requirements.txt`.
+- CI tests the exact dependency minimums with Python 3.11 and resolves current compatible releases with Python 3.12
+  on Ubuntu and Windows. It checks the installed NumPy and Pillow releases against PyPI advisories.
 - Claude Code or Codex, if you want an agent to use the skills. The scripts also run on their own.
 
 Both skills work with any engine or art tool: they read and write plain PNGs and GIFs.
@@ -50,17 +52,26 @@ $skill-installer install https://github.com/therwn/limberpix/tree/main/skills/pi
 ```
 
 They land in `~/.codex/skills/` (or `$CODEX_HOME/skills`). Or copy them there yourself:
-`cp -r limberpix/skills/* ~/.codex/skills/`.
+`mkdir -p ~/.codex/skills && cp -R limberpix/skills/pixel-animate limberpix/skills/pixel-anim-check ~/.codex/skills/`.
 
 **3. As plain skills.** Copy the skill folders into your personal skills folder, or into one project's:
 
 ```bash
 git clone https://github.com/therwn/limberpix
-cp -r limberpix/skills/* ~/.claude/skills/          # every project
-# or: cp -r limberpix/skills/* <your project>/.claude/skills/
+skills_dir="$HOME/.claude/skills"                  # or "$PWD/your-project/.claude/skills"
+mkdir -p "$skills_dir"
+cp -R limberpix/skills/pixel-animate limberpix/skills/pixel-anim-check "$skills_dir/"
 ```
 
-On Windows PowerShell: `Copy-Item -Recurse limberpix\skills\* $HOME\.claude\skills\`.
+On Windows PowerShell, from the folder that holds `limberpix`:
+
+```powershell
+$skillsDir = Join-Path $HOME '.claude/skills'
+New-Item -ItemType Directory -Force -Path $skillsDir | Out-Null
+Copy-Item -Recurse -Force -Path 'limberpix/skills/pixel-animate', 'limberpix/skills/pixel-anim-check' -Destination $skillsDir
+```
+
+Check for `pixel-animate/SKILL.md` and `pixel-anim-check/SKILL.md` under that target folder.
 
 A copied skill does not update itself: copy again after every pull.
 
@@ -132,8 +143,9 @@ cut into whole frames).
 | `--legless` | a snake or slug: no body rise asked of its move |
 | `--facing right\|left` | which way the head faces (default right) |
 | `--fps N` | the rate the game plays the loops at (default 30; a decimal is allowed). It sets the GIF's speed and how a GIF input is sampled, and scales `choppy`, `boil`'s rates, `snap`, `hitch`, the eye `tick`'s dwell and an action's held keys |
-| `--out DIR` | where `<name>_check.png` and `<name>_check.gif` go (default `.`, the current folder) |
+| `--out DIR` | preview location (default `.`). If it is also a frame input folder, previews go in `anim-previews` inside it |
 | `--name NAME` | the stem of the written files (default `anim`) |
+| `--no-preview` | run the same checks and print the same diagnostics and tracks without writing a PNG or GIF |
 | `--action NAME[:KIND[:DIR]]` | that loop is an action: up to two keys (a wind-up and a follow-through) may be held, each up to 13 frames. `strike` (with a direction) has its phases judged; `jump` is not asked to keep to the ground |
 | `--spots PATH` | (with `--ref`, the approved drawing at the loops' scale) a JSON file `{"group": [[row, column], ...]}` naming the drawing's small marks by eye (a hat's specks, a mouth): `spots` names every pose of a loop other than an action showing fewer of a group's marks at their place. A mark that changed colour or became a pinhole still counts |
 | `--style pixel\|redrawn` | how the frames were made (default `pixel`: one drawing moved by whole pixels). `redrawn`: every pose a new drawing of the whole figure (frame by frame, or generated). `stepped` replaces `choppy`, `uneven` and `lurch` (the whole body must move 6 times a second); `lostmark` (marks inside a patch, such as a mouth on a face, gone in 3+ separate runs of poses) and `gaps` (an outline broken in short stretches; give every outline colour with `--ink`) are run; `shimmer` is off; `reshape` and `outline` warn only |
@@ -190,7 +202,8 @@ The clean walker:
 python skills/pixel-anim-check/pixel_anim_check.py --loop idle=examples/walker_idle.png --loop move=examples/walker_move.png --frame 34 --eye "#ffcc33" --out out --name walker
 ```
 
-It prints `walker: 0 fault(s)`, exits 0, and writes `out/walker_check.png` and `out/walker_check.gif`.
+It prints `walker: 0 fault(s)`, exits 0, and prints the folder holding `walker_check.png` and `walker_check.gif`.
+Read `out/walker_check.json` for the two paths relative to `out`.
 
 The same walker with one move frame knocked 4 px sideways:
 
@@ -217,13 +230,13 @@ walker), a kingfisher-like diver (`bird`, a flier) and a chameleon-like lizard (
 strike). Each folder has the drawing as data (`creature.py`, every pixel placed by hand, each moving part its own
 layer), the rig that poses the parts (`*_rig.py`, with `bird_wings.py` and `bird_heads.py` for the bird's drawn keys
 and `lizard_legs.py` for the lizard's legs), `animate.py`, which rebuilds the strips, the drawing at 8x
-(`*_art_8x.png`) and three loops at 30 fps, every pose held 2 frames:
+(`*_art_8x.png`) and three loops at 30 fps. Frame and pose counts include the wrap from the last frame to the first:
 
 | Creature | Frame | Idle | Move | Attack | Road speed |
 |---|---|---|---|---|---|
-| beast | 93x52 | 60 frames | 32 frames | 40 frames, a lunge and a bite | 1.0 px a frame |
-| bird | 86x69 | 72 frames | 32 frames | 54 frames, a dive strike | 1.0 px a frame |
-| lizard | 113x40 | 60 frames | 32 frames | 34 frames, a tongue strike | 0.5 px a frame |
+| beast | 93x52 | 60 frames, 24 poses | 32 frames, 32 poses | 40 frames, 20 poses, a lunge and a bite | 1.0 px a frame |
+| bird | 86x69 | 72 frames, 31 poses | 32 frames, 16 poses | 54 frames, 27 poses, a dive strike | 1.0 px a frame |
+| lizard | 113x40 | 60 frames, 24 poses | 32 frames, 16 poses | 34 frames, 18 poses, a tongue strike | 0.5 px a frame |
 
 The move is drawn in place, to be shown over a road scrolling at the road speed (`ROAD_SPEED` in each `animate.py`):
 a planted foot goes back at that speed (the check prints the two side by side). `animate.py` also writes the check's other inputs into the
@@ -240,7 +253,7 @@ The first prints `beast: 0 fault(s)` and exits 0. Each option has a reason:
 
 - `--ink` names the outline colours. The wolf's top and left edges carry a lit line of its fur ramp instead of ink,
   and those tones are lighter than the default ink threshold: with only `--frame` and `--eye` the same loops report
-  149 faults (143 `outline`, 6 `apart`).
+  138 faults (132 `outline`, 6 `apart`).
 - `--effects` names the attack's flash, sparks, speed lines and dust. With `--ink` but without it, they are 12 faults
   (6 `apart` and 6 `outline`, on the strike's frames).
 - `--action attack:strike:right` has the attack's anticipation, strike and recovery judged, `--speed 1.0` prints
@@ -320,21 +333,45 @@ broken: 2 fault(s)
   scrolling road line up. If that takes more than four cycles of the longest loop, it plays through twice the
   longest loop's duration and stops. Look at it zoomed and at 1x.
 
+Each CLI run renders both files in its own directory and prints that directory after `sheets:`. Scripts that used
+the old `<name>_check.png` and `<name>_check.gif` paths directly under `--out` can read `<name>_check.json` once and
+resolve its `png` and `gif` paths relative to the manifest. The checker replaces the manifest only after both
+images are ready, so concurrent runs and failed renders leave a complete pair available. Earlier generations stay
+on disk for readers that already resolved their paths. When `--out` is also a frame input directory, the manifest
+and generations go under `anim-previews/`. If a flat contact sheet from an older run still sits among the frames,
+move it out of the frame directory. An explicitly supplied PNG is read regardless of its filename.
+
+Use one name per loop and give `--name` as a filename stem. If an output would overwrite a source, choose another
+`--out` or `--name`. For batch jobs, `--no-preview` keeps the checks, diagnostics and motion tracks and skips image
+rendering and publication.
+
+The checker accepts up to 2,048 frames and 8 million frame-pixels per CLI run, including part strips, palette and
+reference inputs. A frame-pixel counts once per game frame, including held frames expanded from a GIF. Timed
+inputs and GIF previews are limited to 120 seconds. Each preview is capped at 80 million rendered pixels across
+its images and 32,768 pixels per side. The showcase's largest input set uses under 2 million frame-pixels. Its
+largest GIF needs about 73 million at the default zoom. Use `--no-preview` when only preview size is exceeded.
+
 ### From code
 
-A project with its own pipeline can skip the PNGs and import the module:
+A project with its own pipeline can import the module. Run this example from the repository root:
 
 ```python
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path.cwd() / "skills" / "pixel-anim-check"))
 import pixel_anim_check as pac
 
-loops = {"idle": pac.load("idle.png", frame=34), "move": pac.load("walk.gif", fps=30)}
+loops = {name: pac.load(f"examples/walker_{name}.png", frame=34) for name in ("idle", "move")}
 spec = pac.Spec(eye="#ffcc33")             # also: flier=True, shadow={...}, gait=False (= --legless), fps=12, ...
 warns = []
 faults = pac.check(loops, spec, warns)     # fault lines; warnings go into warns
 for line in pac.tracks(loops, spec):       # the two read-outs
     print(line)
-pac.sheet(loops, "fox_check.png", faults=faults)   # the contact sheet, faulted frames outlined
-pac.gif(loops, "fox_check.gif", fps=30)
+out = Path("out")
+out.mkdir(exist_ok=True)
+pac.sheet(loops, out / "walker_check.png", faults=faults)
+pac.gif(loops, out / "walker_check.gif", fps=30)
 ```
 
 A frame is a list of rows, and each pixel is a colour key or `None` (transparent). `load` gives `"#rrggbb"` keys.
@@ -458,7 +495,7 @@ colour there, or else to the first tied colour in the palette's order.
     its job (pixel-animate's step 5 does them after it).
   - Its numbers were measured by one person, and one person looked at the pictures (sources and measurements in
     [`skills/pixel-animate/REFERENCES.md`](../skills/pixel-animate/REFERENCES.md)).
-  - It was run on Python 3.11 only (numpy 1.24 with Pillow 10.0, and numpy 2.4 with Pillow 13); CI runs it on 3.8.
+  - CI runs the check on Python 3.11 with the pinned minimums and on Python 3.12 with current compatible dependencies.
 
 ## Limitations
 

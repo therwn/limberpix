@@ -10,34 +10,25 @@ permissions:
 
 jobs:
   selftest:
-    name: ${{ matrix.os }} / Python ${{ matrix.python }} / numpy ${{ matrix.numpy }}
+    name: ${{ matrix.os }} / Python ${{ matrix.python }} / ${{ matrix.dependencies }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python: ["3.12"]
-        numpy: ["requirements"]
+        dependencies: [minimum, current]
         include:
-          - os: windows-latest
-            python: "3.9"
-            numpy: "requirements"
-          - os: ubuntu-22.04              # older Pythons are not built for the newest Ubuntu image
-            python: "3.9"
-            numpy: "requirements"
-          - os: ubuntu-22.04              # the oldest Python the README promises
-            python: "3.8"
-            numpy: "requirements"
-          - os: ubuntu-latest             # NumPy 2, its deprecation warnings made errors
+          - dependencies: minimum
+            python: "3.11"
+          - dependencies: current
             python: "3.12"
-            numpy: "2"
     defaults:
       run:
         shell: bash
     env:
       OUT: out                      # ignored by .gitignore
       PYTHONDONTWRITEBYTECODE: "1"
-      PYW: ${{ matrix.numpy == '2' && '-W error::DeprecationWarning' || '' }}
+      PYW: -W error::DeprecationWarning
     steps:
       - uses: actions/checkout@v4
 
@@ -47,9 +38,32 @@ jobs:
 
       - name: Install requirements
         run: |
-          python -m pip install -r requirements.txt
-          if [ "${{ matrix.numpy }}" = "2" ]; then python -m pip install "numpy>=2"; fi
+          if [ "${{ matrix.dependencies }}" = "minimum" ]; then
+            python -m pip install -r requirements.txt numpy==1.24.3 Pillow==13.0.0
+          else
+            python -m pip install --upgrade -r requirements.txt
+          fi
+          python -m pip check
           python -c "import numpy, PIL; print('numpy', numpy.__version__, 'Pillow', PIL.__version__)"
+
+      - name: Check runtime dependency advisories
+        run: |
+          python -I - <<'PY'
+          from importlib.metadata import version
+          from json import load
+          from urllib.request import urlopen
+
+          found = []
+          for package in ("numpy", "Pillow"):
+              installed = version(package)
+              with urlopen(f"https://pypi.org/pypi/{package}/{installed}/json", timeout=30) as response:
+                  records = load(response)["vulnerabilities"]
+              active = [item["id"] for item in records if not item.get("withdrawn")]
+              print(f"{package} {installed}: {len(active)} active advisory record(s)")
+              found.extend(active)
+          if found:
+              raise SystemExit(", ".join(found))
+          PY
 
       - name: pixel-anim-check selftest
         run: python -I $PYW skills/pixel-anim-check/pixel_anim_selftest.py
@@ -65,6 +79,25 @@ jobs:
 
       - name: Examples match the selftests' creatures
         run: python -I examples/make_examples.py --verify
+
+      - name: All nine showcase loops pass without warnings
+        run: |
+          python -I -B - <<'PY'
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd() / "examples" / "showcase"))
+          import make_showcase as demo
+
+          for key in demo.CREATURES:
+              loops = demo.loops(key)
+              assert set(loops) == {"idle", "move", "attack"}, key
+              warnings = []
+              faults = demo.pac.check(loops, demo.spec(key), warnings)
+              print(key, len(loops), len(faults), len(warnings))
+              if faults or warnings:
+                  raise SystemExit(faults + warnings)
+          PY
 
       - name: Clean examples pass (exit 0)
         run: |
@@ -104,6 +137,9 @@ jobs:
           python -I skills/pixel-animate/body_parts.py examples/figure.png examples/marks.json \
             --out "$OUT" --name figure
           test -f "$OUT/figure_parts.png"
+
+      - name: Cut a flat drawing and check its idle
+        run: python -I -B examples/cut_idle.py --out "$OUT/cut-idle"
 
       - name: Nothing tracked was changed
         run: git diff --exit-code
