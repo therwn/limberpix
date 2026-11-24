@@ -78,7 +78,7 @@ def verify(root, tool, manifest, filenames, variants):
 
     def busy_once(src, dst):
         nonlocal attempts
-        if Path(dst) == pointer:
+        if Path(dst).resolve() == pointer.resolve():
             attempts += 1
             if attempts == 1:
                 error = PermissionError("interrupted by a concurrent Windows rename")
@@ -89,7 +89,9 @@ def verify(root, tool, manifest, filenames, variants):
     with patch.object(os, "replace", side_effect=busy_once), redirect_stdout(io.StringIO()), \
             redirect_stderr(io.StringIO()) as err:
         code = module.main(args(live, 1))
-    assert code == 0 and attempts == 2, f"{tool} did not recover from a transient manifest lock: {err.getvalue()}"
+    assert code == 0 and attempts == 2, (
+        f"{tool} exited {code} after {attempts} manifest replacement attempts (expected 2): {err.getvalue()}"
+    )
 
     with originals[-1].open("rb"):
         code, report = run(live, 1)
