@@ -273,8 +273,8 @@ handed back: the rump's edge down the gap beside the tail, which the tail had re
 lower edge, which goes with the neck.
 
 `examples/showcase/make_showcase.py` draws the README's pictures from these files (see [Development](#development)),
-and `examples/showcase/make_gallery.py` the gallery's: each loop as its own GIF, pixel-animate's four steps, and four
-faults the check names. [examples/README.md](../examples/README.md) shows every example with its pictures.
+and `examples/showcase/make_gallery.py` draws the gallery's loop GIFs, the animated walkthrough of the rig and check,
+and four faults the check names. [examples/README.md](../examples/README.md) shows every example with its pictures.
 
 [`examples/fighter/`](../examples/fighter) holds a fighter in a stance, drawn at game size (48x64) from a skeleton by
 `fighter.py`, and its idle built the Pixelblog 52 way: one bounce of 8 poses held 3 frames over the rise and the top

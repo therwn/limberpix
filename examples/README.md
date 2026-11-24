@@ -83,14 +83,17 @@ A four-legged walker. Frame 93x52.
 | <img src="showcase/beast/beast_art_8x.png" width="220" alt="The wolf's drawing"> | <img src="../docs/img/gallery/beast_idle.gif" alt="The wolf's idle"> | <img src="../docs/img/gallery/beast_move.gif" alt="The wolf's walk in place"> | <img src="../docs/img/gallery/beast_attack.gif" alt="The wolf's attack: a lunge and a bite"> |
 | | 60 frames | 32 frames | 40 frames, a lunge and a bite |
 
-How it was cut, and one pose on the way to a frame:
+The first image shows the measured cut from `body_parts.py`. The second shows the animation rig at rest
+and in a walk pose, with matching colours for the parts in both panels.
 
 <p>
   <img src="../docs/img/parts.png" width="760" alt="body_parts.py on the wolf's drawing: bones placed by eye and the eleven parts it cut">
 </p>
 <p>
-  <img src="../docs/img/gallery/pipeline.png" width="860" alt="The wolf's drawing, its cut, one walk pose as flat parts, and the same pose as the finished frame">
+  <img src="../docs/img/gallery/pipeline.png" width="912" alt="The wolf's drawing, its rig at rest, the same parts posed mid-stride, and the finished frame of that pose">
 </p>
+
+[Watch the rig and the animation check in action](../docs/img/gallery/workflow.gif).
 
 ### Bird (`bird`)
 
@@ -118,7 +121,7 @@ option, in [docs/usage.md](../docs/usage.md#the-showcase-creatures). All three p
 ```sh
 python examples/showcase/beast/animate.py        # rebuild one creature's strips and its check/ files
 python examples/showcase/make_showcase.py        # check all three, then redraw docs/img/hero.gif, check.png, parts.png
-python examples/showcase/make_gallery.py         # redraw docs/img/gallery/: the loop GIFs, pipeline.png, faults.png
+python examples/showcase/make_gallery.py         # redraw docs/img/gallery/, including workflow.gif
 ```
 
 ### What the check catches on them

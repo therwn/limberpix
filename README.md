@@ -38,8 +38,12 @@ The approved drawing is cut into parts once, and every frame is those same pixel
 creature keeps its look.
 
 <p align="center">
-  <img src="docs/img/gallery/pipeline.png" width="860" alt="pixel-animate in four steps on a wolf: the drawing, the cut into eleven parts by body_parts.py, one walk pose shown as flat-coloured parts, and the same pose as the finished frame">
+  <img src="docs/img/gallery/workflow.gif" width="912" alt="The wolf's drawing and rig at rest, then the same rig colours moving in sync with the finished walk. A second panel shows pixel-anim-check flagging a frame shifted four pixels sideways and reporting zero faults after the frame is restored.">
 </p>
+
+The two middle tiles use the same rig colours. The green shape includes the near hind leg's thigh at the hip.
+See the [four steps as a still](docs/img/gallery/pipeline.png) and the
+[measured cut from body_parts.py](docs/img/parts.png).
 
 ### 2. Three loops for each creature
 

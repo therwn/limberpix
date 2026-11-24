@@ -5,15 +5,14 @@
 
   <creature>_<loop>.gif   each showcase creature's idle, move and attack on its own, 30 fps, 2x
   walker_*.gif, flier_*.gif, broken_move.gif   the selftest's two creatures and the broken walk, 4x
-  pipeline.png   pixel-animate in four steps on the beast: the drawing, body_parts.py's cut, one pose as flat parts
-                 (the part strip), the same pose as the finished frame
+  pipeline.png   the beast's drawing, rig at rest, one posed part frame and its matching finished frame
+  workflow.gif   that pipeline in motion, followed by a walk with a shifted frame and the check's result after repair
   faults.png     four things pixel_anim_check catches, each made by breaking the beast's own frames and run through
                  the real check: the line under each tile is what it printed
 
 Every word in the pictures is pixfont.py. Run a creature's animate.py first if its strips changed. The pictures are
 not checked by CI: rebuild them after changing a creature or a fault's wording."""
 import argparse
-import json
 import os
 import sys
 
@@ -24,8 +23,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "skills", "pixel-anim-check"))
-sys.path.insert(0, os.path.join(ROOT, "skills", "pixel-animate"))
-import body_parts as bp                                   # noqa: E402
 import make_showcase as ms                                # noqa: E402
 import pixel_anim_check as pac                            # noqa: E402
 import pixfont                                            # noqa: E402
@@ -87,85 +84,87 @@ def loop_gifs(out):
     return done
 
 
-# ---- pipeline.png -------------------------------------------------------------------------------------------------
-POSE = 10                                                 # the beast's move frame shown as parts and as a frame
+# ---- pipeline.png and workflow.gif --------------------------------------------------------------------------------
+DEMO_WIDTH, DEMO_HEIGHT = 456, 170
+DEMO_MARGIN = 12
+DEMO_TILE_HEIGHT = 58
 
 
-def part_tint():
-    """The beast's drawing at game px, and the same pixels tinted by the part body_parts.py gave each to."""
-    src = os.path.join(HERE, "beast", "beast_art_8x.png")
-    with open(os.path.join(HERE, "beast", "marks.json"), encoding="utf-8") as fh:
-        marks = json.load(fh)
-    drawing = Image.open(src)
-    res, aux = bp.analyse(drawing, marks)
-    if res["warnings"]:
-        sys.exit(f"pipeline: body_parts printed CHECK lines: {res['warnings']}")
-    k = 8
-    lab8 = bp.full_labels(aux, drawing.size)
-    art = np.asarray(drawing.convert("RGBA"))[k // 2::k, k // 2::k]
-    h, w = art.shape[:2]
-    names = aux["names"]
-    inside = {p["name"]: p.get("inside") for p in res["parts"]}
-    tint = np.zeros((h, w, 4), np.uint8)
-    grey = art[..., :3].astype(float).mean(-1) / 255.0
-    for y in range(h):
-        for x in range(w):
-            if art[y, x, 3]:
-                b = lab8[y * k:(y + 1) * k, x * k:(x + 1) * k].ravel()
-                b = b[b >= 0]
-                if not len(b):
-                    continue
-                n = names[int(np.bincount(b).argmax())]
-                col = np.array(st.PART_COLOURS[inside[n] or n], float) * (0.34 + 1.1 * grey[y, x])
-                tint[y, x] = tuple(np.clip(col, 0, 255).astype(np.uint8)) + (255,)
-    return art, tint, len(names)
+def demo_card(title, subtitle):
+    im = st.card(DEMO_WIDTH, DEMO_HEIGHT, radius=10)
+    st.put(im, DEMO_MARGIN, 12, title, st.TEXT, 2)
+    st.put(im, DEMO_MARGIN, 34, subtitle, st.MUTED, 1)
+    return im
 
 
-def pipeline_png(path, S=4):
-    key, c = "beast", ms.CREATURES["beast"]
-    L = ms.loops(key)
-    art, tint, n_parts = part_tint()
-    parts = pac.load(ms.path(key, f"check/{key}_move_parts.png"), frame=c["frame"])
-    flat, frame = ms.rgba(parts[POSE]), ms.rgba(L["move"][POSE])
-    def box(arr):                                         # each picture cut to its own figure, then set on one
-        ys, xs = np.nonzero(arr[..., 3])                  # canvas, feet on one line (the drawing's canvas is not
-        return arr[ys.min():ys.max() + 1, xs.min():xs.max() + 1]   # the loops')
-
-    cut = [box(v) for v in (art, tint, flat, frame)]
-    bh, bw = max(v.shape[0] for v in cut), max(v.shape[1] for v in cut)
-
-    def seat(arr):
-        out = np.zeros((bh, bw, 4), np.uint8)
-        h, w = arr.shape[:2]
-        out[bh - h:, (bw - w) // 2:(bw - w) // 2 + w] = arr
-        return out
-
-    art, tint, flat, frame = (seat(v) for v in cut)
-    x0, x1, y0, y1 = 0, bw, 0, bh
-    steps = [("1", "the drawing", "one approved drawing", art),
-             ("2", "the cut", f"body_parts.py: {n_parts} parts", tint),
-             ("3", "a pose, as parts", "each part moved whole px", flat),
-             ("4", "the frame", "the drawing's own pixels", frame)]
-    tw, th = (x1 - x0 + 6) * S, (y1 - y0 + 6) * S
-    M, gap = 48, 56
-    W = 2 * M + len(steps) * tw + (len(steps) - 1) * gap
-    H = st.TOP + th + 110
-    im = st.card(W, H)
-    st.heading(im, "pixel-animate", "One drawing, cut once, posed for every frame. Nothing is redrawn.")
-    d = ImageDraw.Draw(im)
-    x = M
-    for i, (num, title, sub, arr) in enumerate(steps):
-        t = rounded(ms.up(tile(arr[y0:y1, x0:x1]), S))
-        im.alpha_composite(t, (x, st.TOP))
-        st.put(im, x + tw / 2, st.TOP + th + 30, f"{num}  {title}", st.TEXT, 3, centre=True)
-        st.put(im, x + tw / 2, st.TOP + th + 66, sub, st.MUTED, 2, centre=True)
+def pipeline_card(drawing, rest, parts, frame):
+    im = demo_card("pixel-animate", "Pose the parts from one drawing to build every frame.")
+    tile_width, gap, top = 102, 8, 58
+    steps = (("1 Drawing", drawing), ("2 Rig at rest", rest),
+             ("3 Posed parts", parts), ("4 Final frame", frame))
+    for i, (label, sprite) in enumerate(steps):
+        x = DEMO_MARGIN + i * (tile_width + gap)
+        im.alpha_composite(rounded(tile(sprite, size=(tile_width, DEMO_TILE_HEIGHT)), radius=4), (x, top))
+        st.put(im, x + tile_width // 2, 126, label, st.TEXT, 1, centre=True)
         if i < len(steps) - 1:
-            ax0, ax1, ay = x + tw + 12, x + tw + gap - 12, st.TOP + th // 2
-            d.line((ax0, ay, ax1 - 4, ay), fill=st.MUTED, width=3)
-            d.polygon([(ax1, ay), (ax1 - 12, ay - 8), (ax1 - 12, ay + 8)], fill=st.MUTED)
-        x += tw + gap
-    im.save(path, optimize=True)
-    return im.size
+            st.put(im, x + tile_width + gap // 2, top + DEMO_TILE_HEIGHT // 2, ">", st.MUTED, 1, centre=True)
+    st.put(im, DEMO_MARGIN, 147, "Same part colours", st.TEXT, 1)
+    st.put(im, 146, 147, "Green: near hind leg, from hip to paw", (80, 208, 96), 1)
+    return im
+
+
+def check_card(broken, fixed, fault_count, diagnostic, at_fault):
+    im = demo_card("pixel-anim-check", "Shift one walk frame 4 px sideways, then put it back.")
+    tile_width, top = 208, 61
+    panels = (("Shifted walk", broken, st.RED), ("Restored walk", fixed, st.GREEN))
+    for i, (label, sprite, colour) in enumerate(panels):
+        x = DEMO_MARGIN + i * (tile_width + 16)
+        st.put(im, x, 48, label, colour, 1)
+        im.alpha_composite(rounded(tile(sprite, size=(tile_width, DEMO_TILE_HEIGHT)), radius=4), (x, top))
+        if at_fault:
+            ImageDraw.Draw(im).rounded_rectangle((x, top, x + tile_width - 1, top + DEMO_TILE_HEIGHT - 1),
+                                                 radius=4, outline=colour, width=2)
+        count = fault_count if i == 0 else 0
+        lines = [[(f"beast: {count} fault(s)", st.TEXT), (f">exit {int(bool(count))}", colour)]]
+        if i == 0:
+            lines += [[(line, colour)] for line in wrap(diagnostic, (tile_width - 12) // pixfont.CELL_W)]
+        im.alpha_composite(st.terminal(lines, tile_width, scale=1, pad=6, pitch=10), (x, 126))
+    return im
+
+
+def workflow_images(out, clean, spec):
+    """The part-strip colours and sprite frames come from the same rig and share one frame box."""
+    drawing = ms.rgba(spec.ref)
+    rest = ms.rgba(spec.parts["idle"][0])
+    walk = [ms.rgba(f) for f in clean["move"]]
+    parts = [ms.rgba(f) for f in spec.parts["move"]]
+    if len(parts) != len(walk) or any(not np.array_equal(p[..., 3], f[..., 3]) for p, f in zip(parts, walk)):
+        sys.exit("workflow: the wolf's part strip and walk do not match")
+
+    still = pipeline_card(drawing, rest, parts[10], walk[10])
+    still_path = os.path.join(out, "pipeline.png")
+    still = Image.fromarray(ms.up(np.asarray(still), 2))
+    still.save(still_path, optimize=True)
+
+    modified = _copy(clean)
+    loop, fault_frame = knock(modified, ms.CREATURES["beast"])
+    faults = pac.check(modified, spec)
+    diagnostic = next((line for line in faults if line.startswith(f"jump: {loop}[{fault_frame}] ")), None)
+    if diagnostic is None:
+        sys.exit(f"workflow: the shifted frame did not give the expected jump fault: {faults}")
+
+    matte = Image.new("RGBA", (DEMO_WIDTH, DEMO_HEIGHT), ms.OUTSIDE)
+    frames = []
+    for part_frame, sprite in zip(parts, walk):
+        panel = pipeline_card(drawing, rest, part_frame, sprite)
+        frames.extend([np.asarray(Image.alpha_composite(matte, panel).convert("RGB"))] * 3)
+    for i, sprite in enumerate(walk):
+        at_fault = i == fault_frame
+        broken = ms.rgba(modified[loop][i]) if at_fault else sprite
+        panel = check_card(broken, sprite, len(faults), diagnostic, at_fault)
+        frames.extend([np.asarray(Image.alpha_composite(matte, panel).convert("RGB"))] * (27 if at_fault else 3))
+    gif = ms.write_gif(os.path.join(out, "workflow.gif"), frames, 2)
+    return still.size, gif
 
 
 # ---- faults.png ---------------------------------------------------------------------------------------------------
@@ -304,13 +303,16 @@ def main(argv):
                     help="where the pictures go (default: docs/img/gallery)")
     args = ap.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
+    clean, spec = ms.loops("beast"), ms.spec("beast")
     for key in ms.CREATURES:                               # the same gate as make_showcase: every loop clean
-        faults = pac.check(ms.loops(key), ms.spec(key))
+        faults = pac.check(clean, spec) if key == "beast" else pac.check(ms.loops(key), ms.spec(key))
         if faults:
             sys.exit(f"{key}: {len(faults)} fault(s): {faults[0]}")
     for name, size, n, total in loop_gifs(args.out):
         print(f"{name:20s} {size[0]}x{size[1]}  {n} images  {total} ms")
-    print("pipeline.png", pipeline_png(os.path.join(args.out, "pipeline.png")))
+    still_size, (size, n, total) = workflow_images(args.out, clean, spec)
+    print("pipeline.png", still_size)
+    print(f"{'workflow.gif':20s} {size[0]}x{size[1]}  {n} images  {total} ms")
     size, cases = faults_png(os.path.join(args.out, "faults.png"))
     print("faults.png", size)
     for title, kind, lines in cases:
