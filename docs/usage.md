@@ -486,8 +486,10 @@ The first line shrinks the rest frame once and makes the palette from it. Use it
 
 Each game pixel is drawn when `--cover` of its cell is figure. Contour ink fills a cell if it covers over half of
 the cell, or at least 0.12 at the crest across a stroke. An end on the same crest can extend into a cell below
-`--cover`. For the fill, snap contributing source pixels to the palette and take the colour with the most area in
-the cell. A tie goes to the rest frame's colour there, or else to the first tied colour in the palette's order.
+`--cover`. Cells filled by dark hatching keep the ink as their fill. Two cells straddling the same narrow stroke
+can share one contour pixel. For the fill, snap contributing source pixels to the palette and take the colour
+with the most area in the cell. A tie goes to the rest frame's colour there, or else to the first tied colour in
+the palette's order.
 
 - **Out:** `<name>_shrunk.png` (game size, palette colours only) and, with `--colours`, `<name>_palette.png` (one
   pixel a colour, dark to light).

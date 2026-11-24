@@ -772,7 +772,8 @@ def cadence(loops, spec):
 
     uneven: the holds between moves (here a move is over MOVE_MIN of the figure: a blink or a glint is not) differ by
     2 frames or more and by twice (one long rest, at least twice the next longest, is an idle's pause and is left
-    out). lurch: the median ratio of one move to the next over LURCH (a whole-body bob after a small leg step: a hitch
+    out). Among equally long action keys, prefer the pose with more changed pixels across its entrance and exit.
+    lurch: the median ratio of one move to the next over LURCH (a whole-body bob after a small leg step: a hitch
     on each beat). uneven and lurch only where the moves are big enough to see (over CADENCE_STEP of the figure), and
     on a cycle of moves (four or more; six for lurch): one gesture in an idle is drawn on purpose. Neither judges an
     idle that breathes (_breathes: its body moves whole, and its other pose changes are a free tip's small steps):
@@ -849,12 +850,23 @@ def cadence(loops, spec):
         second = (key and len(longest) > 3 and 0 < longest[-2] <= key   # an action's second held key
                   and longest[-2] >= 2 * statistics.median(longest[:-2]))
         exempt_ranks = ([0] if rest else []) + ([1] if second else [])
-        if any(holds.count(longest[-1 - rank]) > 1 for rank in exempt_ranks):
-            # Resolve tied keys against a canonical rotation of the hold pattern. The input can start mid-hold.
-            holds = min(holds[i:] + holds[:i] for i in range(len(holds)))
-        ranked = sorted(range(len(holds)), key=holds.__getitem__, reverse=True)
-        exempt = {ranked[rank] for rank in exempt_ranks}
-        seq = [h for i, h in enumerate(holds) if i not in exempt]
+        seq = holds
+        if exempt_ranks:
+            # A hold sits between these two visible moves. A key pose stands out on entry and exit together.
+            poses = [(h, p + q) for h, p, q in zip(holds, moving, moving[1:] + moving[:1])]
+            ranked = sorted(poses, reverse=True)
+            exempt = [ranked[rank] for rank in exempt_ranks]
+            if longest[0] != longest[-1] and any(poses.count(k) > exempt.count(k) for k in exempt):
+                # Identical evidence for more candidates than slots: give the ring a common start and direction.
+                first = min(poses)
+                poses = min(ring[i:] + ring[:i] for ring in (poses, poses[::-1])
+                            for i, pose in enumerate(ring) if pose == first)
+            seq = []
+            for pose in poses:
+                if pose in exempt:
+                    exempt.remove(pose)
+                else:
+                    seq.append(pose[0])
         abrupt = sum(1 for p, q in zip(seq, seq[1:] + seq[:1]) if max(p, q) >= 2 * min(p, q) and abs(p - q) >= 2)
         if len(seq) >= 4 and abrupt >= len(seq) / 2:      # a cycle (a gesture of two or three moves is not); a
             # sway's ease doubling its hold at each turn is half less: ease at a stroke's turn lengthens holds gradually

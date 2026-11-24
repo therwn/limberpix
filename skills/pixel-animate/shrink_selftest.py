@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import shrink as sh                                       # noqa: E402
@@ -169,6 +169,31 @@ def run():
                 ends.append((result == 0).sum(int(not transpose)).tolist())
             case(f"thin contour keeps both ends over {'fill' if background[-1] else 'air'}, transpose={transpose}",
                  ends == [[0, 1, 1, 1, 1, 0]] * 2, ends)
+    for paper in (FUR + (255,), (0, 0, 0, 0)):
+        drawing = Image.new("RGBA", (64, 64), paper)
+        ImageDraw.Draw(drawing).line((12, 8, 57, 53), fill=INK + (255,), width=6)
+        pixels = np.asarray(drawing)
+        strokes = [sh.shrink(src, p3, (8, 8)) == 0 for src in (pixels, pixels[:, ::-1])]
+        for orientation, stroke in zip(("original", "mirrored"), strokes):
+            reached = stroke[1]
+            for row in stroke[2:7]:
+                padded = np.pad(reached, 1)
+                reached = row & (padded[:-2] | padded[1:-1] | padded[2:])
+            case(f"{orientation} diagonal connects its ends over alpha {paper[3]}",
+                 reached.any(), stroke.astype(int).tolist())
+        case(f"mirrored diagonal ink keeps its area over alpha {paper[3]}",
+             strokes[0].sum() == strokes[1].sum(), [int(m.sum()) for m in strokes])
+
+    yy, xx = np.indices((32, 32))
+    for name, hatch in (("checkerboard", (xx + yy) % 2 == 0), ("parallel hatch", xx % 2 == 0),
+                        ("half-cell stripes", xx % 4 < 2)):
+        drawing = np.zeros((40, 40, 4), np.uint8)
+        drawing[4:36, 4:36][hatch] = INK + (255,)
+        expected = np.full((10, 10), -1)
+        expected[1:9, 1:9] = 0
+        result = sh.shrink(drawing, p3, (10, 10))
+        case(f"half-covered {name} keeps all 64 ink cells", np.array_equal(result, expected),
+             int((result >= 0).sum()))
     dark2 = (24, 20, 21)
     tones = sh.ordered([INK, dark2])
     ref[:, :22] = tuple(tones[0]) + (255,)

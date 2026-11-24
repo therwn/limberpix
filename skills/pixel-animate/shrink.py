@@ -17,8 +17,9 @@ A game pixel is made from its cell in this order:
    for a creature with thin parts, a narrow wing or a tail joint, that would otherwise break.
 2. The contour is read apart from the fill. Contour pixels are the reference's near-black ones (red + green + blue
    under --contour, default 70). A cell is contour when ink covers over half its area, or at least 0.12 at the
-   crest across a stroke. A partial end can continue the adjacent crest below --cover. This keeps a thin stroke
-   one pixel wide over fill or air. --no-contour turns this off.
+   crest across a stroke. A partial end can continue the adjacent crest below --cover. When a covered cell
+   contains only ink, that ink supplies its fill unless the adjacent pixel already represents the same narrow
+   stroke. --no-contour votes all colours together.
 3. The fill is voted. Every other reference pixel is first snapped to the palette (the nearest colour in CIE Lab);
    the cell takes the colour with the most area. Averaging would introduce tones between the drawing's colours.
 4. A tie goes to the colour the rest frame has at that game pixel (--rest), when it is one of the tied; otherwise to
@@ -155,14 +156,14 @@ def shrink(ref, pal, size, rest=None, cover=COVER, contour=CONTOUR):
         winner = int(cnt.argmax())
         return prior if 0 <= prior < n and cnt[prior] == cnt[winner] else winner
 
-    xs = list(spans(W, w))
+    columns, rows = list(spans(W, w)), list(spans(H, h))
     covered = np.zeros((h, w))
     ink_area = np.zeros((h, w))                           # the contour's geometric share of the entire cell
     fill = np.full((h, w), -1)
     line = np.full((h, w), -1)                            # the contour's own colour there
-    for y, (ys, wy) in enumerate(spans(H, h)):
-        for x, (xslice, wx) in enumerate(xs):
-            sl = (ys, xslice)
+    for y, (ys, wy) in enumerate(rows):
+        for x, (xs, wx) in enumerate(columns):
+            sl = (ys, xs)
             f, d, i = fig[sl], dark[sl], idx[sl]
             weights = wy[:, None] * wx[None, :]
             m = int(weights[f].sum())
@@ -187,7 +188,11 @@ def shrink(ref, pal, size, rest=None, cover=COVER, contour=CONTOUR):
     crest_v = (mid > z[:-2, 1:-1]) & (mid >= z[2:, 1:-1])
     across_h = crest_h & (fall_h > fall_v)
     across_v = crest_v & (fall_v > fall_h)
-    ridge = across_h | across_v | ((fall_h == fall_v) & crest_h & crest_v)
+    # A diagonal can fall equally in x and y. Where opposite neighbours carry the stroke diagonally,
+    # select one crest per row. Elsewhere a tie still needs both crests, e.g. the cap of a straight line.
+    diagonal = np.maximum(np.minimum(z[:-2, :-2], z[2:, 2:]), np.minimum(z[:-2, 2:], z[2:, :-2]))
+    axial = np.maximum(np.minimum(z[1:-1, :-2], z[1:-1, 2:]), np.minimum(z[:-2, 1:-1], z[2:, 1:-1]))
+    ridge = across_h | across_v | ((fall_h == fall_v) & crest_h & (crest_v | (diagonal > axial)))
     # A short end can lose more ink along the stroke than across it. Follow the adjacent crest's direction here.
     # The 10-in-11-px regression has three full rows and a partial end, including a 5+5 split over transparency.
     anchors_h = np.pad(across_h & (covered >= cover), 1)
@@ -195,7 +200,27 @@ def shrink(ref, pal, size, rest=None, cover=COVER, contour=CONTOUR):
     continued = ((crest_h & (anchors_h[:-2, 1:-1] | anchors_h[2:, 1:-1]))
                  | (crest_v & (anchors_v[1:-1, :-2] | anchors_v[1:-1, 2:])))
     is_line = (ink_area > LINE_SOLID) | ((ink_area >= LINE_LOW) & (ridge | continued))
-    return np.where((covered >= cover) | (is_line & continued), np.where(is_line, line, fill), -1)
+    visible = (covered >= cover) | (is_line & continued)
+    ink_fill = visible & (fill < 0) & ~is_line
+    if ink_fill.any():
+        # Ink is also the fill of a monochrome cell, unless a neighbouring game pixel already
+        # represents this narrow stroke. Check the source ink crosses their common edge on the same
+        # scanline and stays inside the pair's outer edges. A halftone fills its cells independently.
+        def shared_strokes(source, bands, cells):
+            first = source[:, [s.start for s, _ in cells]]
+            last = source[:, [s.stop - 1 for s, _ in cells]]
+            crosses = last[:, :-1] & first[:, 1:]
+            outside = first[:, :-1] | last[:, 1:]
+            return np.array([crosses[s].any(axis=0) & ~outside[s].any(axis=0) for s, _ in bands])
+
+        drawn_line = visible & is_line
+        share_x = shared_strokes(dark, rows, columns)
+        share_y = shared_strokes(dark.T, columns, rows).T
+        ink_fill[:, 1:] &= ~(share_x & drawn_line[:, :-1])
+        ink_fill[:, :-1] &= ~(share_x & drawn_line[:, 1:])
+        ink_fill[1:] &= ~(share_y & drawn_line[:-1])
+        ink_fill[:-1] &= ~(share_y & drawn_line[1:])
+    return np.where(visible, np.where(is_line | ink_fill, line, fill), -1)
 
 
 def to_image(idx, pal):

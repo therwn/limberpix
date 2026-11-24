@@ -237,6 +237,20 @@ def cli(case):
         diagonal.save(src)
         code, msg = run_main([src, "--eye-at", "68,6", "--out", out])
         case("cli: a diagonal one-pixel snake is one figure", code == 0 and "facing right" in msg, (code, msg))
+        diagonal.putpixel((36, 6), (0, 0, 0, 0))
+        diagonal.save(src)
+        code, msg = run_main([src, "--eye-at", "68,6", "--out", out])
+        case("cli: a snake visible in two sections is one drawing", code == 0, (code, msg))
+        for width, tail, head, sparks in ((96, 10, 86, [2, 93]), (128, 26, 125, [2, 10, 18])):
+            speckled = Image.new("RGBA", (width, 16))
+            pen = ImageDraw.Draw(speckled)
+            pen.line((tail, 8, head, 8), fill=BODY, width=3)
+            pen.point((head - 3, 8), fill=EYE)
+            pen.point([(x, 8) for x in sparks], fill=EYE)
+            speckled.save(src)
+            code, msg = run_main([src, "--eye-at", f"{head - 3},8", "--out", out])
+            case(f"cli: a snake with {len(sparks)} separate sparks is one figure",
+                 code == 0 and "serpent or worm" in msg and "facing right" in msg, (code, msg))
         round_body = Image.new("RGBA", (32, 32))
         d = ImageDraw.Draw(round_body)
         d.ellipse((8, 8, 24, 24), fill=BODY)
@@ -266,6 +280,17 @@ def cli(case):
         attack.save(src)
         got, text = run_main([src, "--out", out])
         case("cli: repeated attack with detached effects is rejected", got == 2 and "crop one frame" in text, text)
+        touching = Image.new("RGBA", (85, 12))
+        pen = ImageDraw.Draw(touching)
+        for x in range(0, 85, 17):
+            pen.rectangle((x + 5, 4, x + 10, 8), fill=BODY)
+            pen.point((x + 8, 5), fill=EYE)
+        pen.line((27, 4, 33, 4), fill=BODY)              # frame 2 reaches its right edge
+        pen.line((34, 5, 39, 5), fill=BODY)              # frame 3 touches that tip diagonally
+        touching.save(src)
+        got, text = run_main([src, "--out", out])
+        case("cli: two touching poses in a five-frame strip are rejected",
+             got == 2 and "crop one frame" in text, (got, text))
         if code == 0:
             folder = Path(out)
             files = json.loads((folder / "round_map_manifest.json").read_text(encoding="utf-8"))

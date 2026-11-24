@@ -1252,14 +1252,22 @@ def audit_readouts(walker):
         faults = pac.cadence({"move": frames}, pac.Spec(**options))
         case(f"alternating holds are uneven with action={bool(options)}",
              any(f.startswith("uneven:") for f in faults), faults)
-    for holds, expected in (([3, 1, 1, 1, 3, 1, 3, 3], False), ([1, 3] * 4, True)):
-        wave = [f for f, hold in zip(poses, holds) for _ in range(hold)]
-        outcomes = []
-        for start in range(len(wave)):
-            faults = pac.check({"wave": wave[start:] + wave[:start]}, pac.Spec(actions={"wave": "other"}))
-            outcomes.append(any(f.startswith("uneven:") for f in faults))
-        case(f"action holds have one verdict at every start: {holds}",
-             outcomes == [expected] * len(wave), outcomes)
+    action_spec = pac.Spec(actions={"wave": "other"})
+    # Changing the whole swatch gives every pose exactly the same size entrance and exit.
+    swatches = [[[f"#{shade:02x}6030"] * 4 for _ in range(4)] for shade in range(128, 136)]
+    for drawings, holds, expected in ((poses, [3, 1, 1, 1, 3, 1, 3, 3], False),
+                                      (poses, [1, 1, 1, 3, 3, 3, 1, 3], True),
+                                      (poses, [1, 3] * 4, True), (poses, [2] * 8, False),
+                                      (swatches, [3, 1, 1, 1, 3, 1, 3, 3], False), (swatches, [1, 3] * 4, True)):
+        wave = [f for f, hold in zip(drawings, holds) for _ in range(hold)]
+        for direction, cycle in (("forward", wave), ("reverse", wave[::-1])):
+            flagged = 0
+            for start in range(len(cycle)):
+                faults = pac.check({"wave": cycle[start:] + cycle[:start]}, action_spec)
+                flagged += any(f.startswith("uneven:") for f in faults)
+            subject = "action" if drawings is poses else "swatch"
+            case(f"{direction} {subject} holds {holds}: {flagged}/{len(cycle)} starts uneven",
+                 flagged == (len(cycle) if expected else 0), flagged)
     wave = [f for f, hold in zip(poses, [7, 2, 17, 1, 1, 1, 1, 13]) for _ in range(hold)]
     faults = pac.cadence({"wave": wave}, pac.Spec(actions={"wave": "other"}))
     case("an eligible second key cannot exempt the longest hold", any(f.startswith("uneven:") for f in faults), faults)

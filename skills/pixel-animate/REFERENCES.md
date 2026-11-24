@@ -297,10 +297,11 @@ a cell on the same grid, which should be none; and how much of the figure the da
 | the same vote, no contour rule | 18 % | 32 % | 9 % |
 
 On each of the six, `shrink.py` was lowest on the first two numbers, the 2-means next, the average and the single
-sample highest. The third row is the pipeline the private set's sprites were made with;
-`shrink.py`'s coverage and contour thresholds (0.42, 70, 0.45, 0.12) are that pipeline's. Looked at by eye on three
-of the six: the contour rule keeps the outlines the plain vote loses, and the voted fill kept a tail flame and an
-eye that the 2-means lost. One person's measurements and look; nobody else judged the pictures. Even the best row
+sample highest. The third row is the pipeline the private set's sprites were made with. The measurements above
+used that pipeline's coverage and contour thresholds (0.42, 70, 0.45, 0.12). The current shrink counts ink covering
+over half the cell as solid and tests thinner strokes for a crest. On three of the six drawings, the reviewer saw
+the contour rule preserve outlines that plain voting lost, and the voted fill preserve a tail flame and an eye
+that 2-means lost. One person measured and judged the pictures. Even the best row
 changes a third of the pixels under a small move, which is why the default rules move parts by whole game pixels.
 
 The crest rule (which of two cells a thin line straddles is the line) was fixed on built cases, not on the

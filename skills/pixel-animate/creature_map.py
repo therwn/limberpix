@@ -646,32 +646,46 @@ def overlay(im, res, aux, path):
 
 
 def _looks_like_strip(im):
-    """A wide sheet with repeated silhouettes at a regular cell pitch, including detached effects."""
+    """A wide sheet with at least three separated silhouettes repeating at a regular cell pitch."""
     if im.width <= 3 * im.height:
         return False
+    min_figures = 3
     mask = silhouette(im)
     occupied = mask.any(axis=0)
     edges = np.diff(np.r_[False, occupied, False].astype(int))
     starts, ends = np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)
-    if len(starts) >= 3 and im.width % len(starts) == 0:
+    if len(starts) >= min_figures and im.width % len(starts) == 0:
         width = im.width // len(starts)
         cells = np.arange(len(starts))
         if np.array_equal(starts // width, cells) and np.array_equal((ends - 1) // width, cells):
             if mask.reshape(im.height, len(cells), width).all(axis=1).any():
                 return True
-    # The wolf and bird attacks have effects beside some bodies. Their adjacent cells still share a large body
-    # footprint, and their boundaries (unlike slices through a single snake) do not cut connected pixels.
-    for width in range(max(2, im.height // 2), min(3 * im.height, im.width // 3) + 1):
+    # Detached effects can split a pose across several column runs. Compare the body footprints in equal cells.
+    for width in range(max(2, im.height // 2), min(3 * im.height, im.width // min_figures) + 1):
         if im.width % width:
             continue
         cells = mask.reshape(im.height, -1, width).transpose(1, 0, 2)
         left, right = cells[:-1, :, -1], cells[1:, :, 0]
-        if any(np.any(a & b) for a, b in ((left, right), (left[:, 1:], right[:, :-1]),
-                                         (left[:, :-1], right[:, 1:]))):
+        joined = (left & right).any(axis=1)
+        joined |= (left[:, 1:] & right[:, :-1]).any(axis=1)
+        joined |= (left[:, :-1] & right[:, 1:]).any(axis=1)
+        # A continuous body crosses every intervening boundary, possibly diagonally. Two touching poses form
+        # one group here; the other poses can still supply the separated silhouettes needed to identify a strip.
+        groups = 1 + np.count_nonzero(~joined)
+        if groups < min_figures:
             continue
         areas = cells.sum(axis=(1, 2))
         common = (cells[:-1] & cells[1:]).sum(axis=(1, 2))
-        if areas.min() > 0 and np.all(2 * common >= np.minimum(areas[:-1], areas[1:])):
+        if areas.min() == 0 or np.any(2 * common < np.minimum(areas[:-1], areas[1:])):
+            continue
+        if not joined.any():
+            return True
+        # With a body crossing some boundaries, the gaps must also separate repeated bodies. A spark can cover
+        # its own area in the next cell, and two sparks can match each other, while the body crosses many cells.
+        larger_cell = np.maximum(areas[:-1], areas[1:])
+        joined_footprint = common[joined].max()
+        matching_bodies = 2 * common >= np.maximum(larger_cell, joined_footprint)
+        if 1 + np.count_nonzero(~joined & matching_bodies) >= min_figures:
             return True
     return False
 
