@@ -1,8 +1,6 @@
-<p align="center">
-  <img src=".claude-plugin/icon.png" width="96" height="96" alt="The Limberpix icon: a small pixel-art walker on a dark square">
-</p>
-
-<h1 align="center">Limberpix</h1>
+<h1 align="center">
+  <img src="docs/brand/limberpix-logo.png" width="592" alt="Limberpix — Animate &amp; Check">
+</h1>
 
 <p align="center">
   <b>Two agent skills for pixel-art sprite animation, for Claude Code and Codex.</b><br>
@@ -179,4 +177,5 @@ or for the whole system (see [Troubleshooting](docs/usage.md#troubleshooting)).
 
 ## Licence
 
-[MIT](LICENSE), copyright (c) 2026 therwn.
+The software and its documentation are available under the [MIT License](LICENSE), copyright (c) 2026 therwn.
+The [brand usage policy](docs/brand/LICENSE.md) applies to the Limberpix name and the logo artwork.
