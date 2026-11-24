@@ -29,13 +29,16 @@ How it reads the silhouette:
 7. Pivots: a limb's joint is where its branch leaves the spine; its root, where it leaves the trunk's outline
    (the branch point a trunk-width from the joint): a leg is sheared about its root's row, a wing turned about it.
 Output: <name>_map.json (all coordinates in the drawing's own pixels) and <name>_map.png (regions tinted, the
-skeleton, the spine, joints and labels). Exit code: 0 done, 1 no body found in the drawing, 2 a usage error (a bad
+skeleton, the spine, joints and labels). Read <name>_map_manifest.json for both paths relative to --out.
+Exit code: 0 done, 1 no body found in the drawing, 2 a usage error (a bad
 option, a missing file, or a strip of frames: give it one drawing)."""
 import json
 import math
 import os
+import shutil
 import sys
 import tempfile
+import time
 from collections import deque
 
 try:
@@ -662,13 +665,28 @@ def _looks_like_strip(im):
         if im.width % width:
             continue
         cells = mask.reshape(im.height, -1, width).transpose(1, 0, 2)
-        if np.any(cells[:-1, :, -1] & cells[1:, :, 0]):
+        left, right = cells[:-1, :, -1], cells[1:, :, 0]
+        if any(np.any(a & b) for a, b in ((left, right), (left[:, 1:], right[:, :-1]),
+                                         (left[:, :-1], right[:, 1:]))):
             continue
         areas = cells.sum(axis=(1, 2))
         common = (cells[:-1] & cells[1:]).sum(axis=(1, 2))
         if areas.min() > 0 and np.all(2 * common >= np.minimum(areas[:-1], areas[1:])):
             return True
     return False
+
+
+def _replace_manifest(pending, target):
+    """Allow a concurrent Windows rename to settle before treating the output as locked."""
+    for delay in (0.01, 0.02, 0.04, 0.08, 0.16):
+        try:
+            os.replace(pending, target)
+            return
+        except PermissionError as exc:
+            if getattr(exc, "winerror", None) not in (5, 32, 33):
+                raise
+            time.sleep(delay)
+    os.replace(pending, target)
 
 
 def main(argv):
@@ -717,10 +735,11 @@ def main(argv):
     name = opts.get("--name", os.path.splitext(os.path.basename(src))[0])
     out = os.path.realpath(opts.get("--out", "."))
     filenames = (f"{name}_map.json", f"{name}_map.png")
+    manifest = f"{name}_map_manifest.json"
     try:
         if not name or name in (".", "..") or any(c in '/\\:<>"|?*' or ord(c) < 32 for c in name):
             raise ValueError(f"--name must be a file name, not {name!r}")
-        for filename in filenames:
+        for filename in (*filenames, manifest):
             target = os.path.join(out, filename)
             if os.path.isdir(target):
                 raise ValueError(f"output {target} is a directory")
@@ -746,12 +765,22 @@ def main(argv):
         return 1 if str(e) == "no body found" else 2
     try:
         os.makedirs(out, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=out) as stage:
+        stage = tempfile.mkdtemp(prefix=".limberpix-drawing-", dir=out)
+        pending = os.path.join(stage, "manifest.json")
+        try:
             with open(os.path.join(stage, filenames[0]), "w", encoding="utf-8") as fh:
                 json.dump(res, fh, indent=1)
             overlay(im, res, aux, os.path.join(stage, filenames[1]))
-            for filename in filenames:
-                os.replace(os.path.join(stage, filename), os.path.join(out, filename))
+            with open(pending, "w", encoding="utf-8") as fh:
+                json.dump({f: f"{os.path.basename(stage)}/{f}" for f in filenames}, fh)
+        except BaseException:
+            shutil.rmtree(stage, ignore_errors=True)
+            raise
+        try:
+            _replace_manifest(pending, os.path.join(out, manifest))
+        except OSError:
+            shutil.rmtree(stage, ignore_errors=True)
+            raise
     except OSError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -759,7 +788,8 @@ def main(argv):
     for p in res["parts"]:
         print(f"  {p['name']:14s} {p['kind']:28s} {p['zone']:5s} share {p['area_share']:.3f} root {p['root']} "
               f"tip {p['tip']}")
-    print("map:", os.path.abspath(os.path.join(out, f"{name}_map.png")))
+    print("map:", os.path.join(stage, filenames[1]))
+    print("manifest:", os.path.join(out, manifest))
     return 0
 
 

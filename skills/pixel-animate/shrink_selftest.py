@@ -4,6 +4,7 @@ A small creature is drawn at game size, blown up as a reference would be, and br
 is then checked on a case made for it, and the command line on files in a temporary folder."""
 import contextlib
 import io
+import json
 import os
 import sys
 import tempfile
@@ -156,6 +157,18 @@ def run():
         ref[:, start:start + width] = INK + (255,)
         widths.append(int((sh.shrink(ref, p3, (4, 1)) == 0).sum()))
     case("thin contour stays one pixel thick when shifted", widths == [1, 1, 1, 2], widths)
+    for background in (FUR + (255,), (0, 0, 0, 0)):
+        for transpose in (False, True):
+            ends = []
+            for x in (17, 18):
+                drawing = np.zeros((66, 66, 4), np.uint8)
+                drawing[8:58, 8:58] = background
+                drawing[11:47, x:x + 10] = INK + (255,)
+                source = drawing.transpose(1, 0, 2) if transpose else drawing
+                result = sh.shrink(source, p3, (6, 6))
+                ends.append((result == 0).sum(int(not transpose)).tolist())
+            case(f"thin contour keeps both ends over {'fill' if background[-1] else 'air'}, transpose={transpose}",
+                 ends == [[0, 1, 1, 1, 1, 0]] * 2, ends)
     dark2 = (24, 20, 21)
     tones = sh.ordered([INK, dark2])
     ref[:, :22] = tuple(tones[0]) + (255,)
@@ -218,15 +231,21 @@ def cli(rgba, pal, truth, big):
         ref, rest, out = (os.path.join(tmp, n) for n in ("ref.png", "rest.png", "out"))
         Image.fromarray(big).save(ref)
         Image.fromarray(rgba).save(rest)
+
+        def output(stem, suffix):
+            with open(os.path.join(out, f"{stem}_shrink_manifest.json"), encoding="utf-8") as manifest:
+                filename = json.load(manifest)[f"{stem}_{suffix}.png"]
+            return os.path.join(out, filename)
+
         code, text = run_main([ref, "--size", f"{W},{H}", "--palette", rest, "--rest", rest, "--out", out, "--name", "a"])
         case("--size with --palette and --rest brings the drawing back", code == 0
-             and same(os.path.join(out, "a_shrunk.png")), (code, text[-200:]))
+             and same(output("a", "shrunk")), (code, text[-200:]))
         code, text = run_main([ref, "--scale", "8", "--palette", rest, "--out", out, "--name", "b"])
-        case("--scale 8 gives the same frame", code == 0 and same(os.path.join(out, "b_shrunk.png")), (code, text[-200:]))
+        case("--scale 8 gives the same frame", code == 0 and same(output("b", "shrunk")), (code, text[-200:]))
         code, text = run_main([ref, "--scale", "8", "--colours", "5", "--out", out, "--name", "c"])
-        sw = os.path.join(out, "c_palette.png")
+        sw = output("c", "palette")
         case("--colours writes the frame and its palette", code == 0 and os.path.isfile(sw)
-             and Image.open(sw).size[0] <= 5 and os.path.isfile(os.path.join(out, "c_shrunk.png")), (code, text[-200:]))
+             and Image.open(sw).size[0] <= 5 and os.path.isfile(output("c", "shrunk")), (code, text[-200:]))
         code, text = run_main([ref, "--scale", "8", "--palette", sw, "--out", out, "--name", "d"])
         case("that palette file is taken by --palette", code == 0, (code, text[-200:]))
         solid = os.path.join(tmp, "solid.png")
@@ -236,7 +255,7 @@ def cli(rgba, pal, truth, big):
         code, text = run_main([solid, "--scale", "8", "--palette", rest, "--out", out])
         case("a reference with no transparency is a usage error naming --key", code == 2 and "--key" in text, (code, text))
         code, text = run_main([solid, "--scale", "8", "--palette", rest, "--key", "#FF00FF", "--out", out, "--name", "e"])
-        case("--key reads that colour as air", code == 0 and same(os.path.join(out, "e_shrunk.png")), (code, text[-200:]))
+        case("--key reads that colour as air", code == 0 and same(output("e", "shrunk")), (code, text[-200:]))
         wrong = os.path.join(tmp, "wrong.png")
         Image.fromarray(rgba[:5, :5]).save(wrong)
         for name, args in (("neither --size nor --scale", [ref, "--palette", rest]),

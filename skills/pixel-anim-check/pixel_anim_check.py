@@ -163,6 +163,7 @@ import shutil
 import statistics
 import sys
 import tempfile
+import time
 from fractions import Fraction
 
 try:
@@ -493,12 +494,12 @@ def _check(loops, spec, warns=None):
     if len(sizes) > 1:
         return [f"size: frames differ {sorted(sizes)}"]
     skip = spec.effects | spec.shadow
-    unavailable = set()
+    empty_frames = {}
     for a, i, f in allf:
         drawn = [(x, y) for y, r in enumerate(f) for x, v in enumerate(r) if v is not None and v not in skip]
         if not drawn:
             faults.append(f"empty: {a}[{i}]")
-            unavailable.add(a)
+            empty_frames.setdefault(a, set()).add(i)
             continue
         stray = [s for s in _pieces(f, skip)[:-1] if s > spec.allow.get(a, 0)]
         if stray:
@@ -513,9 +514,11 @@ def _check(loops, spec, warns=None):
         if open_edge > 2:                                 # a redrawn style may line its edges in colour (selout)
             line = f"outline: {a}[{i}] {open_edge} coloured edge pixel(s) with no ink"
             (faults.append(line) if spec.style == "pixel" else warns.append("warn: " + line))
-    loops = {a: frames for a, frames in loops.items() if frames and a not in unavailable}
+    palette_faults = palette(loops, spec)                # only temporal checks need a body in every frame
+    all_loops = loops
+    loops = {a: frames for a, frames in loops.items() if frames and a not in empty_frames}
     if not loops:
-        return faults
+        return faults + palette_faults + marks(all_loops, spec, warns, empty_frames)
     for a, frames in loops.items():
         kind = spec.actions.get(a, (None, None))[0]
         figs = [[[None if v in skip else v for v in r] for r in f] for f in frames]
@@ -543,7 +546,7 @@ def _check(loops, spec, warns=None):
         if a == spec.move and body and mean / body < STILL:
             faults.append(f"still: {a} changes {mean / body:.1%} of the figure a frame")
         if spec.style == "pixel":                         # a redrawn pose redraws its texture on purpose
-            faults += _shimmer(a, frames, spec)
+            faults += _shimmer(a, figs, spec)
     redrawn = spec.style == "redrawn"
     face = reshape(loops, spec, warns)
     if redrawn:                                           # a redrawn face changes its pixels on purpose
@@ -553,7 +556,7 @@ def _check(loops, spec, warns=None):
               + (stepped(loops, spec) + lostmark(loops, spec) + gaps(loops, spec) if redrawn
                  else cadence(loops, spec)) + snap(loops, spec)
               + tick(loops, spec, warns) + hop(loops, spec) + vanish(loops, spec) + shallow(loops, spec)
-              + face + palette(loops, spec) + marks(loops, spec, warns) + spots(loops, spec, warns))
+              + face + palette_faults + marks(all_loops, spec, warns, empty_frames) + spots(loops, spec, warns))
     for later in (action, boil, seam, skate, gait, parts, orphans, doubles, blend, drift, swap, split,
                   hitch):                                 # warnings
         later(loops, spec, warns)
@@ -845,10 +848,12 @@ def cadence(loops, spec):
                 or 0 < longest[-1] <= key)                            # action's held key too
         second = (key and len(longest) > 3 and 0 < longest[-2] <= key   # an action's second held key
                   and longest[-2] >= 2 * statistics.median(longest[:-2]))
+        exempt_ranks = ([0] if rest else []) + ([1] if second else [])
+        if any(holds.count(longest[-1 - rank]) > 1 for rank in exempt_ranks):
+            # Resolve tied keys against a canonical rotation of the hold pattern. The input can start mid-hold.
+            holds = min(holds[i:] + holds[:i] for i in range(len(holds)))
         ranked = sorted(range(len(holds)), key=holds.__getitem__, reverse=True)
-        exempt = {ranked[0]} if rest else set()
-        if second:
-            exempt.add(ranked[1])
+        exempt = {ranked[rank] for rank in exempt_ranks}
         seq = [h for i, h in enumerate(holds) if i not in exempt]
         abrupt = sum(1 for p, q in zip(seq, seq[1:] + seq[:1]) if max(p, q) >= 2 * min(p, q) and abs(p - q) >= 2)
         if len(seq) >= 4 and abrupt >= len(seq) / 2:      # a cycle (a gesture of two or three moves is not); a
@@ -1645,6 +1650,14 @@ def _matched(pts, found, shift):
     return best
 
 
+def _validate_spot_coordinates(groups, ref):
+    w, h = _frame_size(ref)
+    for group, coords in groups.items():
+        for y, x in coords:
+            if not (0 <= y < h and 0 <= x < w and round(y) < h and round(x) < w):
+                raise ValueError(f"--spots group {group!r}: ({y:g}, {x:g}) is outside the {w}x{h} reference")
+
+
 def spots(loops, spec, warns):
     """(with --spots and --ref) Small marks of the approved drawing, placed by eye in groups (a hat's four specks, a
     mouth), looked for in every distinct pose of every loop but an action. The approved drawing must be at the loops'
@@ -1660,6 +1673,7 @@ def spots(loops, spec, warns):
     out = []
     if not spec.spots or spec.ref is None:
         return out
+    _validate_spot_coordinates(spec.spots, spec.ref)
     rr, rd = _rgbd(spec.ref, spec)
     if not rd.any():
         return out
@@ -2362,7 +2376,7 @@ def parts(loops, spec, warns):
         body = _part_tracks(labels)[got[0]]
         steps = [abs(body[k][2] - body[k - 1][2]) for k in range(n)]
         if all(v == 0 for v in lags.values()) and max(steps) >= 1.5:   # 1-px steps: riding the body is right
-            warns.append(f"warn: lag: {a} every part riding the body moves on its frame ({', '.join(lags)}): let the "
+            warns.append(f"warn: lag: {a} every part riding the body moves on its frame ({', '.join(map(str, lags))}): let the "
                          f"head, ears or tail follow a pose late (one pose is enough at sprite scale)")
         elif any(abs(v) > n / 4 for v in lags.values()):
             c = max(lags, key=lambda x: abs(lags[x]))
@@ -2567,16 +2581,20 @@ def drift(loops, spec, warns):
     return []
 
 
-def marks(loops, spec, warns):
+def marks(loops, spec, warns, empty_frames=None):
     """The missed defining feature (with --mark): a small high-contrast mark (a gem, a lamp, a lone bright pixel) is
     where the eye goes, and too small for vanish. On every frame each --mark colour must show, and its centroid,
     rounded, must not move 2+ px between consecutive frames (held frames included). Faults in the idle and the
-    move; warnings in other loops (an action may turn it away or swing it fast)."""
+    move; warnings in other loops (an action may turn it away or swing it fast). Skip frames already reported as
+    empty and only judge jumps in complete loops."""
     out = []
     for c in spec.marks:
         for a, frames in loops.items():
+            missing = (empty_frames or {}).get(a, ())
             lines, pos = [], []
             for k, f in enumerate(frames):
+                if k in missing:
+                    continue
                 pts = [(x, y) for y, r in enumerate(f) for x, v in enumerate(r) if v == c]
                 if not pts:
                     lines.append(f"mark: {a}[{k}] has no mark {c}: a defining mark must never vanish")
@@ -2585,7 +2603,7 @@ def marks(loops, spec, warns):
                 pos.append((math.floor(sum(p[0] for p in pts) / len(pts) + 0.5),
                             math.floor(sum(p[1] for p in pts) / len(pts) + 0.5)))
             n = len(frames)
-            for k in range(n if pos and n > 1 else 0):
+            for k in range(n if pos and n > 1 and not missing else 0):
                 (x0, y0), (x1, y1) = pos[k], pos[(k + 1) % n]
                 if max(abs(x1 - x0), abs(y1 - y0)) >= 2:
                     lines.append(f"mark: {a}[{(k + 1) % n}] the mark {c} jumps {max(abs(x1 - x0), abs(y1 - y0))} px "
@@ -3015,21 +3033,27 @@ def fault_frames(lines, loops):
     names = "|".join(re.escape(a) for a in sorted(loops, key=len, reverse=True))
     starts = re.compile(rf"^\s*(?:warn: )?\w+: ({names})(?=\[|\s|$)")
     refs = re.compile(rf"(?<!\w)({names})\[(\d+)(?:-(\d+))?\]")
+    spot_group = re.compile(r""" the marks (?:'[^'\\]*(?:\\.[^'\\]*)*'|"[^"\\]*(?:\\.[^"\\]*)*")(?= \(\d+ in )""")
     for line in lines:
         if isinstance(line, _PoseFault):
             n = len(loops.get(line.loop, ()))
             if n:
                 out.setdefault(line.loop, set()).update((k + i) % n for k, hold in line.runs for i in range(hold))
             continue
-        for name, first, last in refs.findall(line):
+        m = starts.match(line)
+        text = line
+        if m and line.lstrip().startswith("spots:"):
+            group = spot_group.match(line, m.end())
+            if group:
+                text = line[group.end():]                # a quoted group name can itself contain frame syntax
+        for name, first, last in refs.findall(text):
             k, k1, n = int(first), int(last or first), len(loops[name])
             if k < n and k1 < n:
                 out.setdefault(name, set()).update((k + i) % n for i in range((k1 - k) % n + 1))
-        m = starts.match(line)
         if m:
             a = m[1]
             ks, n = out.setdefault(a, set()), len(loops[a])
-            for k in map(int, re.findall(r"\bframe (\d+)", line)):
+            for k in map(int, re.findall(r"\bframe (\d+)", text)):
                 if k < n:
                     ks.add(k)
                     if line.lstrip().startswith(("jump:", "snap:")):
@@ -3393,6 +3417,19 @@ def _preview_folder(out, name, sources):
     return folder
 
 
+def _replace_manifest(pending, target):
+    """Allow a concurrent Windows rename to settle before treating the output as locked."""
+    for delay in (0.01, 0.02, 0.04, 0.08, 0.16):
+        try:
+            os.replace(pending, target)
+            return
+        except PermissionError as exc:
+            if getattr(exc, "winerror", None) not in (5, 32, 33):
+                raise
+            time.sleep(delay)
+    os.replace(pending, target)
+
+
 def _publish_previews(loops, spec, faults, out, name):
     os.makedirs(out, exist_ok=True)
     generation = tempfile.mkdtemp(prefix=".limberpix-preview-", dir=out)
@@ -3408,7 +3445,7 @@ def _publish_previews(loops, spec, faults, out, name):
         shutil.rmtree(generation, ignore_errors=True)
         raise
     try:
-        os.replace(pending, os.path.join(out, f"{name}_check.json"))
+        _replace_manifest(pending, os.path.join(out, f"{name}_check.json"))
     except OSError:
         shutil.rmtree(generation, ignore_errors=True)
         raise
@@ -3538,11 +3575,7 @@ def main(argv):
                                  "approved drawing's pixels") from None
             if not spot_groups or not all(spot_groups.values()):
                 raise ValueError("--spots: every group needs one mark or more")
-            w, h = _frame_size(ref)
-            for group, coords in spot_groups.items():
-                for y, x in coords:
-                    if not (0 <= y < h and 0 <= x < w and round(y) < h and round(x) < w):
-                        raise ValueError(f"--spots group {group!r}: ({y:g}, {x:g}) is outside the {w}x{h} reference")
+            _validate_spot_coordinates(spot_groups, ref)
         eye = opt("--eye")
         eye_at = None
         if opt("--eye-at"):

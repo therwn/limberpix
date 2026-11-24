@@ -37,9 +37,10 @@ def main():
     if status:
         return status
 
-    with Image.open(out / "beacon_labels.png") as image:
+    files = json.loads((out / "beacon_parts_manifest.json").read_text(encoding="utf-8"))
+    with Image.open(out / files["beacon_labels.png"]) as image:
         labels = np.array(image)
-    parts = json.loads((out / "beacon_parts.json").read_text(encoding="utf-8"))["parts"]
+    parts = json.loads((out / files["beacon_parts.json"]).read_text(encoding="utf-8"))["parts"]
     with Image.open(drawing) as image:
         rgba = np.array(image)
     layers = [Image.fromarray(np.where((labels == p["label"])[..., None], rgba, 0)) for p in parts]

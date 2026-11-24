@@ -222,7 +222,7 @@ def cli(case):
         case("cli: bad --eye, --eye-at, option, file exit 2", bad == [2, 2, 2, 2], bad)
         lo = run_main([src, "--eye", EYEHEX, "--out", out, "--name", "lo"])
         up = run_main([src, "--eye", EYEHEX.upper().lstrip("#"), "--out", out, "--name", "lo"])
-        same = lo[0] == up[0] == 0 and lo[1] == up[1]
+        same = lo[0] == up[0] == 0 and lo[1].split("map:")[0] == up[1].split("map:")[0]
         case("cli: --eye FFC828 read as #ffc828", same, (lo[0], up[0]))
         slim = snake()
         x0, y0, x1, y1 = ImageChops.difference(slim, Image.new("RGB", slim.size, BG)).getbbox()
@@ -231,6 +231,12 @@ def cli(case):
         code, msg = run_main([src, "--eye", EYEHEX, "--out", out])
         case("cli: a single wide snake keeps its ground plan",
              code == 0 and "serpent or worm" in msg and "facing right" in msg, msg)
+        diagonal = Image.new("RGBA", (72, 15))
+        for x in range(72):
+            diagonal.putpixel((x, 6 + x % 2), BODY + (255,))
+        diagonal.save(src)
+        code, msg = run_main([src, "--eye-at", "68,6", "--out", out])
+        case("cli: a diagonal one-pixel snake is one figure", code == 0 and "facing right" in msg, (code, msg))
         round_body = Image.new("RGBA", (32, 32))
         d = ImageDraw.Draw(round_body)
         d.ellipse((8, 8, 24, 24), fill=BODY)
@@ -250,13 +256,20 @@ def cli(case):
         got, text = run_main([amber_path, "--out", out, "--eye", "d69d34"])
         case("cli: ambiguous near-colour match asks for a coordinate",
              got == 2 and "ambiguous" in text and "--eye-at" in text, text)
-        examples = Path(__file__).resolve().parents[2] / "examples" / "showcase"
-        for key in ("beast", "bird"):
-            path = str(examples / key / f"{key}_attack.png")
-            got, text = run_main([path, "--out", out])
-            case(f"cli: {key} attack with detached effects is rejected", got == 2 and "crop one frame" in text, text)
+        attack = Image.new("RGBA", (38 * 8, 22))
+        pen = ImageDraw.Draw(attack)
+        for k in range(8):
+            x = k * 38
+            pen.rectangle((x + 4, 6, x + 23, 17), fill=BODY + (255,))
+            if k % 2:
+                pen.rectangle((x + 32, 8, x + 34, 9), fill=EYE + (255,))
+        attack.save(src)
+        got, text = run_main([src, "--out", out])
+        case("cli: repeated attack with detached effects is rejected", got == 2 and "crop one frame" in text, text)
         if code == 0:
-            with open(os.path.join(out, "round_map.json"), encoding="utf-8") as fh:
+            folder = Path(out)
+            files = json.loads((folder / "round_map_manifest.json").read_text(encoding="utf-8"))
+            with (folder / files["round_map.json"]).open(encoding="utf-8") as fh:
                 res = json.load(fh)
             case("cli: round body's centre and ground are mapped", res["ground_y"] == 24 and len(res["spine"]) == 1, res)
         Image.new("RGBA", (32, 32)).save(src)

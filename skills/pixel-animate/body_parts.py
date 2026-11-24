@@ -41,7 +41,8 @@ on both sides of the legs). Each piece is 1-4 points, e.g.
 
 Out: <name>_parts.png (each part tinted, its outline, bone and name), <name>_patches.png (the colour patches and ink
 the cut follows), <name>_parts.json (per part: kind, parent, pivot, bone, area share, bounding box, label, pieces,
-inside and a simplified outline of the largest piece) and <name>_labels.png. To cut a part, select every pixel
+inside and a simplified outline of the largest piece) and <name>_labels.png. Read <name>_parts_manifest.json once
+to locate the four files of the same cut. Its paths are relative to --out. To cut a part, select every pixel
 equal to its JSON label in the label image. Labels start at 1 in JSON part order, with 0 for the background.
 Each part's line gives its kind, area share, pieces and bounding box, and "inside PARENT" for a part that lies
 within its parent's box (a jaw in the head): the overlay shows it hatched inside its parent, and the json's
@@ -60,8 +61,10 @@ import heapq
 import json
 import math
 import os
+import shutil
 import sys
 import tempfile
+import time
 from collections import deque
 
 try:
@@ -357,13 +360,15 @@ def _width(bone, k, mask, at=(0.35, 0.5, 0.65, 0.8), ink=None):
 
 def joint_first(bone, parent_dist, k):
     """The bone with its joint first: its first point, unless the last lies under half as far from the parent's
-    bone (a bone drawn from the far end). A part lying along its parent (a jaw under a skull) keeps its first."""
+    bone (a bone drawn from the far end). Reversing a split bone preserves every break in its line.
+    A part lying along its parent (a jaw under a skull) keeps its first."""
     h, w = parent_dist.shape
 
     def gap(p):
         x, y = int(round(p[0] / k)), int(round(p[1] / k))
         return parent_dist[min(max(y, 0), h - 1), min(max(x, 0), w - 1)]
-    return list(bone)[::-1] if gap(bone[-1]) < 0.5 * gap(bone[0]) else list(bone)
+    points = [p for p in bone if p is not None]
+    return list(reversed(bone)) if points and gap(points[-1]) < 0.5 * gap(points[0]) else list(bone)
 
 
 def fences(marks, names, k, shape, mask=None, ink=None):
@@ -626,7 +631,7 @@ def analyse(im, marks):
     oriented = {}
     for name, spec in original.items():
         bone, parent = spec["bone"], spec.get("parent")
-        if parent in original and len(bone) > 1 and None not in bone:
+        if parent in original and len(bone) > 1:
             bone = joint_first(bone, _bone_dist(original[parent]["bone"], k, mask.shape), k)
         oriented[name] = dict(spec, bone=bone)
     marks = dict(marks, parts=oriented)
@@ -653,8 +658,10 @@ def analyse(im, marks):
         spec = marks["parts"][n]
         bone = [p for p in spec["bone"] if p is not None]
         sel = label == i
-        ps = pieces(sel)
         area = int(sel.sum())
+        full_sel = labels_full == i
+        full_area = int(full_sel.sum())
+        ps = pieces(full_sel)
         def on_fig(p):
             x, y = snap(mask, p[0] / k, p[1] / k)
             X, Y = int(round(x)), int(round(y))
@@ -664,10 +671,10 @@ def analyse(im, marks):
             warn.append(f"{n}: bone point(s) off the figure {off}")
         if not seeds[i]:
             warn.append(f"{n}: its bone lies wholly off the figure")
-        if not area:
+        if not full_area:
             warn.append(f"{n}: no pixels")
-        elif len(ps) > 1 and len(ps[1]) >= max(12, 0.08 * area) and None not in spec["bone"]:
-            warn.append(f"{n}: in {len(ps)} pieces (second {len(ps[1])} px of {area}): a neighbour's bone may cut it")
+        elif len(ps) > 1 and len(ps[1]) >= max(12, 0.08 * full_area) and None not in spec["bone"]:
+            warn.append(f"{n}: in {len(ps)} pieces (second {len(ps[1])} px of {full_area}): a neighbour's bone may cut it")
         stolen = [s for s in seeds[i] if label[s[1], s[0]] != i]
         if seeds[i] and len(stolen) > 0.3 * len(seeds[i]):
             other = names[int(np.bincount([label[s[1], s[0]] for s in stolen if label[s[1], s[0]] >= 0]
@@ -680,11 +687,10 @@ def analyse(im, marks):
                 warn.append(f"{n}: {alien:.0%} of it is a colour not under its bone: a piece of another part seen "
                             "apart (a cape either side of a leg) may lack a bone, or this bone misses a colour")
         poly = [(int(x * k), int(y * k)) for x, y in simplify(outline(sel), 1.2)] if area else []
-        full_sel = labels_full == i
         bbox = Image.fromarray(full_sel).getbbox()
         parts.append(dict(name=n, label=i + 1, kind=spec.get("kind", n), parent=spec.get("parent"),
-                          pivot=bone[0], bone=spec["bone"], area_share=round(int(full_sel.sum()) / max(1, total_full), 4),
-                          pieces=len(pieces(full_sel)),
+                          pivot=bone[0], bone=spec["bone"], area_share=round(full_area / max(1, total_full), 4),
+                          pieces=len(ps),
                           bbox=list(bbox) if bbox else None, poly=poly))
     for p in parts:                                       # a part inside its parent (a jaw in the head)
         par = next((q for q in parts if q["name"] == p["parent"]), None)
@@ -875,6 +881,19 @@ def check_marks(marks):
         raise ValueError(f'"points": the eye {points["eye"]!r} is not two numbers or null')
 
 
+def _replace_manifest(pending, target):
+    """Allow a concurrent Windows rename to settle before treating the output as locked."""
+    for delay in (0.01, 0.02, 0.04, 0.08, 0.16):
+        try:
+            os.replace(pending, target)
+            return
+        except PermissionError as exc:
+            if getattr(exc, "winerror", None) not in (5, 32, 33):
+                raise
+            time.sleep(delay)
+    os.replace(pending, target)
+
+
 def main(argv):
     """The command line (see the module's help). Returns the exit code: 0 a clean cut or the grid, 1 CHECK lines,
     2 a usage error."""
@@ -924,12 +943,14 @@ def main(argv):
     name = opts.get("--name", os.path.splitext(os.path.basename(src))[0])
     out = opts.get("--out", os.path.dirname(os.path.abspath(src)))
     suffixes = ("_grid.png",) if grid_only else ("_parts.png", "_patches.png", "_labels.png", "_parts.json")
+    manifest = f"{name}_parts_manifest.json"
     try:
         if not name or name in (".", "..") or any(c in '/\\:<>"|?*' or ord(c) < 32 for c in name):
             raise ValueError(f"--name must be a file name, not {name!r}")
         folder = os.path.realpath(out)
-        for suffix in suffixes:
-            target = os.path.join(folder, name + suffix)
+        filenames = [name + suffix for suffix in suffixes]
+        for filename in filenames + ([] if grid_only else [manifest]):
+            target = os.path.join(folder, filename)
             if os.path.isdir(target):
                 raise ValueError(f"output {target} is a directory")
             resolved = os.path.realpath(target)
@@ -968,12 +989,21 @@ def main(argv):
         return 2
     res, aux = analyse(im, marks)
     try:
-        os.makedirs(out, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=out) as stage:
+        os.makedirs(folder, exist_ok=True)
+        stage = tempfile.mkdtemp(prefix=".limberpix-drawing-", dir=folder)
+        pending = os.path.join(stage, "manifest.json")
+        try:
             draw(im, res, aux, stage, name)
-            for suffix in suffixes:
-                filename = name + suffix
-                os.replace(os.path.join(stage, filename), os.path.join(out, filename))
+            with open(pending, "w", encoding="utf-8") as fh:
+                json.dump({f: f"{os.path.basename(stage)}/{f}" for f in filenames}, fh)
+        except BaseException:
+            shutil.rmtree(stage, ignore_errors=True)
+            raise
+        try:
+            _replace_manifest(pending, os.path.join(folder, manifest))
+        except OSError:
+            shutil.rmtree(stage, ignore_errors=True)
+            raise
     except OSError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -984,6 +1014,7 @@ def main(argv):
         print("moved:", m)
     for w in res["warnings"]:
         print("CHECK:", w)
+    print("manifest:", os.path.join(folder, manifest))
     return 1 if res["warnings"] else 0
 
 

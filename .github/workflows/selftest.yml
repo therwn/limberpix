@@ -77,6 +77,12 @@ jobs:
       - name: shrink selftest
         run: python -I $PYW skills/pixel-animate/shrink_selftest.py
 
+      - name: Selftests work from a clean skill installation
+        run: python -I -B tests/standalone_selftest.py
+
+      - name: Drawing tools publish complete result sets
+        run: python -I -B tests/drawing_publication_test.py
+
       - name: Examples match the selftests' creatures
         run: python -I examples/make_examples.py --verify
 
@@ -136,7 +142,27 @@ jobs:
         run: |
           python -I skills/pixel-animate/body_parts.py examples/figure.png examples/marks.json \
             --out "$OUT" --name figure
-          test -f "$OUT/figure_parts.png"
+          python -I -B - "$OUT/figure_parts_manifest.json" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+
+          manifest = Path(sys.argv[1])
+          files = json.loads(manifest.read_text(encoding="utf-8"))
+          assert set(files) == {"figure_parts.png", "figure_patches.png", "figure_labels.png", "figure_parts.json"}
+          assert all((manifest.parent / name).is_file() for name in files.values())
+          PY
+
+      - name: Creature map rejects the two showcase attack strips
+        run: |
+          for creature in beast bird; do
+            code=0
+            output=$(python -I -B skills/pixel-animate/creature_map.py \
+              "examples/showcase/$creature/${creature}_attack.png" --out "$OUT" 2>&1) || code=$?
+            echo "$output"
+            test "$code" -eq 2
+            grep -q 'crop one frame' <<< "$output"
+          done
 
       - name: Cut a flat drawing and check its idle
         run: python -I -B examples/cut_idle.py --out "$OUT/cut-idle"

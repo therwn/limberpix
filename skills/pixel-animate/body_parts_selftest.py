@@ -7,7 +7,6 @@ which side an outline goes to is a matter of taste). And a cape marked on one si
 import contextlib
 import hashlib
 from pathlib import Path
-import shutil
 import inspect
 import io
 import json
@@ -336,18 +335,50 @@ def cli():
         code, report = run_main([str(drawing), str(marks)])
         case("parent cycles are usage errors", code == 2 and "cycle" in report and "a" in report and "b" in report,
              (code, report))
+        drawing = root / "tail.png"
+        im = Image.new("RGBA", (36, 20))
+        pen = ImageDraw.Draw(im)
+        pen.rectangle((3, 5, 17, 15), fill="#886232")
+        pen.rectangle((17, 8, 21, 12), fill="#2d966e")
+        pen.rectangle((26, 8, 31, 12), fill="#2d966e")
+        im.save(drawing)
+        bone = [[17, 10], [20, 10], None, [27, 10], [29, 10]]
+        def cut_tail(points, out):
+            marks.write_text(json.dumps({"parts": {"body": {"bone": [[6, 10], [15, 10]]},
+                             "tail": {"parent": "body", "bone": points}}}), encoding="utf-8")
+            code, report = run_main([str(drawing), str(marks), "--out", str(out)])
+            paths = json.loads((out / "tail_parts_manifest.json").read_text(encoding="utf-8"))
+            parts = json.loads((out / paths["tail_parts.json"]).read_text(encoding="utf-8"))["parts"]
+            with Image.open(out / paths["tail_labels.png"]) as labels:
+                return code, report, parts[1], np.array(labels)
+
+        first = cut_tail(bone, root / "forward")
+        last = cut_tail(bone[::-1], root / "reverse")
+        case("split bone has the same root and mask in both orders",
+             first[0] == last[0] == 0 and first[2]["pivot"] == last[2]["pivot"] == [17, 10]
+             and first[2]["bone"] == last[2]["bone"] == bone and np.array_equal(first[3], last[3]),
+             (first[0], last[0], first[2]["pivot"], last[2]["pivot"]))
+
+        im = Image.new("RGBA", (1260, 100))
+        pen = ImageDraw.Draw(im)
+        pen.rectangle((30, 30, 49, 49), fill="green")
+        pen.line((70, 52, 129, 52), fill="green")
+        im.save(drawing)
+        marks.write_text(json.dumps({"parts": {"body": {"bone": [[39, 39]]}}}), encoding="utf-8")
+        code, report = run_main([str(drawing), str(marks), "--out", str(root / "detached")])
+        case("full-size detached line raises CHECK", code == 1 and "second 60 px of 460" in report, (code, report))
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        examples = Path(__file__).resolve().parents[2] / "examples"
         drawing, marks = root / "figure.png", root / "figure_parts.json"
-        shutil.copyfile(examples / "figure.png", drawing)
-        shutil.copyfile(examples / "marks.json", marks)
+        figure()[0].save(drawing)
+        marks_text = json.dumps(MARKS)
+        marks.write_text(marks_text, encoding="utf-8")
         before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in root.iterdir()}
         code, report = run_main([str(drawing), str(marks)])
         after = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in root.iterdir()}
         case("source marks cannot be overwritten", code == 2 and marks.name in report and before == after,
              (code, before[marks.name] == after[marks.name], sorted(after)))
-        shutil.copyfile(examples / "marks.json", marks)
+        marks.write_text(marks_text, encoding="utf-8")
         code, report = run_main([str(drawing), str(marks), "--out", str(root / "cut")])
         case("the same sources cut into a separate folder", code == 0, report)
     with tempfile.TemporaryDirectory() as tmp:
@@ -372,10 +403,12 @@ def cli():
             json.dump({"parts": dict(MARKS["parts"], ghost={"kind": "prop", "bone": [[2, 2], [4, 4]]})}, fh)
         code, text = run_main([full, good, "--out", os.path.join(tmp, "cut")])
         case("a clean cut exits 0", code == 0 and "CHECK" not in text, text[-300:])
-        with open(os.path.join(tmp, "cut", "full_parts.json"), encoding="utf-8") as fh:
+        out = Path(tmp) / "cut"
+        paths = json.loads((out / "full_parts_manifest.json").read_text(encoding="utf-8"))
+        with (out / paths["full_parts.json"]).open(encoding="utf-8") as fh:
             parts = json.load(fh)["parts"]
             labels = {p["name"]: p["label"] for p in parts}
-        with Image.open(os.path.join(tmp, "cut", "full_labels.png")) as mask:
+        with Image.open(out / paths["full_labels.png"]) as mask:
             pixels = np.asarray(mask)
             for part in parts:
                 ys, xs = np.nonzero(pixels == part["label"])

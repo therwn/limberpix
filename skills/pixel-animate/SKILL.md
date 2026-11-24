@@ -118,6 +118,8 @@ python -I ${CLAUDE_SKILL_DIR}/body_parts.py --selftest
     Its `poly` field sketches the largest piece for the overlay.
   - `<name>_labels.png` is the cutting mask at drawing resolution. Background is 0. Each part's pixels have its
     JSON `label` value (in older exports, its position in the parts list, counting from 1).
+  - Read `<name>_parts_manifest.json` once for the four file paths, relative to `--out`, so the mask and part data
+    come from the same cut.
 - **Checks it prints** (`CHECK:` lines; the exit code is then 1), each a thing to fix and run again:
   - a bone point off the figure (snapped when near), or a bone wholly off it;
   - a part with no pixels, or in pieces whose second is 12 px or more and 8 % or more of the part (a part whose bone
@@ -250,18 +252,19 @@ for the loops); where only `skills/` was copied, it is at https://github.com/the
 5. **Bring each frame down on one fixed grid at one fixed scale,** with `shrink.py`:
    ```
    python -I ${CLAUDE_SKILL_DIR}/shrink.py rest.png --size W,H --colours 16 --out DIR --name rest   # the rest frame, once
-   python -I ${CLAUDE_SKILL_DIR}/shrink.py pose.png --size W,H --palette DIR/rest_shrunk.png \
-          --rest DIR/rest_shrunk.png --out DIR --name pose                                            # every other frame
+   python -I ${CLAUDE_SKILL_DIR}/shrink.py pose.png --size W,H --palette "$REST" \
+          --rest "$REST" --out DIR --name pose                                                       # every other frame
    ```
+   - Set `REST` to the path printed after `shrunk:` by the first command. A script can get the same path from
+     `DIR/rest_shrink_manifest.json`, where the value for `rest_shrunk.png` is relative to `DIR`.
    - Pin the grid to the union of all poses of every loop, sized from the farthest reach (a lunge, a breath, a wing
      tip), so still parts land on the same pixels in every frame and no reach is cut by the cell edge. Crop every
      frame to that one box before shrinking it; `--size` is the box's size in game px.
    - Each game pixel reads its own cell of reference pixels:
      - it is drawn when 0.42 of the cell is figure (`--cover`; about 0.3 for a creature with a narrow wing or a
        thin tail joint, which would otherwise break);
-     - the contour, the reference's near-black line, is read apart from the fill: a cell is line when the contour
-       fills 0.45 of it, or 0.12 of it and it is the line's crest across the line. A line thinner than a cell
-       stays whole and one pixel wide. Left in the vote, it loses to the fill and the outlines break;
+     - the contour is read separately from the fill. It wins a cell with over half its area in ink, or at least
+       0.12 at the crest across a stroke. The crest can extend into a partial cell at the end of a stroke;
      - the fill is voted: every other reference pixel is snapped to the palette first, and the cell takes the
        commonest colour. Never average the cell and snap the average: the average is a tone the cell does not
        hold, and it changes with every small move. On painted references averaging left over twice the lone

@@ -390,6 +390,12 @@ Without them, non-hex keys raise a `TypeError`.
 
 The method is [`skills/pixel-animate/SKILL.md`](../skills/pixel-animate/SKILL.md). Three scripts sit beside it.
 
+Read the result manifest once to open a complete set from the same run. The three manifests are
+`<name>_parts_manifest.json`, `<name>_map_manifest.json` and `<name>_shrink_manifest.json`. Each maps a filename
+such as `figure_labels.png` to its path relative to the manifest. This replaces the old lookup by filename directly
+under `--out`. The CLI publishes the manifest after all files are ready. Earlier result directories stay available
+to readers that already resolved their paths. `body_parts --grid` writes its single image directly under `--out`.
+
 ### body_parts.py
 
 Cuts a drawing into rig parts from a few rough bones placed by eye, along the drawing's own ink lines.
@@ -422,7 +428,7 @@ python skills/pixel-animate/body_parts.py --selftest
 - It prints one line per part. Its `pieces` count is every fragment of the part, however small, and is no fault by
   itself: the example prints `pieces 5` for the staff, which is broken by `null` on purpose and drawn behind the
   hand. A `CHECK:` line is printed only for a real problem: a bone point off the figure, a bone wholly off it, a
-  part with no pixels, a part whose second piece is 12 px or more *and* 8 % or more of the part (parts with
+  part with no pixels, a part whose second piece in the full-size mask is 12 px or more *and* 8 % or more of the part (parts with
   `null`-broken bones are not judged), a bone that ended up in a neighbour, a part mostly of colours not under its
   bone, an `eye` point outside every head part, and figure pixels no part reached. A `moved:` line names a thin strip
   a part reached round a gap, along another part's edge, and gave back to it.
@@ -434,7 +440,7 @@ Example, on the figure in `examples/` (a person with a staff and a cape):
 python skills/pixel-animate/body_parts.py examples/figure.png examples/marks.json --out out --name figure
 ```
 
-It writes `out/figure_parts.png` and the other files, and exits 0.
+It writes `out/figure_parts_manifest.json` with the four output paths and exits 0.
 
 ### creature_map.py
 
@@ -461,8 +467,8 @@ python skills/pixel-animate/shrink.py REF.png --size W,H --palette REST.png --re
 python skills/pixel-animate/shrink.py --selftest
 ```
 
-The first line shrinks the rest frame once and makes the palette from it; the second shrinks every other frame
-against that result, so every loop shares one palette and ties fall the same way on every frame.
+The first line shrinks the rest frame once and makes the palette from it. Use its printed `shrunk:` path as
+`REST.png` in the second line so every loop shares one palette and ties fall the same way on every frame.
 
 | Option | Meaning |
 |---|---|
@@ -478,11 +484,10 @@ against that result, so every loop shares one palette and ties fall the same way
 | `--key #rrggbb` | an opaque background colour read as air (default: transparency is air) |
 | `--out DIR` / `--name NAME` | where the files go and their stem (default REF's folder and file name) |
 
-Each game pixel reads its own cell: it is drawn when `--cover` of the cell is figure; the contour is read apart from
-the fill (a cell is line when the contour fills 0.45 of it, or 0.12 of it as the line's crest across), so a line
-thinner than a cell stays whole and one pixel wide; the fill is voted, every other reference pixel snapped to the
-palette first and the cell taking the commonest colour. A cell is never averaged. A tie goes to the rest frame's
-colour there, or else to the first tied colour in the palette's order.
+Each game pixel is drawn when `--cover` of its cell is figure. Contour ink fills a cell if it covers over half of
+the cell, or at least 0.12 at the crest across a stroke. An end on the same crest can extend into a cell below
+`--cover`. For the fill, snap contributing source pixels to the palette and take the colour with the most area in
+the cell. A tie goes to the rest frame's colour there, or else to the first tied colour in the palette's order.
 
 - **Out:** `<name>_shrunk.png` (game size, palette colours only) and, with `--colours`, `<name>_palette.png` (one
   pixel a colour, dark to light).

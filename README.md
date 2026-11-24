@@ -107,7 +107,7 @@ python skills/pixel-anim-check/pixel_anim_check.py --loop idle=examples/walker_i
 # the same walk with one pose knocked sideways: two "jump" faults around frame 8, exits 1
 python skills/pixel-anim-check/pixel_anim_check.py --loop idle=examples/walker_idle.png --loop move=examples/broken_move.png --frame 34 --eye "#ffcc33" --out out --name broken
 
-# cut a drawing into parts along its own ink and colour edges: writes out/figure_parts.png
+# cut a drawing along its own ink and colour edges; find the files in out/figure_parts_manifest.json
 python skills/pixel-animate/body_parts.py examples/figure.png examples/marks.json --out out --name figure
 ```
 

@@ -9,6 +9,10 @@ __pycache__/
 *_check.gif
 *_check.json
 .limberpix-preview-*/
+.limberpix-drawing-*/
+*_parts_manifest.json
+*_map_manifest.json
+*_shrink_manifest.json
 *_parts.png
 *_parts.json
 *_patches.png

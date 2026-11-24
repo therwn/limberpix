@@ -16,13 +16,11 @@ A game pixel is made from its cell in this order:
 1. Coverage. It is drawn when at least --cover of its cell is figure (default 0.42), air otherwise. Lower it (0.3)
    for a creature with thin parts, a narrow wing or a tail joint, that would otherwise break.
 2. The contour is read apart from the fill. Contour pixels are the reference's near-black ones (red + green + blue
-   under --contour, default 70). A cell is contour when they fill 0.45 of its figure, or 0.12 of it and the cell
-   is the line's crest: across the line (the way the contour falls off on both sides) it holds more than the cell
-   before it and no less than the one after. So a line thinner than a cell is kept whole and one pixel wide, and
-   it does not double where it straddles two cells. --no-contour turns this off.
+   under --contour, default 70). A cell is contour when ink covers over half its area, or at least 0.12 at the
+   crest across a stroke. A partial end can continue the adjacent crest below --cover. This keeps a thin stroke
+   one pixel wide over fill or air. --no-contour turns this off.
 3. The fill is voted. Every other reference pixel is first snapped to the palette (the nearest colour in CIE Lab);
-   the cell takes the colour most of them took. Colours are never averaged: the mean of a cell is a tone the drawing
-   does not hold, and it changes with every small move.
+   the cell takes the colour with the most area. Averaging would introduce tones between the drawing's colours.
 4. A tie goes to the colour the rest frame has at that game pixel (--rest), when it is one of the tied; otherwise to
    the first of them in the palette's order (dark to light), so a tie falls the same way on every frame.
 The palette is every opaque colour of --palette (the rest frame already shrunk, or the approved drawing at game
@@ -35,7 +33,8 @@ Not done here (pixel-animate's step 5 does them after it): putting back the eye 
 loses, dropping a lone pixel a turned part's edge leaves, and the one-pixel outline, drawn last on every frame.
 
 Out: <name>_shrunk.png (game size, palette colours only) and, with --colours, <name>_palette.png (one pixel a
-colour, dark to light). --out defaults to REF's folder, --name to REF's file name.
+colour, dark to light). Their paths are printed and recorded in <name>_shrink_manifest.json relative to --out.
+--out defaults to REF's folder, --name to REF's file name.
 Exit code: 0 done, 2 a usage error (a bad option, a missing file, an image with no transparency and no --key, a rest
 frame of another size).
 
@@ -43,9 +42,12 @@ Why these rules (REFERENCES.md has the numbers): on six painted reference drawin
 18 tones each, this left 18 % of the figure as lone pixels and changed 34 % of it when the drawing moved a fifth
 of a cell; averaging each cell left 42 % and 67 %, one sample at the cell's centre 41 % and 65 %. Reading the
 contour apart kept it on 25 % of the figure; the same vote without it kept 9 %, and the outlines broke."""
+import json
 import os
+import shutil
 import sys
 import tempfile
+import time
 
 try:
     import numpy as np
@@ -155,7 +157,7 @@ def shrink(ref, pal, size, rest=None, cover=COVER, contour=CONTOUR):
 
     xs = list(spans(W, w))
     covered = np.zeros((h, w))
-    share = np.zeros((h, w))                              # the contour's share of the cell's figure
+    ink_area = np.zeros((h, w))                           # the contour's geometric share of the entire cell
     fill = np.full((h, w), -1)
     line = np.full((h, w), -1)                            # the contour's own colour there
     for y, (ys, wy) in enumerate(spans(H, h)):
@@ -168,29 +170,32 @@ def shrink(ref, pal, size, rest=None, cover=COVER, contour=CONTOUR):
             if not m:
                 continue
             k = int(weights[d].sum())
-            share[y, x] = k / m
+            ink_area[y, x] = k / (W * H)
             prior = rest[y, x] if rest is not None else -1
             if k:
                 line[y, x] = vote(i[d], weights[d], prior)
             if m > k:
                 coloured = f & ~d
                 fill[y, x] = vote(i[coloured], weights[coloured], prior)
-    # a line's crest, read across the line. Along a line the cells hold the same contour; across it the contour
-    # falls away on both sides. So the pair of neighbours with the larger fall (how much less they hold than the
-    # cell, summed; at the frame's edge the cell stands in for its missing neighbour) lies across the line, and
-    # on that pair the cell is the crest when it holds more than the one before and no less than the one after:
-    # of two cells a line straddles evenly, the first takes it. With the falls equal (a dot, or the end of a
-    # thick line's spill into the next cell) it must be the crest both ways.
-    e, z = np.pad(share, 1, mode="edge"), np.pad(share, 1)
+    # Read the crest across the line by comparing how much ink falls away in each direction. Use actual ink area
+    # so a line divided equally between two cells is the same over fill and over air. Select one side on a tie.
+    e, z = np.pad(ink_area, 1, mode="edge"), np.pad(ink_area, 1)
     mid = z[1:-1, 1:-1]
     fall_h = np.maximum(mid - e[1:-1, :-2], 0) + np.maximum(mid - e[1:-1, 2:], 0)
     fall_v = np.maximum(mid - e[:-2, 1:-1], 0) + np.maximum(mid - e[2:, 1:-1], 0)
     crest_h = (mid > z[1:-1, :-2]) & (mid >= z[1:-1, 2:])
     crest_v = (mid > z[:-2, 1:-1]) & (mid >= z[2:, 1:-1])
-    ridge = np.where(fall_h > fall_v, crest_h, np.where(fall_v > fall_h, crest_v, crest_h & crest_v))
-    # A 10-px stroke in 11-px cells passes as one pixel even at a 5+5 split. A full cell or wider still has a solid core.
-    is_line = (line >= 0) & ((share > LINE_SOLID) | ((share >= LINE_LOW) & ridge) | (fill < 0))
-    return np.where(covered >= cover, np.where(is_line, line, fill), -1)
+    across_h = crest_h & (fall_h > fall_v)
+    across_v = crest_v & (fall_v > fall_h)
+    ridge = across_h | across_v | ((fall_h == fall_v) & crest_h & crest_v)
+    # A short end can lose more ink along the stroke than across it. Follow the adjacent crest's direction here.
+    # The 10-in-11-px regression has three full rows and a partial end, including a 5+5 split over transparency.
+    anchors_h = np.pad(across_h & (covered >= cover), 1)
+    anchors_v = np.pad(across_v & (covered >= cover), 1)
+    continued = ((crest_h & (anchors_h[:-2, 1:-1] | anchors_h[2:, 1:-1]))
+                 | (crest_v & (anchors_v[1:-1, :-2] | anchors_v[1:-1, 2:])))
+    is_line = (ink_area > LINE_SOLID) | ((ink_area >= LINE_LOW) & (ridge | continued))
+    return np.where((covered >= cover) | (is_line & continued), np.where(is_line, line, fill), -1)
 
 
 def to_image(idx, pal):
@@ -219,6 +224,19 @@ def hexrgb(v):
 
 
 # ---- the command line --------------------------------------------------------------------------------------------
+def _replace_manifest(pending, target):
+    """Allow a concurrent Windows rename to settle before treating the output as locked."""
+    for delay in (0.01, 0.02, 0.04, 0.08, 0.16):
+        try:
+            os.replace(pending, target)
+            return
+        except PermissionError as exc:
+            if getattr(exc, "winerror", None) not in (5, 32, 33):
+                raise
+            time.sleep(delay)
+    os.replace(pending, target)
+
+
 def main(argv):
     """The command line (see the module's help). Returns the exit code: 0 done, 2 a usage error."""
     if "--help" in argv or "-h" in argv:
@@ -314,7 +332,8 @@ def main(argv):
             raise ValueError(f"--name must be a file name, not {name!r}")
         folder = os.path.realpath(opts.get("--out", os.path.dirname(os.path.abspath(pos[0]))))
         filenames = [f"{name}_shrunk.png"] + ([f"{name}_palette.png"] if n is not None else [])
-        for filename in filenames:
+        manifest = f"{name}_shrink_manifest.json"
+        for filename in filenames + [manifest]:
             target = os.path.join(folder, filename)
             if os.path.isdir(target):
                 raise ValueError(f"output {target} is a directory")
@@ -326,21 +345,32 @@ def main(argv):
                         or os.path.exists(target) and os.path.samefile(target, source)):
                     raise ValueError(f"output {target} would overwrite source {source}; choose a different --out or --name")
         os.makedirs(folder, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=folder) as stage:
+        stage = tempfile.mkdtemp(prefix=".limberpix-drawing-", dir=folder)
+        pending = os.path.join(stage, "manifest.json")
+        try:
             to_image(out, pal).save(os.path.join(stage, filenames[0]))
             if n is not None:
                 colours = np.concatenate([pal, np.full((len(pal), 1), 255, np.uint8)], 1)
                 Image.fromarray(colours[None]).save(os.path.join(stage, filenames[1]))
-            for filename in filenames:
-                os.replace(os.path.join(stage, filename), os.path.join(folder, filename))
+            with open(pending, "w", encoding="utf-8") as fh:
+                json.dump({f: f"{os.path.basename(stage)}/{f}" for f in filenames}, fh)
+        except BaseException:
+            shutil.rmtree(stage, ignore_errors=True)
+            raise
+        try:
+            _replace_manifest(pending, os.path.join(folder, manifest))
+        except OSError:
+            shutil.rmtree(stage, ignore_errors=True)
+            raise
     except (OSError, ValueError, Image.DecompressionBombError) as e:
         print(f"error: {e}  (--help lists the options)", file=sys.stderr)
         return 2
     print(f"{name}: {out.shape[1]}x{out.shape[0]} px, {int((out >= 0).sum())} drawn, "
           f"{len(np.unique(out[out >= 0]))} of {len(pal)} palette colours used")
     if n is not None:
-        print("palette:", os.path.join(folder, filenames[1]))
-    print("shrunk:", os.path.join(folder, filenames[0]))
+        print("palette:", os.path.join(stage, filenames[1]))
+    print("shrunk:", os.path.join(stage, filenames[0]))
+    print("manifest:", os.path.join(folder, manifest))
     return 0
 
 

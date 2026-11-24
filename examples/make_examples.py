@@ -53,7 +53,6 @@ import body_parts_selftest as bst                         # noqa: E402
 import pixel_anim_check as pac                            # noqa: E402
 import pixel_anim_selftest as st                          # noqa: E402
 
-BROKEN_FRAME, BROKEN_SHIFT = 8, 4                         # the frame knocked sideways, and by how many pixels
 
 
 def strip(frames):
@@ -75,9 +74,7 @@ def build():
     for cname, loops in (("walker", walker), ("flier", flier)):
         for loop, frames in loops.items():
             out[f"{cname}_{loop}.png"] = strip(frames)
-    broken = [list(map(list, f)) for f in walker["move"]]
-    broken[BROKEN_FRAME] = [[None] * BROKEN_SHIFT + r[:-BROKEN_SHIFT] for r in broken[BROKEN_FRAME]]
-    out["broken_move.png"] = strip(broken)
+    out["broken_move.png"] = strip(st.broken_move(walker["move"]))
     figure, _ = bst.figure()
     out["figure.png"] = figure
     out["marks.json"] = bst.MARKS

@@ -48,14 +48,14 @@ drawing's own ink and colour edges.
 python skills/pixel-animate/body_parts.py examples/figure.png examples/marks.json --out out --name figure
 ```
 
-It writes `out/figure_parts.png` (each part tinted, with its bone and name), `out/figure_patches.png`,
-`out/figure_labels.png` (the cutting mask) and `out/figure_parts.json`.
+It writes `out/figure_parts_manifest.json`. Its paths, relative to `out`, locate `figure_parts.png` (the tinted
+overlay), `figure_patches.png`, `figure_labels.png` (the cutting mask) and `figure_parts.json`.
 
 ## Cut idle
 
 Run `python -I examples/cut_idle.py --out out/cut-idle` to build and check a hovering beacon. The script writes
-`beacon.png` and `beacon-marks.json`, runs `body_parts.py`, and reads `beacon_labels.png` and `beacon_parts.json` to
-extract the two layers from the flat drawing. It builds `beacon_idle.png` from the layers and runs the checker,
+`beacon.png` and `beacon-marks.json`, runs `body_parts.py`, and resolves `beacon_labels.png` and `beacon_parts.json`
+from the cut manifest. It builds `beacon_idle.png` from the two extracted layers and runs the checker,
 which reports zero faults and prints the preview directory.
 
 ## Fighter

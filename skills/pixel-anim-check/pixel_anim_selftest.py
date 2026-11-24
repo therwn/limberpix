@@ -158,6 +158,13 @@ def creatures():
     return walker, flier
 
 
+def broken_move(frames):
+    """The walker with one frame knocked four pixels sideways, used by the CLI tests and examples."""
+    broken = copy.deepcopy(frames)
+    broken[8] = [[None] * 4 + row[:-4] for row in broken[8]]
+    return broken
+
+
 def run(verbose=False):
     """Every case, one line each; False when any fails. verbose adds the numbers behind the special clean cases."""
     walker, flier = creatures()
@@ -729,6 +736,18 @@ def relaxed_bounds(walker):
                                     for k in range(16)]}, "squash": {LEG_L}})
     b2, b2kw = bob(2)
     b1, b1kw = bob(1)
+    labels = b2kw["parts"]["move"]
+    colours = {c: i for i, c in enumerate(sorted({v for f in labels for row in f for v in row if v is not None}))}
+    numeric = [[[colours[v] if v is not None else None for v in row] for row in f] for f in labels]
+    warnings = []
+    try:
+        pac.check({"move": b2}, pac.Spec(eye=EYE, parts={"move": numeric}, squash={colours[LEG_L]}), warnings)
+        numeric_ok = any(w.startswith("warn: lag:") for w in warnings)
+    except TypeError as exc:
+        numeric_ok = False
+        warnings.append(str(exc))
+    print(f"lag      numeric part labels produce a warning  {'ok' if numeric_ok else 'WRONG'}  {warnings}")
+    ok &= numeric_ok
     for label, loops, kind, kw, want in (
             ("a head pasted in place, the body moving", pasted, "frozen", {}, True),
             ("the head carried on the breath", dict(walker, idle=ride), "frozen", {}, False),
@@ -1106,6 +1125,29 @@ def redrawn_cases():
     print(f"spots    on walker  {'caught' if hit else 'MISSED'}  (one speck gone in frames 5, 6 and 15)"
           + ("" if hit else f"  ({f[0][:110] if f else 'nothing'})"))
     ok &= bool(hit)
+    named = {"idle": broken}
+    rendered = []
+    frames = []
+    with tempfile.TemporaryDirectory() as d:
+        for group in ("hat", "hat (frame 12) idle[12]"):
+            spec = pac.Spec(eye=EYE, ref=ref, spots={group: SPECKS})
+            lines = [x for x in pac.check(named, spec) if x.startswith("spots:")]
+            frames.append(pac.fault_frames(lines, named))
+            target = Path(d) / "preview.png"
+            pac.sheet(named, target, faults=lines)
+            rendered.append(target.read_bytes())
+    correct = frames == [{"idle": {5, 6, 15}}] * 2 and rendered[0] == rendered[1]
+    print(f"spots    group text cannot mark a healthy frame  {'ok' if correct else 'WRONG'}  {frames}")
+    ok &= correct
+    for point in ((22, 4), (-1, 4)):
+        try:
+            pac.check(named, pac.Spec(eye=EYE, ref=ref, spots={"hat": [point]}))
+        except (IndexError, ValueError) as exc:
+            good = isinstance(exc, ValueError) and "hat" in str(exc) and "outside" in str(exc)
+        else:
+            good = False
+        print(f"spots    Python rejects outside point {point}  {'ok' if good else 'WRONG'}")
+        ok &= good
     with tempfile.TemporaryDirectory() as d:
         p, q = os.path.join(d, "idle.png"), os.path.join(d, "spots.json")
         _strip(clean, p)
@@ -1150,7 +1192,7 @@ def audit_structure(walker, flier):
     faults = pac.check({"flight": shadow_only}, fs)
     case("shadow alone is empty in all four frames", faults == [f"empty: flight[{i}]" for i in range(4)], faults)
     case("steady shadow and a flying body pass", not pac.check(flier, fs), pac.check(flier, fs))
-    broken = pac.load(str(Path(__file__).resolve().parents[2] / "examples" / "broken_move.png"), frame=34)
+    broken = broken_move(walker["move"])
     fx = [row[:] for row in walker["idle"][0]]
     fx = [[GEM if v == EYE else None for v in row] for row in fx]
     try:
@@ -1178,6 +1220,14 @@ def audit_structure(walker, flier):
     fx0[0][0] = fx1[0][3] = GEM
     faults = pac.check({"idle": [fx0, fx1]}, pac.Spec(effects={GEM}))
     case("independent effect does not knock a fixed body", not faults, faults)
+    flashing = []
+    for k in range(12):
+        f = copy.deepcopy(stable)
+        for y in range(4):
+            f[y][:4] = [GEM if k % 2 else DARK] * 4
+        flashing.append(f)
+    faults = pac.check({"idle": flashing}, pac.Spec(effects={GEM, DARK}))
+    case("a flashing declared effect does not shimmer the body", not faults, faults)
     detached = [[INK if y in (4, 5) and x in (0, 1, 18, 19) else None for x in range(20)] for y in range(10)]
     try:
         faults = pac.check({"move": [detached] * 4}, pac.Spec())
@@ -1202,6 +1252,17 @@ def audit_readouts(walker):
         faults = pac.cadence({"move": frames}, pac.Spec(**options))
         case(f"alternating holds are uneven with action={bool(options)}",
              any(f.startswith("uneven:") for f in faults), faults)
+    for holds, expected in (([3, 1, 1, 1, 3, 1, 3, 3], False), ([1, 3] * 4, True)):
+        wave = [f for f, hold in zip(poses, holds) for _ in range(hold)]
+        outcomes = []
+        for start in range(len(wave)):
+            faults = pac.check({"wave": wave[start:] + wave[:start]}, pac.Spec(actions={"wave": "other"}))
+            outcomes.append(any(f.startswith("uneven:") for f in faults))
+        case(f"action holds have one verdict at every start: {holds}",
+             outcomes == [expected] * len(wave), outcomes)
+    wave = [f for f, hold in zip(poses, [7, 2, 17, 1, 1, 1, 1, 13]) for _ in range(hold)]
+    faults = pac.cadence({"wave": wave}, pac.Spec(actions={"wave": "other"}))
+    case("an eligible second key cannot exempt the longest hold", any(f.startswith("uneven:") for f in faults), faults)
     photos = {"idle": [walker_frame(k / 24, "idle", band=1 if 6 <= k < 18 else 0) for k in range(24)]}
     ref = copy.deepcopy(photos["idle"][0])
     changed = copy.deepcopy(ref)
@@ -1215,6 +1276,16 @@ def audit_readouts(walker):
     frame = walker["idle"][0]
     area = [[INK if x < 10 and y < 6 else None for x in range(34)] for y in range(22)]
     empty = [[None] * 34 for _ in range(22)]
+    bad = copy.deepcopy(frame)
+    bad[0][0] = GEM
+    palette = {c for row in frame for c in row if c is not None}
+    faults = pac.check({"wave": [frame, bad, frame, empty, frame]}, pac.Spec(palette=palette, allow={"wave": 1}))
+    case("blank frame keeps the other frame's palette fault",
+         "empty: wave[3]" in faults and any(f.startswith("palette: wave[1]") for f in faults), faults)
+    marked = _with_gem([frame])[0]
+    faults = pac.check({"idle": [marked, frame, marked, empty, marked]}, pac.Spec(marks=[GEM]))
+    case("blank frame keeps the other frame's missing mark fault",
+         faults == ["empty: idle[3]", f"mark: idle[1] has no mark {GEM}: a defining mark must never vanish"], faults)
     report = pac.tracks({"idle": [frame] * 8, "sample": [frame] * 4},
                         pac.Spec(parts={"sample": [area] * 3 + [empty]}))
     case("one held pose has zero updates per second", any("1 poses: updates 0.0/s" in line for line in report), report)
@@ -1277,8 +1348,9 @@ def cli(walker):
              and hashlib.sha256(alias.read_bytes()).hexdigest() == before, (code, report))
         code, report = run_main(args + ["--out", str(source_dir), "--name", "../escape"])
         case("a preview stem cannot escape the output folder", code == 2 and "--name" in report, (code, report))
-        examples = Path(__file__).resolve().parents[2] / "examples"
-        broken, clean = (str(examples / file) for file in ("broken_move.png", "walker_move.png"))
+        broken, clean = (str(root / file) for file in ("broken_move.png", "walker_move.png"))
+        _strip(broken_move(walker["move"]), broken)
+        _strip(walker["move"], clean)
         opts = ["--frame", "34", "--eye", EYE, "--out", str(root / "duplicates")]
         for first, second in ((broken, clean), (clean, broken)):
             code, report = run_main(["--loop", "move=" + first, "--loop", "move=" + second] + opts)
@@ -1364,6 +1436,20 @@ def cli(walker):
         case("failed GIF leaves the last PNG/GIF pair intact", code == 2 and "injected GIF" in report
              and len(paths) == 2 and preview_pair(preview_root, "anim") == paths
              and [p.read_bytes() for p in paths] == before, (code, report[-180:]))
+        replace = os.replace
+        attempts = []
+
+        def busy_once(src, dst):
+            attempts.append(dst)
+            if len(attempts) == 1:
+                error = PermissionError("interrupted by a concurrent Windows rename")
+                error.winerror = 5
+                raise error
+            return replace(src, dst)
+
+        with patch.object(os, "replace", side_effect=busy_once):
+            code, report = run_main(["--loop", "move=" + clean] + opts)
+        case("preview publish retries a transient Windows rename", code == 0 and len(attempts) == 2, (code, report[-180:]))
         tiny = [{"sample": [[[INK] + [None] * w]]} for w in (1, 3)]
         with ThreadPoolExecutor(max_workers=2) as pool:
             jobs = [pool.submit(pac._publish_previews, item, pac.Spec(), [], str(preview_root), "race") for item in tiny]
