@@ -182,6 +182,19 @@ All notable changes to this project are listed here. The format follows
   small moves. REFERENCES.md describes Astropulse's K-Centroid from its own page (k-means per tile, 2 centroids and
   3 iterations by default).
 
+### Fixed
+
+- **pixel-anim-check** `vanish` no longer depends on the loop's first frame. A whole-figure lift was taken out
+  against frame 0, so a loop started inside a far wing's hidden stretch was aligned against the gap and the vanish
+  went unseen (an idle of 19 frames: missed from 6 of its starts). The lift is now taken out against the pose the
+  loop shows most often. A part going and coming back, read as two events of equal weight, is reported going, so
+  the start no longer picks which. A vanish at the last-to-first step names frame 0, not frame n, and the contact
+  sheet frames it.
+- **pixel-anim-check** a loop's name holding "frame 12" no longer marks frame 12 on the contact sheet drawn from
+  `check()`'s lines.
+- **pixel-anim-check** an empty frame no longer hides the loop's other poses from `--spots`: they are still read,
+  and a mark outside the approved drawing is still refused. Selftest cases for all three.
+
 ## [0.1.0] - 2026-11-21
 
 First public release.

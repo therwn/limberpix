@@ -397,6 +397,7 @@ def run(verbose=False):
     ok &= redrawn_cases()
     ok &= audit_structure(walker, flier)
     ok &= audit_readouts(walker)
+    ok &= open_ends()
     cases += later_cases()
     for kind, who, fn in cases:
         L = copy.deepcopy(walker if who == "walker" else flier)
@@ -1310,6 +1311,67 @@ def audit_readouts(walker):
         with Image.open(path) as preview:
             colors = preview.getcolors(maxcolors=preview.width * preview.height)
             case("a normally sampled-out pose gets a red frame", any(c == (255, 70, 70) for _, c in colors), preview.size)
+    return ok
+
+
+def open_ends():
+    """The three faults the second audit left open: a vanish read from where the loop starts and numbered past its
+    end, a loop name holding "frame 12", and an empty frame hiding the spots of the loop's other poses."""
+    ok = True
+
+    def case(name, cond, got):
+        nonlocal ok
+        print(f"open end {name:48s} {'ok' if cond else 'WRONG'}" + ("" if cond else f"  ({got})"))
+        ok &= bool(cond)
+
+    move = [flier_frame(k / 16, "move") for k in range(16)]   # the far wing switched off for frames 8-11
+    move[7] = move[12] = flier_frame(0.5, "move")
+    move[8:12] = [flier_frame(0.5, "move", hidden=True)] * 4
+    n19 = 19                                              # and the idle switching it off, its shadow read as body
+    idle = [flier_frame(k / n19, "idle", hidden=True) for k in range(n19)]
+    for name, frames, spec in (("move", move, pac.Spec(eye=EYE, flier=True, shadow={SHADOW})),
+                               ("idle", idle, pac.Spec(eye=EYE, flier=True))):
+        n, seen = len(frames), []
+        for r in range(n):                                # every start, the seam crossing included
+            lines = pac.vanish({name: frames[r:] + frames[:r]}, spec)
+            marked = pac.fault_frames(lines, {name: frames})
+            seen.append(sorted((k + r) % n for k in marked.get(name, ())))   # back to the first start's frames
+        case(f"vanish names one frame from all {n} starts ({name})", seen[0] and all(s == seen[0] for s in seen),
+             seen)
+
+    SPECKS = [(9, 13), (10, 17), (11, 11)]
+
+    def specked(k, drop=()):
+        g = walker_frame(k / 24, "idle")
+        for i, (y, x) in enumerate(SPECKS):
+            if i not in drop:
+                g[y][x] = GEM
+        return g
+    ref = specked(0)
+    broken = [specked(k, drop={2} if k in (5, 6, 15) else ()) for k in range(24)]
+    spec = pac.Spec(eye=EYE, ref=ref, spots={"hat": SPECKS})
+    marked = []
+    for name in ("idle", "idle frame 12"):
+        loops = {name: broken}
+        marked.append(pac.fault_frames(pac.check(loops, pac.Spec(eye=EYE, ref=ref, spots={"hat": SPECKS}, idle=name)),
+                                       loops)[name])
+    case("a loop named 'idle frame 12' marks no healthy frame", marked == [{5, 6, 15}] * 2, marked)
+    named = pac.fault_frames([f"vanish: idle frame 12 a 10-px piece switches off at frame 3 and stays"],
+                             {"idle frame 12": broken})
+    case("'frame k' after a loop's name is read, the name is not", named == {"idle frame 12": {3}}, named)
+
+    holed = copy.deepcopy(broken)
+    holed[20] = [[None] * len(holed[0][0]) for _ in holed[0]]
+    faults = pac.check({"idle": holed}, spec)
+    case("an empty frame leaves the other poses' spots read",
+         "empty: idle[20]" in faults and any(x.startswith("spots: idle") for x in faults), faults)
+    try:
+        pac.check({"idle": holed}, pac.Spec(eye=EYE, ref=ref, spots={"hat": [(99, 4)]}))
+    except ValueError as exc:
+        rejected = "outside" in str(exc)
+    else:
+        rejected = False
+    case("an empty frame still rejects a spot outside the drawing", rejected, rejected)
     return ok
 
 

@@ -461,9 +461,15 @@ def _dilate(m, r):
 
 
 def _stabilised(arrs, ink):
-    """Each frame moved by the whole rows that best match frame 0's colours exactly (ink excluded: an outline matches
-    anywhere), so a whole-figure lift is taken out before reading what changed (vanish, shallow)."""
-    ref = arrs[0]
+    """Each frame moved by the whole rows that best match the rest pose's colours exactly (ink excluded: an outline
+    matches anywhere), so a whole-figure lift is taken out before reading what changed (vanish, shallow). The rest
+    pose is the one the loop shows most often (ties: the fullest), not frame 0, so the reading does not depend on
+    where the loop starts: started inside a far wing's hidden stretch, frame 0 aligned the others against the gap
+    and the vanish went unseen."""
+    seen = {}
+    for a in arrs:
+        seen.setdefault(a.tobytes(), [a, 0])[1] += 1
+    ref = max(seen.values(), key=lambda e: (e[1], int((e[0] > 0).sum()), (e[0] > 0).tobytes()))[0]
     can = (ref > 0) & ~np.isin(ref, list(ink))
     out = []
     for a in arrs:
@@ -517,8 +523,8 @@ def _check(loops, spec, warns=None):
     palette_faults = palette(loops, spec)                # only temporal checks need a body in every frame
     all_loops = loops
     loops = {a: frames for a, frames in loops.items() if frames and a not in empty_frames}
-    if not loops:
-        return faults + palette_faults + marks(all_loops, spec, warns, empty_frames)
+    if not loops:                                         # spots reads each pose alone and passes over empty ones
+        return faults + palette_faults + marks(all_loops, spec, warns, empty_frames) + spots(all_loops, spec, warns)
     for a, frames in loops.items():
         kind = spec.actions.get(a, (None, None))[0]
         figs = [[[None if v in skip else v for v in r] for r in f] for f in frames]
@@ -556,7 +562,7 @@ def _check(loops, spec, warns=None):
               + (stepped(loops, spec) + lostmark(loops, spec) + gaps(loops, spec) if redrawn
                  else cadence(loops, spec)) + snap(loops, spec)
               + tick(loops, spec, warns) + hop(loops, spec) + vanish(loops, spec) + shallow(loops, spec)
-              + face + palette_faults + marks(all_loops, spec, warns, empty_frames) + spots(loops, spec, warns))
+              + face + palette_faults + marks(all_loops, spec, warns, empty_frames) + spots(all_loops, spec, warns))
     for later in (action, boil, seam, skate, gait, parts, orphans, doubles, blend, drift, swap, split,
                   hitch):                                 # warnings
         later(loops, spec, warns)
@@ -1139,12 +1145,14 @@ def vanish(loops, spec):
                     continue
                 idx = [(i + d) % n if kind == "gone" else (i - d) % n for d in range(1, hold + 1)]
                 r4 = s / max(1.0, hold_n * sum(ch[j] for j in idx) / len(idx))
-                if best is None or r4 > best[0]:
+                # A part going and coming back are one event read from both ends; on a tie report it going, so
+                # the loop's start does not pick the end.
+                if best is None or (round(r4, 9), kind == "gone") > (round(best[0], 9), best[4] == "gone"):
                     best = (r4, s, hold, i, kind)
         if best and best[0] >= VANISH_R4:
             r4, s, hold, i, kind = best
             out.append(f"vanish: {a} a {s}-px piece {'switches off' if kind == 'gone' else 'switches on'} at "
-                       f"frame {i + 1} and its place stays empty {hold} frames while the rest barely moves (r4 "
+                       f"frame {(i + 1) % n} and its place stays empty {hold} frames while the rest barely moves (r4 "
                        f"{r4:.2f}): a far wing hidden at the turn of its stroke; let it show (25-30 % of it) or "
                        f"hide it only while it crosses edge-on")
     return out
@@ -3065,7 +3073,9 @@ def fault_frames(lines, loops):
         if m:
             a = m[1]
             ks, n = out.setdefault(a, set()), len(loops[a])
-            for k in map(int, re.findall(r"\bframe (\d+)", text)):
+            # A loop's own name can contain "frame 12": read "frame k" only outside the name and its "loop[k]" refs.
+            tail = refs.sub(" ", line[m.end():] if text is line else text)
+            for k in map(int, re.findall(r"\bframe (\d+)", tail)):
                 if k < n:
                     ks.add(k)
                     if line.lstrip().startswith(("jump:", "snap:")):
