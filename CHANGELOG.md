@@ -198,6 +198,11 @@ All notable changes to this project are listed here. The format follows
 
 ### Added (pixel-anim-check)
 
+- **`fix_sheet.py`: one command for a generated sheet.** `--features` prepares the sheet and lists what must stay;
+  with the confirmed `--keep` list it prepares, repairs and checks the sheet, with a contact sheet and a GIF. Its
+  selftest takes a 6x sheet whose mouth is missing in poses 2 and 9 back to the game-size idle, pixel for pixel, and
+  checks it clean. The README and the skill now open with this workflow.
+
 - **`prepare_sheet.py`: a generated sheet onto the drawing's grid.** It keys out the background and a green key's
   fringe, finds the grid (or takes `--grid`), gives the poses one scale (a pose drawn 8 % off keeps its own and is
   named), anchors the feet on the drawing's, and brings each pose down by vote on one palette, colours snapped

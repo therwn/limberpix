@@ -3,12 +3,12 @@
   "owner": {
     "name": "therwn"
   },
-  "description": "Pixel-art sprite animation skills for Claude Code: animate creatures from one drawing and check the motion before anyone sees it.",
+  "description": "Pixel-art sprite animation skills for Claude Code: find and repair what a generated sprite sheet loses between frames, animate creatures from one drawing, and check the motion before anyone sees it.",
   "plugins": [
     {
       "name": "limberpix",
       "source": "./",
-      "description": "Two skills for pixel-art sprite animation: pixel-animate (a method to animate creatures from one drawing, with a body-part cutter) and pixel-anim-check (a measured check for broken motion, with a contact sheet and GIF)."
+      "description": "Two skills for pixel-art sprite animation: pixel-anim-check (find and repair what a generated sheet loses between frames, and a measured check for broken motion, with a contact sheet and GIF) and pixel-animate (a method to animate creatures from one drawing, with a body-part cutter)."
     }
   ]
 }

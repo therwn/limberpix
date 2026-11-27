@@ -1,7 +1,7 @@
 {
   "name": "limberpix",
   "version": "0.1.0",
-  "description": "Animate pixel-art creatures from one drawing so they move like living things, and check every sprite animation for broken motion (specks, lost eyes, pops, shimmer, choppy cadence, 1-px ticks, frozen heads) before anyone sees it.",
+  "description": "Find and repair what an image model's pixel-art sprite sheet loses between frames (a mouth or an eye gone in some frames), animate pixel-art creatures from one drawing, and check every sprite animation for broken motion (specks, lost eyes, pops, shimmer, choppy cadence, 1-px ticks, frozen heads) before anyone sees it.",
   "author": {
     "name": "therwn"
   },

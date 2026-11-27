@@ -74,6 +74,9 @@ jobs:
       - name: repair_sheet selftest
         run: python -I $PYW skills/pixel-anim-check/repair_sheet.py --selftest
 
+      - name: fix_sheet selftest
+        run: python -I $PYW skills/pixel-anim-check/fix_sheet.py --selftest
+
       - name: body_parts selftest
         run: python -I $PYW skills/pixel-animate/body_parts_selftest.py
 

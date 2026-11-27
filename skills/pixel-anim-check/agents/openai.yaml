@@ -1,4 +1,4 @@
 interface:
   display_name: "Pixel Anim Check"
-  short_description: "Check a sprite animation for broken motion"
+  short_description: "Repair what a generated sprite sheet loses; check animations"
   default_prompt: "Use $pixel-anim-check to check this sprite animation before it is shown."

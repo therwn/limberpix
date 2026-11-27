@@ -3,8 +3,9 @@
 </h1>
 
 <p align="center">
-  <b>Two agent skills for pixel-art sprite animation, for Claude Code and Codex.</b><br>
-  Animate a creature from one drawing, then check every loop for broken motion before anyone sees it.
+  <b>Agent skills for pixel-art sprite animation, for Claude Code and Codex.</b><br>
+  Find what an image model's sprite sheet loses from frame to frame, a mouth gone in frames 2 and 9, and draw it
+  back. Or animate a creature from one drawing and check every loop before anyone sees it.
 </p>
 
 <p align="center">
@@ -20,6 +21,7 @@
 </p>
 
 <p align="center">
+  <a href="#fix-a-sheet-an-image-model-drew">Fix a generated sheet</a> ·
   <a href="#what-it-does-in-pictures">In pictures</a> ·
   <a href="#try-it">Try it</a> ·
   <a href="#examples">Examples</a> ·
@@ -29,6 +31,26 @@
 </p>
 
 ---
+
+## Fix a sheet an image model drew
+
+An image model (ChatGPT, SpriteCook, PixelLab, a video model) draws an idle sheet that does not hold the character
+from frame to frame: the mouth is gone in two of ten poses, a hat's speck in another. Limberpix finds those losses
+and draws them back from the frames that kept them, locally, with no credits spent, and says what it changed.
+
+```sh
+# 1. what must stay: the drawing's marks (eyes, mouth, studs), numbered on a picture to confirm
+python skills/pixel-anim-check/fix_sheet.py sheet.png --ref drawing.png --features --out out --name idle
+
+# 2. name them, mark what comes and goes on purpose (a staff's sparks) as "transient", then fix and check
+python skills/pixel-anim-check/fix_sheet.py sheet.png --ref drawing.png --keep out/idle_features.json --fps 8 --out out --name idle
+```
+
+The second run brings the sheet onto the drawing's pixel grid (`prepare_sheet.py`), draws each kept mark back in
+the frames that dropped it (`repair_sheet.py`: frames that lost nothing stay pixel for pixel), and checks the result
+with a contact sheet and a GIF. Look at `out/idle_repair.png` and play the GIF before using the strip: the check
+names what is missing, and whoever plays the loop judges the motion. What is done and what is next:
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## What it does, in pictures
 
@@ -128,7 +150,7 @@ Every example, with its pictures and the commands that rebuild it: [examples/REA
 | It suits | It does not |
 |---|---|
 | A rigid body with limbs, a tail or wings: the showcase's wolf, bird and lizard | Cloth that changes shape, a body that turns, a pose the drawing does not show |
-| Keeping the approved drawing's exact pixels and colours through every frame | The look of frames redrawn one by one by hand or by a model |
+| Keeping the approved drawing's exact pixels and colours through every frame | Making frames redrawn one by one by hand or by a model look right: it finds and repairs what they lose, not their motion |
 | Finding defects a script can find: specks, a lost eye, a part come loose, a colour off the palette | Saying whether the motion is good |
 
 - **A cut-out cannot show what the drawing does not show.** In a test against a hand-drawn sheet of a cloaked wizard,

@@ -24,8 +24,9 @@ A rule is kept because it helps find or repair such a loss, not because it is al
 
 - [x] In `--style redrawn`, how the body moves (`stepped`, `frozen`, `stiff`, `snap`, `tick`, `hop`, `shallow`,
   `still`) is a warning. The faults are the frames that lose the character.
-- [ ] README and both SKILL.md files lead with the generated-sheet workflow: a sheet and the approved frame in,
-  the faulty frames and a repaired sheet out. Posing one drawing (`pixel-animate`) stays as the second route.
+- [x] The README and pixel-anim-check's SKILL.md lead with the generated-sheet workflow: a sheet and the approved
+  drawing in, the faulty frames and a repaired sheet out. Posing one drawing (`pixel-animate`) stays as the second
+  route.
 - [ ] Every remaining rule is reviewed against the purpose. A rule that neither finds nor repairs a loss moves to an
   opt-in motion profile.
 - [ ] One warning a loop where today there is one a frame (`outline`), and no `drift` reading that every pixel
@@ -77,8 +78,9 @@ pixel-identical.
 
 ## 4. One workflow
 
-- [ ] One command: sheet, check, repair, check again, a GIF and a contact sheet.
-- [ ] The skills tell the agent to show the faulty frames framed in red, repair them, and hand over a GIF to play.
+- [x] One command (`fix_sheet.py`): sheet, keep list, repair, check, a GIF and a contact sheet.
+- [x] The skill tells the agent to show the keep list and the before-and-after picture to the user, and to hand
+  over a GIF to play.
 - [ ] A prompt guide for image models that keeps the losses down from the start.
 
 ## 5. Measuring

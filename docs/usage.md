@@ -389,6 +389,21 @@ pac.sheet(loops, "fox_check.png", rgb=spec.rgb)
 
 Without them, non-hex keys raise a `TypeError`.
 
+### fix_sheet.py
+
+The two tools below and the check in one command, for a sheet an image model drew:
+
+```sh
+python skills/pixel-anim-check/fix_sheet.py sheet.png --ref drawing.png --features --out out --name idle
+python skills/pixel-anim-check/fix_sheet.py sheet.png --ref drawing.png --keep out/idle_features.json --fps 8 --out out --name idle
+```
+
+`--features` prepares the sheet and writes the keep list's candidates (off the drawing when it is pixel art with 64
+colours or fewer, else off the first frame), and stops. With `--keep` (or neither) it prepares the sheet
+(`<name>_strip.png`), repairs it (`<name>_fixed.png`, `<name>_repair.json`, `<name>_repair.png`) and runs the check
+on the fixed strip in `--style redrawn`, with its contact sheet and GIF. `--grid`, `--eye`, `--ink`, `--effects`,
+`--shadow` and `--fps` are passed on. The exit code is the check's.
+
 ### prepare_sheet.py
 
 Brings a sheet an image model drew (a grid of poses on a flat background, at its own size) onto the approved

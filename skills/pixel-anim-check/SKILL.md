@@ -1,6 +1,6 @@
 ---
 name: pixel-anim-check
-description: Check a pixel-art sprite animation (idle, walk, attack or any loop of a character or creature) for faults that make sprite motion look broken. Takes sprite strips, frame folders or GIFs plus the eye colour. Reports size mismatches, stray specks, a lost eye, open outlines, feet off the ground, pops and held poses knocked sideways, texture shimmer, a frozen head, choppy or uneven timing, dead stops, 1-px ticks, hops, vanishing parts, shallow wing beats, a redrawn face, colours off the palette and lost marks; warns on sliding feet, walk bobs, a repeated pose at a loop's seam, outline boil, action timing (anticipation, strike, recovery, jumps), part volume and lag, a torso split into bands, a head stepping alone after a long hold, blends, orphan pixels, doubled outlines and drift from the approved drawing; writes a contact sheet and a GIF for a look by eye. Use whenever a sprite animation is made or changed, and before showing or shipping one.
+description: Find and repair what an image model's pixel-art sprite sheet loses between frames (a mouth, an eye or a mark gone in some frames, effects allowed to come and go), and check a pixel-art sprite animation (idle, walk, attack or any loop of a character or creature) for faults that make sprite motion look broken. Takes sprite strips, frame folders or GIFs plus the eye colour. Reports size mismatches, stray specks, a lost eye, open outlines, feet off the ground, pops and held poses knocked sideways, texture shimmer, a frozen head, choppy or uneven timing, dead stops, 1-px ticks, hops, vanishing parts, shallow wing beats, a redrawn face, colours off the palette and lost marks; warns on sliding feet, walk bobs, a repeated pose at a loop's seam, outline boil, action timing (anticipation, strike, recovery, jumps), part volume and lag, a torso split into bands, a head stepping alone after a long hold, blends, orphan pixels, doubled outlines and drift from the approved drawing; writes a contact sheet and a GIF for a look by eye. Use whenever a sprite animation is made or changed, and before showing or shipping one.
 ---
 
 # Pixel-art animation check
@@ -10,6 +10,19 @@ inspection by eye below should find nothing. A reviewer's time is best spent on 
 find, so catch those first.
 
 The check is itself tested (step 4). A check that is run only for show, or that cries wolf, is worse than none.
+
+**A sheet an image model drew** (a grid of poses on a flat background) goes through `fix_sheet.py` in two runs:
+
+```sh
+python -I ${CLAUDE_SKILL_DIR}/fix_sheet.py sheet.png --ref drawing.png --features --out out --name idle
+python -I ${CLAUDE_SKILL_DIR}/fix_sheet.py sheet.png --ref drawing.png --keep out/idle_features.json --fps 8 --out out --name idle
+```
+
+The first lists what must stay (section 1, the keep list): show `out/idle_features.png` to the user, name the kept
+marks, set `"keep": false` on shading and texture, and add `"transient"` boxes where effects come and go. The second
+prepares the sheet (1a), draws back the kept marks the frames dropped (1b) and checks the result. Show the user
+`out/idle_repair.png` and the GIF; report what was repaired, what was skipped and why, and what the check still
+names. Do not call the sheet fixed from the exit code alone.
 
 **0 faults means no listed defect was found, not that the motion is good.** Never report a fault count, or a count
 going down, as the animation's quality. In one test (one viewer, one character: a cloaked wizard whose partly lined
