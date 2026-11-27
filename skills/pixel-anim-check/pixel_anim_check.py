@@ -33,6 +33,12 @@ optional. Options:
                       choppy, boil's rates, snap, hitch, the eye tick's dwell and an action's held keys)
   --name NAME         the stem of the written files (default anim)
   --no-preview        print the same checks and motion tracks without rendering a PNG or GIF
+  --features          list what must stay: the marks of the approved drawing (--ref, else the first frame) and the
+                      pieces apart from it, numbered on <name>_features.png and written to <name>_features.json in
+                      --out. Name them, set "keep", add "transient" boxes for what comes and goes (a staff's spark);
+                      nothing is checked
+  --keep PATH         that list, confirmed: every kept feature must show on every frame (keep, in place of lostmark),
+                      and a piece wholly inside a transient box is no apart fault
   --json PATH         also write the findings as JSON: each fault and warning with its rule, its loop, the frames it
                       names (0-based) and its text, for a repair step or another program to read
   --action NAME[:KIND[:DIR]]  that loop is an action: it may hold up to two keys (a wind-up and a follow-through),
@@ -245,7 +251,7 @@ class Spec:
     def __init__(self, ink=None, shadow=(), effects=(), eye=None, flier=False, idle="idle", move="move",
                  allow=None, glows_eye=(), lum=lum_hex, rgb=hexrgb, gait=True, fps=30, facing="right",
                  actions=None, speed=None, parts=None, squash=(), palette=None, glow=(), ref=None, marks=(),
-                 sheets=(), min_rate=None, style="pixel", spots=None, eye_at=None):
+                 sheets=(), min_rate=None, style="pixel", spots=None, eye_at=None, keep=None):
         self.ink, self.shadow, self.effects = ink, set(shadow), set(effects)
         self.eye_at = tuple(eye_at) if eye_at else None   # (column, row) of the eye on a loop's first frame: which
                                                           # piece of the eye colour is the eye (see _eye_piece)
@@ -270,19 +276,29 @@ class Spec:
                                                           # its texture kept); "redrawn": every pose a new drawing
         self.spots = dict(spots or {})                    # {group name: [(row, column)]}: small marks of the
                                                           # approved drawing (ref), placed by eye (spots)
+        self.keep = read_keep(keep) if keep else None     # the keep list (features(), confirmed): kept and transient
 
     def is_ink(self, v):
         return v in self.ink if self.ink is not None else v is not None and self.lum(v) < 40
 
 
 # ---- frame helpers ---------------------------------------------------------------------------------------------
-def _pieces(f, skip):
+def _pieces(f, skip, spec=None):
+    """The sizes of a frame's 8-connected pieces, smallest first. With a keep list (spec.keep), a piece lying wholly
+    in its transient boxes (a spark, a mote: things that come and go on purpose) is left out."""
     pts = {(x, y) for y, r in enumerate(f) for x, v in enumerate(r) if v is not None and v not in skip}
-    sizes, seen = [], set()
+    inside = None
+    if pts and spec is not None and spec.keep and spec.keep["transient"]:
+        drawn = np.zeros((len(f), len(f[0])), np.int32)
+        for x, y in pts:
+            drawn[y, x] = 1
+        rows = np.nonzero(drawn.any(1))[0]
+        inside = _transient_mask(drawn, spec.keep, max(2.0, KEEP_REACH * int(rows.max() - rows.min() + 1)))
+    sizes, seen, dropped = [], set(), []
     for q in pts:
         if q in seen:
             continue
-        stack, n = [q], 0
+        stack, n, piece = [q], 0, [q]
         seen.add(q)
         while stack:
             x, y = stack.pop()
@@ -293,7 +309,10 @@ def _pieces(f, skip):
                     if m in pts and m not in seen:
                         seen.add(m)
                         stack.append(m)
-        sizes.append(n)
+                        piece.append(m)
+        (dropped if inside is not None and all(inside[y, x] for x, y in piece) else sizes).append(n)
+    if dropped and (not sizes or max(dropped) > max(sizes)):   # the figure itself is never left out
+        sizes.append(max(dropped))
     return sorted(sizes)
 
 
@@ -519,7 +538,7 @@ def _check(loops, spec, warns=None):
             faults.append(f"empty: {a}[{i}]")
             empty_frames.setdefault(a, set()).add(i)
             continue
-        stray = [s for s in _pieces(f, skip)[:-1] if s > spec.allow.get(a, 0)]
+        stray = [s for s in _pieces(f, skip, spec)[:-1] if s > spec.allow.get(a, 0)]
         if stray:
             faults.append(f"apart: {a}[{i}] {len(stray)} piece(s) of {stray} px apart from the figure")
         if spec.eye is not None and a not in spec.glows_eye and not any(f[y][x] == spec.eye for x, y in drawn):
@@ -581,7 +600,8 @@ def _check(loops, spec, warns=None):
         warns += ["warn: " + x for x in still + motion]
         motion = []
     faults = (faults + eye_jumps(loops, spec, warns) + motion
-              + (lostmark(loops, spec) + gaps(loops, spec) if redrawn else [])
+              + (kept(loops, spec) if spec.keep else lostmark(loops, spec) if redrawn else [])
+              + (gaps(loops, spec) if redrawn else [])
               + vanish(loops, spec) + face + palette_faults + marks(all_loops, spec, warns, empty_frames)
               + spots(all_loops, spec, warns))
     for later in (action, boil, seam, skate, gait, parts, orphans, doubles, blend, drift, swap, split,
@@ -1439,18 +1459,14 @@ def lostmark(loops, spec):
     in some poses. Every patch of one colour of PATCH_MIN px and PATCH_FRAC of the figure or more in the first pose
     is followed through the distinct poses: in each, the patch of its colour nearest its last place, within
     PATCH_REACH of the figure's height and within PATCH_SIZE times its last size either way (a patch not found in
-    some pose is let go). In each pose, the pixels the patch closes in are its marks. Fault when the marks are there
-    in LOST_HAVE of the poses and gone in LOST_RUNS or more separate runs of poses: a blink, once or twice a loop, is
-    drawn on purpose; a mouth missing again and again is a generated frame's slip.
-    Tried on: the generated wizard idle the user judged, whose mouth they saw missing in poses 9, 10, 13 and 15: the
-    face's patch has marks in the other 12 and none in exactly those 4. On the same idle it also names the hat's
-    patch in poses 1, 2, 10 and 15, where the user saw the hat's yellow specks lost; but the marks it counts there are
-    1-px dark specks and holes, not the yellow specks, which sit across the hat's shades and close in no one patch,
-    and the specks' partial losses (poses 4, 9, 13: some of the four left) it does not see. A search for the approved
-    drawing's small marks in every pose was tried for them and refused: the generated poses redraw the specks a few
-    px away and in another colour, and it named nearly the opposite poses. The two cut-out wizard idles, the
-    showcase's nine loops, the fighter and six test creatures: nothing (the bird's two blinks and a beast's closing
-    eye in its attack, one or two runs, are let go). Not proven beyond these."""
+    some pose is let go). Its marks are voted on by the poses (_lost_marks): each mark is followed by its place on
+    the patch, and one kept by LOST_HAVE of the poses and missing in the others is lost there, even in one frame.
+    A mark of the eye colour lost in fewer than LOST_RUNS separate runs of poses is a blink and passes. With a keep
+    list (--keep) kept() judges what the user said must stay instead.
+    Tried on: the generated wizard idle the user judged, whose mouth they saw missing in poses 9, 10, 13 and 15: it
+    names the mouth in exactly those, and two of the robe's gold stars lost in some poses (seen on crops). The hat's
+    yellow specks sit across the hat's shades and close in no one patch: spots finds those. The two cut-out wizard
+    idles, the showcase's nine loops, the fighter and six test creatures: nothing. Not proven beyond these."""
     out = []
     for a, frames in loops.items():
         if a in spec.actions:
@@ -1548,6 +1564,206 @@ def _lost_marks(track, P, eye_codes, patch_rgb, rgbs, least):
         if gone and len(seen) >= LOST_HAVE * len(P):
             first = seen[min(seen)]
             out.append((gone, first[1], first[2], any(p[3] for p in seen.values())))
+    return out
+
+
+# ---- the keep list: what must stay on every frame, and what may come and go --------------------------------------
+KEEP_REACH = 0.04                                         # a kept feature is looked for this share of the figure's
+                                                          # height from its place (2 px at least);
+KEEP_COLOUR = 100                                         # a kept mark's colour may drift this far in a channel (a
+                                                          # model redraws a mouth in another brown)
+
+
+def _anchor(a):
+    """The figure's median row and column in an int array (0 is air): a pose's place against the drawing's."""
+    ys, xs = np.nonzero(a)
+    return (float(np.median(ys)), float(np.median(xs))) if len(ys) else (0.0, 0.0)
+
+
+def _contrast(p, q):
+    return max(abs(u - v) for u, v in zip(p, q))
+
+
+def _pose_marks(p, ink, rgbs, eye_codes):
+    """Every mark a patch of one colour closes in, in one pose (an int array): [{"box": (top, left, bottom, right),
+    "centre", "px", "code" (0: a hole), "eye"}], read as lostmark reads them (MARK_CONTRAST, MARK_SCALE, MARK_MOST)."""
+    rows = np.nonzero(p.any(1))[0]
+    if not len(rows):
+        return []
+    least_patch = max(PATCH_MIN, PATCH_FRAC * int((p > 0).sum()))
+    least = max(1, round(int(rows.max() - rows.min() + 1) / MARK_SCALE))
+    out = []
+    for c in np.unique(p):
+        if c == 0 or c in ink:
+            continue
+        for ys, xs in _comps4(p == c):
+            if len(ys) < least_patch:
+                continue
+            y0, x0, m = _enclosed_mask(ys, xs)
+            got = []
+            for hy, hx in _comps4(m):
+                hy, hx = hy + y0, hx + x0
+                codes = p[hy, hx].tolist()
+                commonest = max(set(codes), key=codes.count)
+                if len(hy) < least or (commonest and _contrast(rgbs[commonest], rgbs[c]) < MARK_CONTRAST):
+                    continue
+                got.append({"box": (int(hy.min()), int(hx.min()), int(hy.max()), int(hx.max())),
+                            "centre": (float(hy.mean()), float(hx.mean())), "px": len(hy), "code": int(commonest),
+                            "eye": bool(eye_codes & set(codes))})
+            if len(got) <= MARK_MOST:                     # more is a texture
+                out += got
+    return out
+
+
+def features(ref, spec):
+    """The keep list's candidates, read from the approved drawing (a frame): {"size": [w, h], "anchor": [row,
+    column], "features": [...], "transient": []}. Each feature {"id", "name": "", "keep", "kind", "box": [top, left,
+    bottom, right], "px", "colour", "blink"}: kind "mark" is a mark a patch closes in (a mouth, an eye, a stud, as
+    lostmark reads them), kept; kind "piece" is a small piece apart from the figure (a mote, a spark), not kept, as
+    most are effects. blink: the mark is the eye colour, and may close once or twice a loop. The user names them,
+    flips keep, and lists in "transient" the boxes where things come and go on purpose; then --keep judges it."""
+    keys = {}
+    (a,), ink = _arrays([ref], spec, keys)
+    colour_of = {code: colour for colour, code in keys.items()}
+    rgbs = {code: spec.rgb(colour) for colour, code in keys.items()}
+    eye_codes = {keys[spec.eye]} if spec.eye in keys else set()
+    found = [{"kind": "mark", "box": list(m["box"]), "px": m["px"], "colour": colour_of.get(m["code"]),
+              "blink": m["eye"]} for m in _pose_marks(a, ink, rgbs, eye_codes)]
+    pieces = sorted(_blobs(a > 0), key=lambda b: len(b[0]))
+    for ys, xs in pieces[:-1]:                            # the biggest piece is the figure
+        codes = a[ys, xs].tolist()
+        found.append({"kind": "piece", "box": [int(ys.min()), int(xs.min()), int(ys.max()), int(xs.max())],
+                      "px": len(ys), "colour": colour_of[max(set(codes), key=codes.count)], "blink": False})
+    found.sort(key=lambda f: (f["box"][0], f["box"][1]))
+    feats = [{"id": i + 1, "name": "", "keep": f["kind"] == "mark", **f} for i, f in enumerate(found)]
+    return {"size": [int(a.shape[1]), int(a.shape[0])], "anchor": [round(v, 2) for v in _anchor(a)],
+            "features": feats, "transient": []}
+
+
+def read_keep(raw):
+    """A keep list as features() writes it, checked: ValueError naming what is wrong."""
+    try:
+        anchor = [float(v) for v in raw["anchor"]]
+        feats = []
+        for f in raw.get("features", []):
+            box = [int(v) for v in f["box"]]
+            if len(box) != 4 or box[2] < box[0] or box[3] < box[1] or f["kind"] not in ("mark", "piece"):
+                raise ValueError
+            feats.append({"id": f.get("id"), "name": str(f.get("name") or ""), "keep": bool(f.get("keep")),
+                          "kind": f["kind"], "box": box, "px": max(1, int(f["px"])), "colour": f.get("colour"),
+                          "blink": bool(f.get("blink"))})
+            if feats[-1]["kind"] == "piece" and feats[-1]["colour"] is None:
+                raise ValueError
+        transient = []
+        for t in raw.get("transient", []):
+            box = [int(v) for v in (t["box"] if isinstance(t, dict) else t)]
+            if len(box) != 4 or box[2] < box[0] or box[3] < box[1]:
+                raise ValueError
+            transient.append({"name": str(t.get("name") or "") if isinstance(t, dict) else "", "box": box})
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise ValueError('a keep list is {"anchor": [row, column], "features": [{"id", "name", "keep", "kind": '
+                         '"mark" or "piece", "box": [top, left, bottom, right], "px", "colour"}], "transient": '
+                         '[{"name", "box"}]}, as --features writes it') from None
+    if len(anchor) != 2:
+        raise ValueError("a keep list's anchor is [row, column]")
+    return {"anchor": anchor, "features": feats, "transient": transient}
+
+
+def _transient_mask(a, keep, reach):
+    """The pixels of a pose (an int array) inside the keep list's transient boxes, moved with the pose's place and
+    grown by reach."""
+    m = np.zeros(a.shape, bool)
+    if not keep or not keep["transient"]:
+        return m
+    pr, pc = _anchor(a)
+    dy, dx = pr - keep["anchor"][0], pc - keep["anchor"][1]
+    H, W = a.shape
+    for t in keep["transient"]:
+        top, left, bottom, right = t["box"]
+        y0, y1 = max(0, math.floor(top + dy - reach)), min(H - 1, math.ceil(bottom + dy + reach))
+        x0, x1 = max(0, math.floor(left + dx - reach)), min(W - 1, math.ceil(right + dx + reach))
+        if y0 <= y1 and x0 <= x1:
+            m[y0:y1 + 1, x0:x1 + 1] = True
+    return m
+
+
+def kept(loops, spec):
+    """(with --keep) Every feature the keep list keeps shows on every frame of every loop but an action, near its
+    place on the approved drawing, moved by the pose's median row and column against the drawing's (within
+    KEEP_REACH of the figure's height): a "mark" as a mark a patch closes in (_pose_marks) near the feature's colour
+    (under KEEP_COLOUR off it) and a third to three times its px, each mark standing for the nearest feature (the
+    eye and the mouth beside it are told apart by place); a "piece" as
+    a third of its px in its colour. Fault for each feature missing, naming the frames. A feature marked blink may
+    be gone in one or two runs of poses (a blink). Unlike lostmark, no majority is asked: the user said it stays."""
+    keep = spec.keep
+    feats = [f for f in (keep or {}).get("features", []) if f["keep"]]
+    out = []
+    if not feats:
+        return out
+    ar, ac = keep["anchor"]
+    for a, frames in loops.items():
+        if a in spec.actions:
+            continue
+        keys = {}
+        figs, ink = _arrays(frames, spec, keys)
+        rgbs = {code: spec.rgb(colour) for colour, code in keys.items()}
+        eye_codes = {keys[spec.eye]} if spec.eye in keys else set()
+        lut = np.full((len(keys) + 1, 3), -999, int)
+        for code, rgb in rgbs.items():
+            lut[code] = rgb[:3]
+        runs = _same_runs(figs)
+        missing = {i: [] for i in range(len(feats))}
+        for pi, (k, _) in enumerate(runs):
+            p = figs[k]
+            rows = np.nonzero(p.any(1))[0]
+            if not len(rows):
+                continue
+            reach = max(2.0, KEEP_REACH * int(rows.max() - rows.min() + 1))
+            pr, pc = _anchor(p)
+            dy, dx = pr - ar, pc - ac
+            marks = _pose_marks(p, ink, rgbs, eye_codes)
+            pairs = []
+            for fi, f in enumerate(feats):
+                top, left, bottom, right = f["box"]
+                cy, cx = (top + bottom) / 2 + dy, (left + right) / 2 + dx
+                want = spec.rgb(f["colour"]) if f["colour"] is not None else None
+                if f["kind"] == "mark":
+                    for mi, m in enumerate(marks):
+                        d = math.dist(m["centre"], (cy, cx))
+                        if d > reach or not f["px"] / 3 <= m["px"] <= 3 * f["px"]:
+                            continue
+                        if (want is None) != (m["code"] == 0):
+                            continue
+                        if want is not None and _contrast(rgbs[m["code"]], want) >= KEEP_COLOUR:
+                            continue
+                        pairs.append((d, fi, mi))
+                    continue
+                y0, y1 = max(0, math.floor(top + dy - reach)), max(0, math.ceil(bottom + dy + reach))
+                x0, x1 = max(0, math.floor(left + dx - reach)), max(0, math.ceil(right + dx + reach))
+                window = lut[p[y0:y1 + 1, x0:x1 + 1]]
+                near = np.abs(window - np.array(want[:3])).max(-1) < MARK_CONTRAST
+                if int(near.sum()) < max(1, f["px"] // 3):
+                    missing[fi].append(pi)
+            used_f, used_m = set(), set()
+            for d, fi, mi in sorted(pairs):
+                if fi not in used_f and mi not in used_m:
+                    used_f.add(fi)
+                    used_m.add(mi)
+            for fi, f in enumerate(feats):
+                if f["kind"] == "mark" and fi not in used_f:
+                    missing[fi].append(pi)
+        n = len(frames)
+        for fi, gone in missing.items():
+            f = feats[fi]
+            times = sum(1 for i in gone if (i - 1) % len(runs) not in gone)
+            if not gone or (f["blink"] and times < LOST_RUNS and len(gone) < len(runs)):
+                continue
+            name = f["name"] or f"feature {f['id']}"
+            line = (f"keep: {a} {name!r} (a kept {f['kind']} at row {f['box'][0]}, column {f['box'][1]} of the "
+                    f"approved drawing) is missing in {', '.join(_pose_ref(a, runs, i, n) for i in gone)}: a frame "
+                    f"dropping what must stay. Draw it on every pose")
+            out.append(_PoseFault(line, a, (runs[i] for i in gone), feature=f["id"], name=f["name"],
+                                  kind=f["kind"], box=f["box"]))
     return out
 
 
@@ -3122,6 +3338,23 @@ def _img(f, rgb, Z, bg=(74, 66, 84)):
     return im.resize((im.width * Z, im.height * Z), Image.NEAREST)
 
 
+def features_png(ref, found, path, rgb=hexrgb):
+    """The keep list's candidates on the approved drawing, numbered: kept ones boxed green, the others orange."""
+    w, h = _frame_size(ref)
+    Z = max(4, min(16, 640 // max(w, h)))
+    im = _img(ref, rgb, Z).convert("RGB")
+    d, font = ImageDraw.Draw(im), _preview_font()
+    for f in found["features"]:
+        top, left, bottom, right = f["box"]
+        colour = (80, 230, 90) if f["keep"] else (255, 160, 40)
+        d.rectangle([left * Z - 2, top * Z - 2, (right + 1) * Z + 1, (bottom + 1) * Z + 1], outline=colour, width=2)
+        d.text((left * Z, max(0, top * Z - 15)), str(f["id"]), fill=colour, font=font)
+    for t in found["transient"]:
+        top, left, bottom, right = t["box"]
+        d.rectangle([left * Z, top * Z, (right + 1) * Z - 1, (bottom + 1) * Z - 1], outline=(90, 170, 255), width=1)
+    im.save(path)
+
+
 def fault_frames(lines, loops):
     """{loop: {frame indices}} named in fault lines: "loop[k]", "loop[k0-k1]" (a held pose, every frame of it; k1
     may wrap past the loop's end: "move[15-0]") and "loop ... (frame k)". Frame indices are 0-based; a jump's or a
@@ -3427,8 +3660,9 @@ def _wide_strip(src):
 
 VALUED = {"--loop", "--frame", "--frames", "--eye", "--eye-at", "--facing", "--ink", "--shadow", "--effects", "--allow",
           "--glows-eye", "--idle", "--move", "--out", "--fps", "--name", "--action", "--speed", "--parts", "--squash",
-          "--palette", "--glow", "--ref", "--mark", "--sheet", "--key", "--min-rate", "--style", "--spots", "--json"}
-FLAGS = {"--flier", "--legless", "--no-preview", "--selftest", "--help", "-h"}
+          "--palette", "--glow", "--ref", "--mark", "--sheet", "--key", "--min-rate", "--style", "--spots", "--json",
+          "--keep"}
+FLAGS = {"--flier", "--legless", "--no-preview", "--selftest", "--help", "-h", "--features"}
 
 
 def report(loops, faults, warns=()):
@@ -3649,7 +3883,7 @@ def main(argv):
             if a not in loops:
                 raise ValueError(f"no loop named {a!r} (give it with --loop)")
         part_strips = {}
-        sources = list(srcs.values()) + [opt(o) for o in ("--palette", "--ref", "--spots") if opt(o)]
+        sources = list(srcs.values()) + [opt(o) for o in ("--palette", "--ref", "--spots", "--keep") if opt(o)]
         for t in opt("--parts", many=True):
             a, _, src = t.partition("=")
             if a not in loops or not os.path.exists(src):
@@ -3699,6 +3933,15 @@ def main(argv):
             if not spot_groups or not all(spot_groups.values()):
                 raise ValueError("--spots: every group needs one mark or more")
             _validate_spot_coordinates(spot_groups, ref)
+        keep = None
+        if opt("--keep"):
+            if not os.path.isfile(opt("--keep")):
+                raise ValueError(f"no such file: {opt('--keep')}")
+            try:
+                with open(opt("--keep"), encoding="utf-8") as fh:
+                    keep = read_keep(json.load(fh))
+            except json.JSONDecodeError:
+                raise ValueError(f"--keep {opt('--keep')} is not JSON") from None
         eye = opt("--eye")
         eye_at = None
         if opt("--eye-at"):
@@ -3718,7 +3961,7 @@ def main(argv):
                     palette={v for r in pal for v in r if v is not None} if pal else None,
                     glow=cols(opt("--glow")), ref=ref, marks=sorted(cols(opt("--mark"))),
                     sheets=opt("--sheet", many=True), min_rate=min_rate, style=style, spots=spot_groups,
-                    eye_at=eye_at)
+                    eye_at=eye_at, keep=keep)
         name = opt("--name", "anim")
         if not name or name in (".", "..") or any(c in '/\\:<>"|?*' or ord(c) < 32 for c in name):
             raise ValueError(f"--name must be a file name, not {name!r}")
@@ -3729,6 +3972,27 @@ def main(argv):
         if json_path is not None and any(os.path.exists(src) and os.path.samefile(json_path, src) for src in sources
                                          if os.path.exists(json_path)):
             raise ValueError(f"--json {json_path} is one of the inputs")
+        if "--features" in got:
+            folder = opt("--out", ".")
+            os.makedirs(folder, exist_ok=True)
+            targets = [os.path.join(folder, f"{name}_features.{ext}") for ext in ("json", "png")]
+            for t in targets:
+                if any(os.path.exists(t) and os.path.exists(src) and os.path.samefile(t, src) for src in sources):
+                    raise ValueError(f"--features would write over an input: {t}")
+            drawing = ref if ref is not None else next(iter(loops.values()))[0]
+            found = features(drawing, spec)
+            with open(targets[0], "w", encoding="utf-8", newline="\n") as fh:
+                json.dump(found, fh, indent=1)
+                fh.write("\n")
+            features_png(drawing, found, targets[1])
+            where = "the approved drawing" if ref is not None else "the first frame"
+            print(f"{name}: {len(found['features'])} feature(s) on {where}")
+            for f in found["features"]:
+                blink = " (the eye: may blink)" if f["blink"] else ""
+                print(f"  {f['id']}: {'kept' if f['keep'] else 'not kept'} {f['kind']} at row {f['box'][0]}, column "
+                      f"{f['box'][1]}, {f['px']} px, {f['colour'] or 'a hole'}{blink}")
+            print(f"list: {targets[0]}  picture: {targets[1]}")
+            return 0
         out = None if "--no-preview" in got else _preview_folder(opt("--out", "."), name, sources)
         square = not frame and not frames and any(_wide_strip(src) for src in srcs.values())
     except (ValueError, OSError, Image.DecompressionBombError) as e:

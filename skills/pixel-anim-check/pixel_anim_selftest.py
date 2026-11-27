@@ -1131,6 +1131,73 @@ def face_marks():
                 and [f["frames"] for f in written["faults"] if f["rule"] == "lostmark"] == [[2, 9]])
     print(f"--json writes the findings, refuses an input as its path {'ok' if good else 'WRONG'}  ({code}, {same})")
     ok &= good
+    return ok & keep_list()
+
+
+SPARK = "#fff4a0"
+
+
+def _sparked(g, k):
+    """A spark rising from the figure's side in frames 3-5, apart from it: an effect that comes and goes."""
+    if k in (3, 4, 5):
+        g[24 - (k - 3) * 2][3] = g[24 - (k - 3) * 2][4] = SPARK
+    return g
+
+
+def keep_list():
+    """The keep list: features() reads the face's two eyes (may blink) and its mouth off the approved drawing, all
+    kept; --keep then names the mouth wherever it is missing, even in most frames (no majority asked), lets a blink
+    pass, and a spark apart from the figure, an apart fault in each frame it shows, is none inside a transient box.
+    The command line writes the list and its picture, and refuses a malformed list."""
+    ok = True
+
+    def case(name, cond, got):
+        nonlocal ok
+        print(f"keep     {name:52s} {'ok' if cond else 'WRONG'}" + ("" if cond else f"  ({got})"))
+        ok &= bool(cond)
+
+    n = 10
+    base = dict(eye=EYE, fps=10, style="redrawn")
+    found = pac.features(face_frame(0, n), pac.Spec(**base))
+    kinds = [(f["kind"], f["keep"], f["blink"], f["px"]) for f in found["features"]]
+    case("features lists two eyes and the mouth, kept", sorted(kinds) == [("mark", True, False, 3)]
+         + [("mark", True, True, 1)] * 2, kinds)
+
+    def run(frames, keep, **kw):
+        lines = pac.check({"idle": frames}, pac.Spec(**base, keep=keep, **kw))
+        return lines, pac.fault_frames(lines, {"idle": frames}).get("idle", set())
+
+    lines, where = run([face_frame(k, n, mouth=k not in (2, 9)) for k in range(n)], found)
+    case("the mouth gone in frames 2 and 9 is named there", where == {2, 9} and all(
+        x.startswith("keep:") for x in lines), lines)
+    lines, where = run([face_frame(k, n, mouth=k in (0, 5, 8, 9)) for k in range(n)], found)
+    case("the mouth gone in 6 of 10 frames is still named", where == {1, 2, 3, 4, 6, 7}, sorted(where))
+    lines, _ = run([face_frame(k, n, eyes=k != 5) for k in range(n)], found, glows_eye={"idle"})
+    case("a blink (frame 5) passes", not lines, lines)
+    sparked = [_sparked(face_frame(k, n), k) for k in range(n)]
+    lines, where = run(sparked, found)
+    case("an undeclared spark is apart where it shows", where == {3, 4, 5} and all(
+        x.startswith("apart:") for x in lines), lines)
+    lines, _ = run(sparked, dict(found, transient=[{"name": "spark", "box": [18, 1, 25, 6]}]))
+    case("the same spark inside a transient box passes", not lines, lines)
+
+    with tempfile.TemporaryDirectory() as d:
+        strip = os.path.join(d, "idle.png")
+        _strip([face_frame(k, n, mouth=k not in (2, 9)) for k in range(n)], strip)
+        args = ["--loop", f"idle={strip}", "--frame", "32", "--fps", "10", "--eye", EYE, "--style", "redrawn"]
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            listed = pac.main(args + ["--features", "--out", d, "--name", "face"])
+            keep = os.path.join(d, "face_features.json")
+            checked = pac.main(args + ["--keep", keep, "--no-preview", "--json", os.path.join(d, "out.json")])
+            bad = os.path.join(d, "bad.json")
+            with open(bad, "w", encoding="utf-8") as fh:
+                fh.write('{"anchor": [1, 2], "features": [{"kind": "blob", "box": [0, 0, 1, 1], "px": 1}]}')
+            refused = pac.main(args + ["--keep", bad, "--no-preview"])
+        with open(os.path.join(d, "out.json"), encoding="utf-8") as fh:
+            got = [(f["rule"], f["frames"]) for f in json.load(fh)["faults"]]
+        case("--features writes the list and picture, --keep reads it", listed == 0 and checked == 1 and os.path.isfile(
+            os.path.join(d, "face_features.png")) and got == [("keep", [2, 9])], (listed, checked, got))
+        case("--keep refuses a malformed list", refused == 2, refused)
     return ok
 
 

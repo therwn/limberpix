@@ -198,6 +198,13 @@ All notable changes to this project are listed here. The format follows
 
 ### Added (pixel-anim-check)
 
+- **A keep list: what must stay, and what may come and go.** `--features` lists the candidates on the approved
+  drawing (marks a patch closes in, kept; small pieces apart from the figure, not kept), numbered on a picture
+  and written as JSON for the user to confirm, with `transient` boxes for effects such as a staff's sparks.
+  `--keep PATH` then names each kept feature in every frame it is missing from, a majority or not, and a piece
+  inside a transient box is no `apart` fault. `features()`, `read_keep()` and `Spec(keep=...)` do the same from
+  Python. On the generated wizard idle the mouth is named in exactly its reviewer's four frames, and the staff's
+  sparkles go from 16 `apart` faults to none.
 - **`--json PATH`** writes the findings as data (rule, loop, 0-based frames, text; a lost mark's place and size; a
   spots group), and `findings(loops, Spec(...))` returns the same from Python: what the repair step will read.
 

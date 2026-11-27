@@ -144,6 +144,22 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
     you have judged whenever they change. A fourth sample already speaks against `stepped`'s 6 a second: a
     hand-drawn 10-frame idle, accepted by its viewer played at 120 ms a frame, moves its whole body 4.2 times a
     second and gets the warning.
+- **A keep list says what must stay, and what may come and go.** A spark leaving a staff, a twinkle, a mote is
+  meant to vanish; the mouth and the eyes are not. Pixels alone cannot tell them apart, so ask the user:
+  1. `--features` (with `--ref`, else the first frame) lists the candidates and checks nothing: each mark a patch
+     closes in (an eye, a mouth, a stud; kept) and each small piece apart from the figure (a spark, a mote; not
+     kept), numbered on `<name>_features.png` and written to `<name>_features.json` in `--out`.
+  2. Show the picture to the user. Name what they keep, set `"keep": false` on what is shading or texture, and add
+     `"transient": [{"name": "staff spark", "box": [top, left, bottom, right]}]` for the places where things come
+     and go on purpose (boxes on the drawing's pixels).
+  3. `--keep PATH` then judges it: `keep` names each kept feature in every frame it is missing from, a majority or
+     not (it takes `lostmark`'s place), an eye-coloured one may blink once or twice, and a piece wholly inside a
+     transient box is no `apart` fault. On the generated wizard idle, the mouth's frames are exactly the four its
+     reviewer named, and the staff's sparkles, 16 `apart` faults without a list, give none.
+  - Its limits: a feature is looked for near its place moved with the whole figure (4 % of the figure's height),
+    so a part swinging on its own (a cape) is not followed; a painted drawing with no one-colour patches gives no
+    marks (use a frame of the sheet); the list proposes shading and texture marks too, which is why the user
+    confirms it.
 - `--json PATH` also writes the findings as data: each fault and warning with its rule, its loop, the 0-based
   frames it names and its text; a `lostmark` finding adds the mark's place (top-left row and column) and size, a
   `spots` finding its group and marks. A repair step reads this instead of the printed lines.

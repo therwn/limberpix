@@ -40,12 +40,17 @@ A rule is kept because it helps find or repair such a loss, not because it is al
 - [ ] Losses read: a feature gone or added (mouth, eye, mark, accessory), colour drift, height and scale drift,
   anchor drift (feet, body centre), a part changing sides, outline gaps, stray specks, a background fringe, a part
   cut by the cell's edge.
-- [ ] **What must stay, and what may come and go.** A spark leaving a staff, a twinkle or a glow is meant to vanish;
+- [x] **What must stay, and what may come and go.** A spark leaving a staff, a twinkle or a glow is meant to vanish;
   the mouth, the eyes, a hat's marks and the outline are not. Today only colours can be declared transient
   (`--effects`), which fails when an effect shares a colour with the body (a gold spark and gold trim), and an
   undeclared spark off the body is an `apart` fault in every frame it shows. The check should build a keep list
   from the approved drawing and the vote (features most frames have), show it numbered on the drawing for the user
   to confirm, and take transient regions or features, not only colours. Only the keep list is judged.
+  Done: `--features`, `--keep`, `transient` boxes.
+- [ ] Follow a kept feature on its own part. It is looked for near its place moved with the whole figure, so a
+  mark on a cape swinging on its own is lost from view.
+- [ ] Read marks on a painted drawing (thousands of colours, no one-colour patch), and propose fewer shading and
+  texture marks.
 - [x] `--json` and `findings()`: each finding with its rule, loop, frames and text; a lost mark's place and size.
 - [ ] A region (a mask or a box) for every rule, not only `lostmark` and `spots`.
 
