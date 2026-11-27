@@ -558,11 +558,20 @@ def _check(loops, spec, warns=None):
     if redrawn:                                           # a redrawn face changes its pixels on purpose
         warns += ["warn: " + x for x in face]
         face = []
-    faults = (faults + eye_jumps(loops, spec, warns) + frozen(loops, spec) + stiff(loops, spec)
-              + (stepped(loops, spec) + lostmark(loops, spec) + gaps(loops, spec) if redrawn
-                 else cadence(loops, spec)) + snap(loops, spec)
-              + tick(loops, spec, warns) + hop(loops, spec) + vanish(loops, spec) + shallow(loops, spec)
-              + face + palette_faults + marks(all_loops, spec, warns, empty_frames) + spots(all_loops, spec, warns))
+    # How the body moves: a fault for a loop posed from one drawing, a warning for redrawn frames (drawn one by one
+    # or generated), whose check is that every frame keeps the character (lostmark, gaps, spots, eye, apart, ...):
+    # the motion a model gave is judged by playing it, and no repair here can change it.
+    motion = (frozen(loops, spec) + stiff(loops, spec) + (stepped(loops, spec) if redrawn else cadence(loops, spec))
+              + snap(loops, spec) + tick(loops, spec, warns) + hop(loops, spec) + shallow(loops, spec))
+    if redrawn:
+        still = [x for x in faults if x.startswith("still:")]
+        faults = [x for x in faults if not x.startswith("still:")]
+        warns += ["warn: " + x for x in still + motion]
+        motion = []
+    faults = (faults + eye_jumps(loops, spec, warns) + motion
+              + (lostmark(loops, spec) + gaps(loops, spec) if redrawn else [])
+              + vanish(loops, spec) + face + palette_faults + marks(all_loops, spec, warns, empty_frames)
+              + spots(all_loops, spec, warns))
     for later in (action, boil, seam, skate, gait, parts, orphans, doubles, blend, drift, swap, split,
                   hitch):                                 # warnings
         later(loops, spec, warns)

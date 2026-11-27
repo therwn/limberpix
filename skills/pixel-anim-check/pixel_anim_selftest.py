@@ -1069,9 +1069,10 @@ def redrawn_cases():
           f"{'' if not f else ': NO, FALSE ALARM: ' + '; '.join(f[:3])}")
     ok &= not f
     held = [walker_frame(p / 6, "idle") for p in range(6) for _ in range(9)]
-    f = pac.check({"idle": held}, pac.Spec(eye=EYE, style="redrawn"))
-    hit = any(x.startswith("stepped:") for x in f)
-    print(f"stepped  on redrawn {'caught' if hit else 'MISSED'}")
+    warned = []
+    f = pac.check({"idle": held}, pac.Spec(eye=EYE, style="redrawn"), warned)
+    hit = any(x.startswith("warn: stepped:") for x in warned) and not any(x.startswith("stepped:") for x in f)
+    print(f"stepped  on redrawn {'warned, not a fault' if hit else 'WRONG'}  (motion is judged by playing it)")
     ok &= hit
 
     def studded(skip):                                    # the walker's idle with a 2-px stud on its belly, left

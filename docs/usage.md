@@ -148,7 +148,7 @@ cut into whole frames).
 | `--no-preview` | run the same checks and print the same diagnostics and tracks without writing a PNG or GIF |
 | `--action NAME[:KIND[:DIR]]` | that loop is an action: up to two keys (a wind-up and a follow-through) may be held, each up to 13 frames. `strike` (with a direction) has its phases judged; `jump` is not asked to keep to the ground |
 | `--spots PATH` | (with `--ref`, the approved drawing at the loops' scale) a JSON file `{"group": [[row, column], ...]}` naming the drawing's small marks by eye (a hat's specks, a mouth): `spots` names every pose of a loop other than an action showing fewer of a group's marks at their place. A mark that changed colour or became a pinhole still counts |
-| `--style pixel\|redrawn` | how the frames were made (default `pixel`: one drawing moved by whole pixels). `redrawn`: every pose a new drawing of the whole figure (frame by frame, or generated). `stepped` replaces `choppy`, `uneven` and `lurch` (the whole body must move 6 times a second); `lostmark` (marks inside a patch, such as a mouth on a face, gone in 3+ separate runs of poses) and `gaps` (an outline broken in short stretches; give every outline colour with `--ink`) are run; `shimmer` is off; `reshape` and `outline` warn only |
+| `--style pixel\|redrawn` | how the frames were made (default `pixel`: one drawing moved by whole pixels). `redrawn`: every pose a new drawing of the whole figure (frame by frame, or generated). Its faults are the frames that lose the character; how the body moves (`stepped`, which replaces `choppy`, `uneven` and `lurch` and asks the whole body to move 6 times a second, and `frozen`, `stiff`, `snap`, `tick`, `hop`, `shallow`, `still`) only warns; `lostmark` (marks inside a patch, such as a mouth on a face, gone in 3+ separate runs of poses) and `gaps` (an outline broken in short stretches; give every outline colour with `--ink`) are run; `shimmer` is off; `reshape` and `outline` warn only |
 | `--min-rate R` | `choppy`'s floor for the idle and the move, in updates a second (a number over 0), for a style held longer than the fitted floors allow. Without it the floor is 10, 5.2 for a move whose every pose change is big (a new drawing of the stride), and 2.5 for an idle whose every pose moves the body |
 | `--speed PX` | the road's scroll in game px a frame: the planted feet's speed is printed beside it, and the GIF scrolls a ground line under the move |
 | `--parts LOOP=PATH` | a part strip for that loop (the same frames, each rig part one flat colour): per-part volume and lag are judged on it |
@@ -550,7 +550,7 @@ the palette's order.
 - **Every loop is read as a cycle.** A one-shot that does not end where it began (a death) gets a `jump` and a
   `vanish` at its last-to-first step. There is no option to say a loop plays once.
 - **`choppy` and `stepped` need the real frame rate.** They are counted in time. A sheet that comes with no rate has
-  none to check: one hand-drawn 10-frame idle fails `stepped` at 8.3 and at 10 fps and passes at 12.
+  none to check: one hand-drawn 10-frame idle gets `stepped` at 8.3 and at 10 fps and passes at 12.
 - **A drawing lined only in places fails `outline` on every frame** in the default style, the approved drawing with
   it; there is no switch for a partly lined style short of `--style redrawn`, where it only warns.
 - **`creature_map.py` is a first look only.** It reads the silhouette, and a silhouette cannot tell a bow from an arm

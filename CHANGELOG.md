@@ -182,6 +182,14 @@ All notable changes to this project are listed here. The format follows
   small moves. REFERENCES.md describes Astropulse's K-Centroid from its own page (k-means per tile, 2 centroids and
   3 iterations by default).
 
+### Changed (pixel-anim-check)
+
+- **`--style redrawn` warns on motion, and faults on lost character.** `stepped`, `frozen`, `stiff`, `snap`, `tick`,
+  `hop`, `shallow` and `still` are warnings in this style; the faults are the frames that lose the character
+  (`lostmark`, `spots`, `gaps`, `eye`, `apart`, `palette`, `mark`, `vanish`, a pose knocked sideways or off the
+  ground). The motion a model gave is judged by playing the loop, and no repair here changes it.
+  docs/ROADMAP.md says where this goes: finding and repairing what generated sheets lose.
+
 ### Fixed
 
 - **pixel-anim-check** `vanish` no longer depends on the loop's first frame. A whole-figure lift was taken out

@@ -79,7 +79,7 @@ is what it printed.
 | **Timing** | choppy or uneven holds, a dead stop then a burst, 1-px ticks, a pop or a pose knocked sideways, a part that vanishes | a repeated pose at the loop's seam, outline boil |
 | **Texture and face** | shimmer, a redrawn face | |
 | **Actions** | | anticipation, strike, recovery, jumps and landings |
-| **Redrawn frames** (`--style redrawn`) | slow and stepped motion, a mark gone in some poses, a broken outline, small marks missing | |
+| **Redrawn frames** (`--style redrawn`) | a mark gone in some poses, a broken outline, small marks missing | slow and stepped motion, and every other motion check |
 
 Every fault's meaning and its usual fix: [skills/pixel-anim-check/SKILL.md](skills/pixel-anim-check/SKILL.md).
 
@@ -179,6 +179,7 @@ or for the whole system (see [Troubleshooting](docs/usage.md#troubleshooting)).
 | [pixel-animate/SKILL.md](skills/pixel-animate/SKILL.md) | The method the agent follows, step by step |
 | [pixel-animate/MOTION.md](skills/pixel-animate/MOTION.md) | The motion rules: steps, cadence, wings, gaits, heads, attacks |
 | [pixel-anim-check/SKILL.md](skills/pixel-anim-check/SKILL.md) | Every fault, what it means and its usual fix |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Where it is going: finding and repairing what generated sheets lose |
 | [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTING.md](CONTRIBUTING.md) | Changes, and how to change it |
 
 ## Licence
