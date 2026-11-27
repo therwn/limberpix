@@ -68,6 +68,9 @@ jobs:
       - name: pixel-anim-check selftest
         run: python -I $PYW skills/pixel-anim-check/pixel_anim_selftest.py
 
+      - name: prepare_sheet selftest
+        run: python -I $PYW skills/pixel-anim-check/prepare_sheet.py --selftest
+
       - name: repair_sheet selftest
         run: python -I $PYW skills/pixel-anim-check/repair_sheet.py --selftest
 

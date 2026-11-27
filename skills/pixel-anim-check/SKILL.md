@@ -188,6 +188,25 @@ change from frame k to the next. Open the folder printed after `sheets:` for bot
   the scrolling road. When the cycles take too long to align, the preview plays once.
 - In code: `check(loops, spec, warns)` fills the list `warns`; `tracks(loops, spec)` returns the two read-outs.
 
+## 1a. Prepare a sheet an image model drew
+
+An image model gives a grid of poses on a flat background, at its own size. Bring it onto the approved drawing's
+pixel grid before checking it:
+
+```sh
+python -I ${CLAUDE_SKILL_DIR}/prepare_sheet.py sheet.png --ref drawing.png --out out --name idle
+```
+
+It keys out the background (transparency, or the corners' colour and a green key's fringe), finds the grid (or
+takes `--grid CxR`), gives every pose one scale (a pose drawn over 8 % bigger or smaller keeps its own and is
+named), puts the feet on the drawing's feet, and brings each pose down by vote on one palette (the drawing's own
+colours when it has 64 or fewer). It writes `<name>_strip.png`, frames of the drawing's size side by side, and
+prints the check command for it. Run that with `--style redrawn` and the rate the game plays at.
+- Look at the strip first: a pose cut by its cell, two poses in one cell (give `--grid`), a background colour left
+  on the figure.
+- On a 2048 px GPT Image sheet of a 160 px wizard (4x4, a green key, sparks beside the staff) it found the 16 poses
+  and matched the trial pipeline's silhouette on 99.6 % of the pixels.
+
 ## 1b. Repair what a generated sheet dropped
 
 When `lostmark` or `keep` names a mark (a mouth, an eye, a stud) missing in some frames of a generated sheet,

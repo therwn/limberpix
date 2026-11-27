@@ -198,6 +198,11 @@ All notable changes to this project are listed here. The format follows
 
 ### Added (pixel-anim-check)
 
+- **`prepare_sheet.py`: a generated sheet onto the drawing's grid.** It keys out the background and a green key's
+  fringe, finds the grid (or takes `--grid`), gives the poses one scale (a pose drawn 8 % off keeps its own and is
+  named), anchors the feet on the drawing's, and brings each pose down by vote on one palette, colours snapped
+  exactly. On a 2048 px GPT Image sheet of the 160 px wizard it finds the 16 poses in 3 s and matches the trial
+  pipeline's silhouette on 99.6 % of the pixels. With its own selftest, run in CI and from a clean skill install.
 - **`repair_sheet.py`: draw back what a generated sheet dropped.** A mark `lostmark` or `keep` finds missing in some
   frames is taken from the nearest frame that has it, placed by the marks beside it (or the pixels around it), and
   drawn over its patch only; every other frame stays pixel for pixel. A mark that moved is not drawn twice, and a

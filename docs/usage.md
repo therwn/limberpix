@@ -389,6 +389,28 @@ pac.sheet(loops, "fox_check.png", rgb=spec.rgb)
 
 Without them, non-hex keys raise a `TypeError`.
 
+### prepare_sheet.py
+
+Brings a sheet an image model drew (a grid of poses on a flat background, at its own size) onto the approved
+drawing's pixel grid.
+
+```sh
+python skills/pixel-anim-check/prepare_sheet.py sheet.png --ref drawing.png [--grid CxR] [--colours N] [--cover 0.42] --out out --name idle
+```
+
+1. **Background:** transparency, or the corners' colour within 90 (summed over the channels), and a green key's
+   greenish fringe.
+2. **Cells:** `--grid CxR`, or found from the empty rows and columns between poses (gaps of 0.5 % of the sheet; a
+   spark alone in a gap joins its nearest pose).
+3. **One scale** from the poses' heights against the drawing's; a pose more than 8 % off keeps its own.
+4. **One anchor:** the lowest row and the middle of the lowest quarter on the drawing's.
+5. **By vote** onto the drawing's grid: every pixel snapped to one palette first (the drawing's colours when it has
+   64 or fewer, else `--colours` tones cut from the sheet and 16 from its vivid pixels), a game pixel drawn when
+   `--cover` of its cell is figure, in the colour with the most area.
+
+Out: `<name>_strip.png` and `<name>_prepare.json` (background, cells, scales, palette); the check command is
+printed. Exit 0 done, 2 a usage error.
+
 ### repair_sheet.py
 
 Draws back a mark (a mouth, an eye, a stud) that `lostmark` or `keep` finds missing in some frames of a generated
