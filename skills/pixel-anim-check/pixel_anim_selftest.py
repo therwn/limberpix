@@ -1059,6 +1059,81 @@ def _redrawn_idle(n=16):
     return out
 
 
+SKIN, ROBE, ROBE_GRAIN, MOUTH, LID = "#e8b890", "#5a4a9a", "#5e4e9e", "#7a2a2a", "#d8a880"
+
+
+def face_frame(k, n, mouth=True, eyes=True, seed=0):
+    """A small robed figure with a face (two eyes and a mouth on one patch of skin), as an image model redraws it:
+    the head sinking a pixel every other quarter of the loop, the face now and then a pixel off, the robe's grain new
+    every frame. mouth=False leaves the mouth out; eyes=False draws the lids shut."""
+    g = [[None] * 32 for _ in range(44)]
+    bob = 1 if (k * 4 // n) % 2 else 0
+    _disc(g, 16, 31, 9, 11, ROBE)
+    _disc(g, 16, 13 + bob, 7, 7, SKIN)
+    rnd = random.Random(seed * 1000 + k)
+    for y, r in enumerate(g):
+        for x, v in enumerate(r):
+            if v == ROBE and rnd.random() < 0.3:
+                r[x] = ROBE_GRAIN
+    sway = rnd.choice((0, 0, 1))
+    for x in (13, 19):
+        g[12 + bob][x + sway] = EYE if eyes else LID
+    if mouth:
+        for x in (15, 16, 17):
+            g[16 + bob][x + sway] = MOUTH
+    return _outline(g)
+
+
+def face_marks():
+    """lostmark votes each mark of a patch across the poses: a mouth missing in frames 2 and 9 of a 10-frame idle
+    (the case the tool is for) is named there, though the eyes on the same patch stay; so is one missing only in the
+    first frame. A blink, once a loop, passes; eyes shut in three separate runs do not. The robe's grain, a near tone
+    new every frame, is not a mark."""
+    ok = True
+
+    def lost(frames, **kw):
+        lines = [x for x in pac.check({"idle": frames}, pac.Spec(eye=EYE, fps=10, style="redrawn", **kw))
+                 if x.startswith("lostmark:")]
+        return lines, pac.fault_frames(lines, {"idle": frames}).get("idle", set())
+
+    n = 10
+    for name, drop in (("frames 2 and 9", {2, 9}), ("frame 0", {0}), ("no frame", set())):
+        lines, where = lost([face_frame(k, n, mouth=k not in drop) for k in range(n)])
+        good = where == drop and all("the mark " in x for x in lines)
+        print(f"lostmark mouth gone in {name:15s} {'named exactly' if good else 'WRONG'}  {sorted(where)}")
+        ok &= good
+    lines, where = lost([face_frame(k, n, eyes=k != 5) for k in range(n)], glows_eye={"idle"})
+    print(f"lostmark lets a blink (frame 5) pass{'' if not lines else ': NO, FALSE ALARM: ' + lines[0]}")
+    ok &= not lines
+    lines, where = lost([face_frame(k, n, eyes=k not in (1, 4, 7)) for k in range(n)], glows_eye={"idle"})
+    good = where == {1, 4, 7} and all("the eye " in x for x in lines)
+    print(f"lostmark eyes shut in 3 separate frames {'named' if good else 'WRONG'}  {sorted(where)}")
+    ok &= good
+
+    frames = [face_frame(k, n, mouth=k not in (2, 9)) for k in range(n)]
+    got = pac.findings({"idle": frames}, pac.Spec(eye=EYE, fps=10, style="redrawn"))
+    lost_ = [f for f in got["faults"] if f["rule"] == "lostmark"]
+    mouth = lost_[0] if len(lost_) == 1 else {}
+    good = (mouth.get("loop") == "idle" and mouth.get("frames") == [2, 9] and mouth.get("eye") is False
+            and abs(mouth.get("row", 0) - 16) <= 1 and abs(mouth.get("column", 0) - 15) <= 1 and mouth.get("px") == 3)
+    print(f"findings gives the lost mouth's frames and place {'ok' if good else 'WRONG'}  {mouth}")
+    ok &= good
+    with tempfile.TemporaryDirectory() as d:
+        strip, report = os.path.join(d, "idle.png"), os.path.join(d, "idle.json")
+        _strip(frames, strip)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            code = pac.main(["--loop", f"idle={strip}", "--frame", "32", "--fps", "10", "--eye", EYE,
+                             "--style", "redrawn", "--no-preview", "--json", report])
+            same = pac.main(["--loop", f"idle={strip}", "--frame", "32", "--no-preview", "--json", strip])
+        with open(report, encoding="utf-8") as fh:
+            written = json.load(fh)
+        good = (code == 1 and same == 2 and written["loops"]["idle"] == {"frames": 10, "width": 32, "height": 44}
+                and [f["frames"] for f in written["faults"] if f["rule"] == "lostmark"] == [[2, 9]])
+    print(f"--json writes the findings, refuses an input as its path {'ok' if good else 'WRONG'}  ({code}, {same})")
+    ok &= good
+    return ok
+
+
 def redrawn_cases():
     """--style redrawn. The walker's idle redrawn on every pose at 8 fps passes (no shimmer, no choppy: its grain is
     new on purpose); the plain walker's idle as 6 poses held 9 frames at 30 fps, its body still while the head and
@@ -1087,11 +1162,14 @@ def redrawn_cases():
     lost = [x for x in pac.check({"idle": studded({5, 11, 17})}, spec) if x.startswith("lostmark:")]
     print(f"lostmark on redrawn {'caught' if lost else 'MISSED'}  (the stud gone in 3 separate poses)")
     ok &= bool(lost)
-    blink = [x for x in pac.check({"idle": studded({5, 6})}, spec) if x.startswith("lostmark:")]
+    once = pac.fault_frames([x for x in pac.check({"idle": studded({5, 6})}, spec) if x.startswith("lostmark:")],
+                            {"idle": studded(set())})
     kept = [x for x in pac.check({"idle": studded(set())}, spec) if x.startswith("lostmark:")]
-    print(f"lostmark lets a blink (one run) and a stud on every pose pass"
-          f"{'' if not blink and not kept else ': NO, FALSE ALARM: ' + (blink + kept)[0]}")
-    ok &= not blink and not kept
+    print(f"lostmark names a stud gone once (frames 5-6) {'ok' if once == {'idle': {5, 6}} else 'WRONG'}  {once}")
+    ok &= once == {"idle": {5, 6}}
+    print(f"lostmark lets a stud on every pose pass{'' if not kept else ': NO, FALSE ALARM: ' + kept[0]}")
+    ok &= not kept
+    ok &= face_marks()
 
     def broken(f):                                        # every 5th inked edge pixel of the body turned to fur
         h, w = len(f), len(f[0])

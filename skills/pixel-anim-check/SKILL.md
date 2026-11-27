@@ -117,9 +117,15 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
     `tick`, `hop`, `shallow` and `still`. The motion a model gave is judged by playing the loop.
   - `shimmer` is not run, and `reshape` and `outline` only warn: a redrawn pose changes its texture and its face's
     pixels on purpose, and may line its edges in colour.
-  - `lostmark` finds the marks a patch of one colour closes in (a mouth on a face, a stud on a coat) gone in 3 or
-    more separate runs of poses while most poses have them; a blink, once or twice a loop, passes. It found a
-    generated idle's missing mouth in exactly the poses its reviewer named.
+  - `lostmark` lets the poses vote. Each mark a patch of one colour closes in (a mouth or an eye on a face, a stud
+    on a coat) is followed by its place on the patch; one most poses keep (60 %) and some drop is lost there, even
+    in a single frame: a mouth missing in frames 2 and 9 of a 10-frame idle is named in exactly those, with the eyes
+    on the same face kept. No approved drawing or placed marks are needed. A mark of the `--eye` colour lost once or
+    twice a loop is a blink and passes; three times or more it is named. A mark must differ from its patch by 40 or
+    more in some colour channel (a grain speck or a shading tone does not) and have 1 px for every 80 rows of the
+    figure; a patch closing in over 8 such marks a pose is a texture and is not read. On the generated wizard idle
+    its reviewer judged it names the mouth in exactly the poses they named, and two of the robe's gold stars that
+    are gone in some poses.
   - `gaps` finds an outline broken in short stretches (1-4 coloured pixels between ink on the edge, over 5 per 100
     edge pixels). Give every outline colour with `--ink`, the lit ones too: a lit outline left out reads as gaps.
   - `lostmark` does not see a mark that no one patch closes in (specks across a hat's shades, a line on a patch's
@@ -138,7 +144,11 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
     you have judged whenever they change. A fourth sample already speaks against `stepped`'s 6 a second: a
     hand-drawn 10-frame idle, accepted by its viewer played at 120 ms a frame, moves its whole body 4.2 times a
     second and gets the warning.
-- In a project with its own pipeline, call `pixel_anim_check.check(loops, Spec(...))` from a small adapter.
+- `--json PATH` also writes the findings as data: each fault and warning with its rule, its loop, the 0-based
+  frames it names and its text; a `lostmark` finding adds the mark's place (top-left row and column) and size, a
+  `spots` finding its group and marks. A repair step reads this instead of the printed lines.
+- In a project with its own pipeline, call `pixel_anim_check.check(loops, Spec(...))` from a small adapter, or
+  `findings(loops, Spec(...))` for the same data `--json` writes.
   - Pixels may be any colour key; pass `lum` and `rgb` to read them.
   - Import the module from the skill folder, or vendor a copy of `pixel_anim_check.py` and `pixel_anim_selftest.py`
     (the selftest needs both). If you vendor them, make changes in one place first and copy them over, so the

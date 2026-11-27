@@ -33,12 +33,21 @@ A rule is kept because it helps find or repair such a loss, not because it is al
 
 ## 2. Finding without a reference
 
-- [ ] **The frames vote.** When 8 of 10 frames show a mouth and 2 do not, the 2 are the outliers. No approved
-  drawing or hand-placed marks needed; with them, the vote is checked against the drawing.
+- [x] **The frames vote** for marks inside a patch (`lostmark`): when 8 of 10 frames show a mouth and 2 do not,
+  the 2 are named. No approved drawing or hand-placed marks needed.
+- [ ] The same vote for features not closed in by one patch (an accessory, a hand, a part on the silhouette's
+  edge), and checked against the drawing when one is given.
 - [ ] Losses read: a feature gone or added (mouth, eye, mark, accessory), colour drift, height and scale drift,
   anchor drift (feet, body centre), a part changing sides, outline gaps, stray specks, a background fringe, a part
   cut by the cell's edge.
-- [ ] `--json`: each finding with its frame, its region as a mask or a box, and the evidence. The repair reads it.
+- [ ] **What must stay, and what may come and go.** A spark leaving a staff, a twinkle or a glow is meant to vanish;
+  the mouth, the eyes, a hat's marks and the outline are not. Today only colours can be declared transient
+  (`--effects`), which fails when an effect shares a colour with the body (a gold spark and gold trim), and an
+  undeclared spark off the body is an `apart` fault in every frame it shows. The check should build a keep list
+  from the approved drawing and the vote (features most frames have), show it numbered on the drawing for the user
+  to confirm, and take transient regions or features, not only colours. Only the keep list is judged.
+- [x] `--json` and `findings()`: each finding with its rule, loop, frames and text; a lost mark's place and size.
+- [ ] A region (a mask or a box) for every rule, not only `lostmark` and `spots`.
 
 **Done when** a sheet with a feature removed from chosen frames has exactly those frames found, with no
 reference.

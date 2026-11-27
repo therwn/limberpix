@@ -190,6 +190,17 @@ All notable changes to this project are listed here. The format follows
   ground). The motion a model gave is judged by playing the loop, and no repair here changes it.
   docs/ROADMAP.md says where this goes: finding and repairing what generated sheets lose.
 
+- **`lostmark` lets the poses vote, and finds a mark lost in one frame.** Each mark a patch closes in (a mouth, an
+  eye, a stud) is followed by its place on the patch; one most poses keep and some drop is named in exactly those.
+  It used to ask the whole patch to empty in 3 separate runs, so a mouth missing in frames 2 and 9 of a 10-frame
+  idle went unseen, and so did any mouth on a face that also holds the eyes. A grain speck or a shading tone (under
+  40 in every channel from its patch) is not a mark. An eye-coloured mark lost once or twice is still a blink.
+
+### Added (pixel-anim-check)
+
+- **`--json PATH`** writes the findings as data (rule, loop, 0-based frames, text; a lost mark's place and size; a
+  spots group), and `findings(loops, Spec(...))` returns the same from Python: what the repair step will read.
+
 ### Fixed
 
 - **pixel-anim-check** `vanish` no longer depends on the loop's first frame. A whole-figure lift was taken out

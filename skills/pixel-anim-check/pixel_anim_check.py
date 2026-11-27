@@ -33,6 +33,8 @@ optional. Options:
                       choppy, boil's rates, snap, hitch, the eye tick's dwell and an action's held keys)
   --name NAME         the stem of the written files (default anim)
   --no-preview        print the same checks and motion tracks without rendering a PNG or GIF
+  --json PATH         also write the findings as JSON: each fault and warning with its rule, its loop, the frames it
+                      names (0-based) and its text, for a repair step or another program to read
   --action NAME[:KIND[:DIR]]  that loop is an action: it may hold up to two keys (a wind-up and a follow-through),
                       each up to 13 frames (at 30 fps), outside choppy and uneven. KIND strike (its phases are
                       judged; DIR right|left|up|down, default the facing), jump (it leaves the ground: ground is
@@ -213,6 +215,10 @@ STEP_ROWS, STEP_TILE, STEP_COVER, STEPPED_RATE = 8, 0.15, 0.4, 6.0   # stepped: 
 PATCH_MIN, PATCH_FRAC, PATCH_REACH, PATCH_SIZE = 12, 0.003, 0.12, 1.6   # lostmark: a patch's least px and share of
 LOST_HAVE, LOST_RUNS = 0.6, 3                            # the figure, its reach a pose (of the height), its size swing;
 GAP_LEN, GAP_RATE = 4, 5.0                               # marks on this share of the poses, gone this many times; gaps
+MARK_REACH, MARK_MOST = 0.25, 8                          # lostmark: a mark's place, of the patch's radius (1.5 px at
+                                                         # least); a patch closing in more marks a pose is a texture;
+MARK_CONTRAST, MARK_SCALE = 40, 80                       # a mark's least channel difference from its patch (a grain
+                                                         # speck is a near tone) and least px, 1 per this many rows
 SPOT_PX, SPOT_HUE, SPOT_SAT, SPOT_INK = 3, 1 / 8, 0.15, 45   # spots: a mark's most px; a patch tone's hue reach (of
 SPOT_PAD, SPOT_REACH, SPOT_TOL, SPOT_DROP = 8, 12, 1, 0.4    # the circle), least saturation; ink's lightness; the
                                                              # window round a group, its search, a mark's slack in
@@ -491,6 +497,12 @@ def check(loops, spec, warns=None):
     """loops: {name: [frame, ...]}, a frame a list of rows of colour keys or None. Returns fault lines; warns, if a
     list, receives the warning lines (looked at, not counted as faults)."""
     return [str(line) for line in _check(loops, spec, warns)]
+
+
+def findings(loops, spec):
+    """check() as data: report() of its faults and warnings, with each finding's frames and a lost mark's place."""
+    warns = []
+    return report(loops, _check(loops, spec, warns), warns)
 
 
 def _check(loops, spec, warns=None):
@@ -1383,6 +1395,11 @@ def _comps4(m):
 def _enclosed(ys, xs, H, W):
     """How many pixels a patch (its pixels ys, xs) closes in: those its box holds that air from outside the box
     cannot reach in 4-connected steps (a mouth on a face, a stud on a coat)."""
+    return int(_enclosed_mask(ys, xs)[2].sum())
+
+
+def _enclosed_mask(ys, xs):
+    """(y0, x0, mask): the pixels a patch closes in, as a mask over its box grown by one, whose top left is y0, x0."""
     y0, x0 = ys.min() - 1, xs.min() - 1
     m = np.ones((ys.max() - y0 + 2, xs.max() - x0 + 2), bool)
     m[ys - y0, xs - x0] = False
@@ -1398,7 +1415,7 @@ def _enclosed(ys, xs, H, W):
             if 0 <= ny < m.shape[0] and 0 <= nx < m.shape[1] and m[ny, nx] and not reach[ny, nx]:
                 reach[ny, nx] = True
                 stack.append((ny, nx))
-    return int((m & ~reach).sum())
+    return y0, x0, m & ~reach
 
 
 def _pose_ref(a, runs, i, n):
@@ -1409,10 +1426,11 @@ def _pose_ref(a, runs, i, n):
 class _PoseFault(str):
     """A diagnostic carrying the original pose runs for the contact sheet."""
 
-    def __new__(cls, text, loop, runs):
+    def __new__(cls, text, loop, runs, **detail):
         line = super().__new__(cls, text)
         line.loop = loop
         line.runs = tuple(runs)
+        line.detail = detail                              # what report() adds for a repair step: a mark's place
         return line
 
 
@@ -1437,12 +1455,15 @@ def lostmark(loops, spec):
     for a, frames in loops.items():
         if a in spec.actions:
             continue
-        figs, ink = _arrays(frames, spec)
+        keys = {}
+        figs, ink = _arrays(frames, spec, keys)
+        eye_codes = {keys[spec.eye]} if spec.eye in keys else set()
+        rgbs = {code: spec.rgb(colour) for colour, code in keys.items()}
         runs = _same_runs(figs)
         if len(runs) < 3:
             continue
         P = [figs[k] for k, _ in runs]
-        n, H, W = len(frames), *P[0].shape
+        n = len(frames)
         area = _area(P)
         rows = [np.nonzero(p.any(1))[0] for p in P]
         height = statistics.mean(int(r.max() - r.min() + 1) for r in rows if len(r))
@@ -1470,15 +1491,63 @@ def lostmark(loops, spec):
                     last = (len(y_), ce)
                 if not track:
                     continue
-                marks = [_enclosed(y_, x_, H, W) for y_, x_ in track]
-                gone = [i for i, m in enumerate(marks) if not m]
-                times = sum(1 for i in gone if (i - 1) % len(P) not in gone)
-                if gone and len(P) - len(gone) >= LOST_HAVE * len(P) and times >= LOST_RUNS:
-                    line = (f"lostmark: {a} the marks inside a patch at row {round(cen[0])}, column "
-                            f"{round(cen[1])} (a mouth on a face, a stud on a coat: {marks[0]} px in the first "
-                            f"pose) vanish in {', '.join(_pose_ref(a, runs, i, n) for i in gone)}: a generated "
-                            f"frame dropping them. Draw them on every pose")
-                    out.append(_PoseFault(line, a, (runs[i] for i in gone)))
+                least_mark = max(1, round(height / MARK_SCALE))
+                for gone, place, size, eye in _lost_marks(track, P, eye_codes, rgbs.get(c), rgbs, least_mark):
+                    times = sum(1 for i in gone if (i - 1) % len(P) not in gone)
+                    if eye and times < LOST_RUNS:                 # an eye closing once or twice is a blink
+                        continue
+                    line = (f"lostmark: {a} the {'eye' if eye else 'mark'} inside a patch at row {place[0]}, column "
+                            f"{place[1]} (a mouth on a face, a stud on a coat: {size} px, in {len(P) - len(gone)} "
+                            f"of {len(P)} poses) vanishes in {', '.join(_pose_ref(a, runs, i, n) for i in gone)}: a "
+                            f"generated frame dropping it. Draw it on every pose")
+                    out.append(_PoseFault(line, a, (runs[i] for i in gone), row=place[0], column=place[1], px=size,
+                                          eye=eye, patch=(round(cen[0]), round(cen[1]))))
+    return out
+
+
+def _lost_marks(track, P, eye_codes, patch_rgb, rgbs, least):
+    """The marks a tracked patch closes in, voted on by its poses: [(poses without it, (row, column) where it is
+    first, its px there, whether it is the eye)]. A mark is a piece of what the patch closes in (_enclosed_mask) of
+    least px or more, its commonest colour MARK_CONTRAST or more off the patch's in some channel (air counts: a hole;
+    a grain speck or a shading tone is a near tone), placed by its offset from the patch's centre; a pose has it
+    when one of its pieces lies within MARK_REACH of the patch's radius of that place. A mark kept by LOST_HAVE of
+    the poses and missing in the others is lost there. A patch closing in over MARK_MOST marks a pose (a texture) is
+    not read."""
+    holes = []
+    for i, (ys, xs) in enumerate(track):
+        y0, x0, m = _enclosed_mask(ys, xs)
+        cy, cx = ys.mean(), xs.mean()
+        pieces = []
+        for hy, hx in _comps4(m):
+            hy, hx = hy + y0, hx + x0
+            codes = P[i][hy, hx].tolist()
+            commonest = max(set(codes), key=codes.count)
+            if len(hy) < least or (commonest and patch_rgb is not None and max(
+                    abs(u - v) for u, v in zip(rgbs[commonest], patch_rgb)) < MARK_CONTRAST):
+                continue
+            pieces.append(((hy.mean() - cy, hx.mean() - cx), (int(hy.min()), int(hx.min())), len(hy),
+                           bool(eye_codes & set(codes))))
+        holes.append(pieces)
+    if not holes or statistics.median(len(h) for h in holes) > MARK_MOST:
+        return []
+    reach = max(1.5, MARK_REACH * math.sqrt(statistics.median(len(ys) for ys, _ in track) / math.pi))
+    marks = []                                            # [offset, {pose: piece}]
+    for i, pieces in enumerate(holes):
+        free = list(pieces)
+        for mark in marks:
+            near = [(math.dist(p[0], mark[0]), p) for p in free]
+            near = [t for t in near if t[0] <= reach]
+            if near:
+                p = min(near, key=lambda t: t[0])[1]
+                mark[1][i] = p
+                free.remove(p)
+        marks += [[p[0], {i: p}] for p in free]
+    out = []
+    for offset, seen in marks:
+        gone = [i for i in range(len(P)) if i not in seen]
+        if gone and len(seen) >= LOST_HAVE * len(P):
+            first = seen[min(seen)]
+            out.append((gone, first[1], first[2], any(p[3] for p in seen.values())))
     return out
 
 
@@ -1744,7 +1813,8 @@ def spots(loops, spec, warns):
                 poses = ', '.join(f"{_pose_ref(a, runs, i, len(frames))} {n}" for i, n in where)
                 line = (f"spots: {a} the marks {name!r} ({groups[name][4]} in the approved drawing) are fewer in "
                         f"{poses}: draw every one on every pose, in its place")
-                out.append(_PoseFault(line, a, (runs[i] for i, _ in where)))
+                out.append(_PoseFault(line, a, (runs[i] for i, _ in where), group=name,
+                                      marks=[list(p) for p in groups[name][0]]))
     return out
 
 
@@ -3357,8 +3427,30 @@ def _wide_strip(src):
 
 VALUED = {"--loop", "--frame", "--frames", "--eye", "--eye-at", "--facing", "--ink", "--shadow", "--effects", "--allow",
           "--glows-eye", "--idle", "--move", "--out", "--fps", "--name", "--action", "--speed", "--parts", "--squash",
-          "--palette", "--glow", "--ref", "--mark", "--sheet", "--key", "--min-rate", "--style", "--spots"}
+          "--palette", "--glow", "--ref", "--mark", "--sheet", "--key", "--min-rate", "--style", "--spots", "--json"}
 FLAGS = {"--flier", "--legless", "--no-preview", "--selftest", "--help", "-h"}
+
+
+def report(loops, faults, warns=()):
+    """The findings as data, for a repair step or another program: {"loops": {name: {"frames": n, "width": w,
+    "height": h}}, "faults": [...], "warnings": [...]}, each finding {"rule", "loop" (None when it names no loop),
+    "frames" (the 0-based frames it names, as the contact sheet frames them), "text"}, and for lostmark the mark's
+    top-left "row" and "column" and its "px" in the first pose showing it, "eye" and the "patch" centre, for spots
+    the "group" and its "marks" on the approved drawing. findings() runs the check and returns this; check()'s plain
+    strings lose those details."""
+    def item(line):
+        text = str(line)
+        body = text[len("warn: "):] if text.startswith("warn: ") else text
+        named = fault_frames([line], loops)
+        loop = getattr(line, "loop", None) or next(iter(named), None)
+        if loop is None:
+            loop = next((a for a in sorted(loops, key=len, reverse=True)
+                         if re.match(rf"\s*\w+: {re.escape(a)}(?=\[|\s|$)", body)), None)
+        return {"rule": body.split(":", 1)[0].strip(), "loop": loop,
+                "frames": sorted(named.get(loop, ())) if loop else [], "text": text, **getattr(line, "detail", {})}
+    return {"loops": {a: {"frames": len(v), "width": _frame_size(v[0])[0], "height": _frame_size(v[0])[1]}
+                      for a, v in loops.items() if v},
+            "faults": [item(x) for x in faults], "warnings": [item(x) for x in warns]}
 
 
 def _args(argv):
@@ -3630,6 +3722,13 @@ def main(argv):
         name = opt("--name", "anim")
         if not name or name in (".", "..") or any(c in '/\\:<>"|?*' or ord(c) < 32 for c in name):
             raise ValueError(f"--name must be a file name, not {name!r}")
+        json_path = opt("--json")
+        if json_path is not None and (not json_path or os.path.isdir(json_path)
+                                      or not os.path.isdir(os.path.dirname(os.path.abspath(json_path)))):
+            raise ValueError(f"--json needs a file path in an existing folder, not {json_path!r}")
+        if json_path is not None and any(os.path.exists(src) and os.path.samefile(json_path, src) for src in sources
+                                         if os.path.exists(json_path)):
+            raise ValueError(f"--json {json_path} is one of the inputs")
         out = None if "--no-preview" in got else _preview_folder(opt("--out", "."), name, sources)
         square = not frame and not frames and any(_wide_strip(src) for src in srcs.values())
     except (ValueError, OSError, Image.DecompressionBombError) as e:
@@ -3644,6 +3743,14 @@ def main(argv):
     print(f"{name}: {len(faults)} fault(s)")
     for f in faults + warns:
         print("  " + f)
+    if json_path is not None:
+        try:
+            with open(json_path, "w", encoding="utf-8", newline="\n") as fh:
+                json.dump(report(loops, faults, warns), fh, indent=1)
+                fh.write("\n")
+        except OSError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
     if any(f.startswith("size:") for f in faults):
         for a, src in srcs.items():
             if os.path.isdir(src) and len({_frame_size(f) for f in loops[a]}) > 1:
