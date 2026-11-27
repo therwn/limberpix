@@ -188,6 +188,29 @@ change from frame k to the next. Open the folder printed after `sheets:` for bot
   the scrolling road. When the cycles take too long to align, the preview plays once.
 - In code: `check(loops, spec, warns)` fills the list `warns`; `tracks(loops, spec)` returns the two read-outs.
 
+## 1b. Repair what a generated sheet dropped
+
+When `lostmark` or `keep` names a mark (a mouth, an eye, a stud) missing in some frames of a generated sheet,
+`repair_sheet.py` draws it back:
+
+```sh
+python -I ${CLAUDE_SKILL_DIR}/repair_sheet.py idle.png --frame 64 --keep face_features.json --eye "#2b3a63" --out out --name idle
+```
+
+It checks the frames in `--style redrawn` (with `--keep`, the kept features; else `lostmark`'s vote), and for each
+frame without the mark takes it from the nearest frame that has it. It places it by the marks beside it (the eyes
+beside a mouth), or else by matching the pixels around it, and draws it only over the patch's own pixels, never
+over air or an outline. Frames that lose nothing stay pixel for pixel. A mark drawn a few pixels off in its patch
+is left alone (it moved, it was not lost), and a drawing the check still reads as lost is undone. It writes
+`<name>_repaired.png`, `<name>_repair.json` (each repair and each skip, the faults before and after) and
+`<name>_repair.png` (before and after, repaired frames framed green). Exit 0: nothing left; 1: a mark still
+missing; 2: a usage error.
+- Show the user `<name>_repair.png` and a GIF of the repaired strip before using it. A mark that moved onto its
+  patch's edge is not read as a mark there and may be drawn twice.
+- On the generated wizard idle it put the mouth back in the four frames its reviewer named, and undid its drawings
+  of a robe star the check had read as lost where it had only moved.
+- Not repaired yet: a lost piece apart from the figure, an outline gap, colour, scale and anchor drift.
+
 ## 2. What each fault means and the usual fix
 
 | Fault | Meaning | Usual cause, fix |

@@ -389,6 +389,25 @@ pac.sheet(loops, "fox_check.png", rgb=spec.rgb)
 
 Without them, non-hex keys raise a `TypeError`.
 
+### repair_sheet.py
+
+Draws back a mark (a mouth, an eye, a stud) that `lostmark` or `keep` finds missing in some frames of a generated
+sheet, from the nearest frame that has it, and leaves every other frame as it is.
+
+```sh
+python skills/pixel-anim-check/repair_sheet.py idle.png --frame 64 [--keep LIST.json] [--eye "#rrggbb"] [--ink C,...] [--effects C,...] [--shadow C,...] [--key "#rrggbb"] [--fps N] --out out --name idle
+```
+
+- **Where it goes:** the donor's other marks beside it (the eyes beside a mouth), found again in the frame, give
+  the shift; with none, the pixels around the mark are matched over every shift within reach of the figure's move.
+  It is drawn only over the patch's own pixels, never over air or an outline.
+- **What it will not do:** draw a mark that moved within its patch (it is a few pixels off, not lost), or keep a
+  drawing the check still reads as lost (it is undone).
+- **Out:** `<name>_repaired.png`, `<name>_repair.json` (repairs, skips, the faults before and after) and
+  `<name>_repair.png` (before and after). Exit 0 nothing left to repair, 1 a mark still missing, 2 a usage error.
+- **Limits:** a mark that moved onto its patch's edge may be drawn twice, so look at `<name>_repair.png`; a lost
+  piece apart from the figure, an outline gap and colour, scale or anchor drift are not repaired yet.
+
 ## pixel-animate tools
 
 The method is [`skills/pixel-animate/SKILL.md`](../skills/pixel-animate/SKILL.md). Three scripts sit beside it.

@@ -13,7 +13,7 @@ def main():
         skills = Path(tmp) / "skills"
         for name in ("pixel-anim-check", "pixel-animate"):
             shutil.copytree(source / name, skills / name, ignore=shutil.ignore_patterns("__pycache__"))
-        scripts = [skills / "pixel-anim-check" / "pixel_anim_check.py"]
+        scripts = [skills / "pixel-anim-check" / name for name in ("pixel_anim_check.py", "repair_sheet.py")]
         scripts.extend(skills / "pixel-animate" / (name + ".py") for name in ("body_parts", "creature_map", "shrink"))
         for script in scripts:
             result = subprocess.run([sys.executable, "-I", "-B", "-X", "utf8", "-W", "error::DeprecationWarning",

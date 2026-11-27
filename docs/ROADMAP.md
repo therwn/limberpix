@@ -17,7 +17,7 @@ A rule is kept because it helps find or repair such a loss, not because it is al
 | | Done | Missing |
 |---|---|---|
 | **Finding** | `pixel-anim-check --style redrawn`: `lostmark` (a mark inside a patch, such as a mouth, gone in some poses), `spots` (marks placed on the approved drawing), `gaps`, `apart`, `eye`, `palette`, `mark`, `vanish`. On a generated wizard idle it names the mouthless poses (9, 10, 13, 15) and the hat's lost specks exactly as the viewer did. Motion checks only warn in this style | Finding a loss without a reference or hand-placed marks; scale, colour and anchor drift as faults; a part changing sides; machine-readable output; a quieter report (one `outline` warning a frame today) |
-| **Repairing** | Prototypes outside the skills: keying out, one scale, anchoring by the feet, one palette, marks painted back from the drawing, outline gaps closed, boots locked | All of it as a tool in the skill |
+| **Repairing** | `repair_sheet.py`: a lost mark drawn back from the nearest frame that has it, every other frame left as it is, a log and a before-and-after picture. Prototypes outside the skills for keying out, one scale, anchoring by the feet, one palette, outline gaps, boots locked | Those prototypes as tools in the skill; lost pieces and outline gaps repaired |
 | **Measuring** | One labelled sample (the generated wizard idle, 32 per-frame judgements) | A set of sheets with known losses, run in CI |
 
 ## 1. Purpose and rules
@@ -59,11 +59,15 @@ reference.
 
 ## 3. Repair
 
-- [ ] `repair_sheet.py` in the skill: split the sheet into cells (the grid found, or given), key out the
-  background and its fringe, one scale, one anchor, one palette.
-- [ ] Region repair: a lost feature is taken from the nearest sound frame or the drawing, placed where that frame's
-  head (or part) is, and its seam re-inked.
-- [ ] Sound frames are never touched. Every change is logged, with a before-and-after sheet.
+- [x] `repair_sheet.py`: a lost mark is taken from the nearest sound frame, placed by the marks beside it or the
+  pixels around it, and drawn over its patch only. A mark that moved is not drawn twice; a drawing the check still
+  reads as lost is undone.
+- [x] Sound frames are never touched. Every change is logged, with a before-and-after sheet.
+- [ ] Split a sheet into cells (the grid found, or given), key out the background and its fringe, one scale, one
+  anchor, one palette (prototypes in the local trials).
+- [ ] Repair a lost piece apart from the figure, an outline gap, and a mark that moved onto its patch's edge (it is
+  not read as a mark there, so today it can be drawn twice).
+- [ ] Take a lost feature from the approved drawing when no frame has it.
 - [ ] A frame that cannot be repaired here is named, with a prompt to regenerate that frame alone.
 
 **Done when** the sheet from step 2 comes back with the feature on every frame and the other frames

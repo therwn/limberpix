@@ -198,6 +198,12 @@ All notable changes to this project are listed here. The format follows
 
 ### Added (pixel-anim-check)
 
+- **`repair_sheet.py`: draw back what a generated sheet dropped.** A mark `lostmark` or `keep` finds missing in some
+  frames is taken from the nearest frame that has it, placed by the marks beside it (or the pixels around it), and
+  drawn over its patch only; every other frame stays pixel for pixel. A mark that moved is not drawn twice, and a
+  drawing the check still reads as lost is undone. It writes the repaired strip, a JSON log and a before-and-after
+  picture. On the generated wizard idle it put the mouth back in the four frames its reviewer named. With its own
+  selftest, run in CI and from a clean skill install.
 - **A keep list: what must stay, and what may come and go.** `--features` lists the candidates on the approved
   drawing (marks a patch closes in, kept; small pieces apart from the figure, not kept), numbered on a picture
   and written as JSON for the user to confirm, with `transient` boxes for effects such as a staff's sparks.

@@ -1508,7 +1508,7 @@ def lostmark(loops, spec):
                 if not track:
                     continue
                 least_mark = max(1, round(height / MARK_SCALE))
-                for gone, place, size, eye in _lost_marks(track, P, eye_codes, rgbs.get(c), rgbs, least_mark):
+                for gone, place, size, eye, shown in _lost_marks(track, P, eye_codes, rgbs.get(c), rgbs, least_mark):
                     times = sum(1 for i in gone if (i - 1) % len(P) not in gone)
                     if eye and times < LOST_RUNS:                 # an eye closing once or twice is a blink
                         continue
@@ -1517,18 +1517,18 @@ def lostmark(loops, spec):
                             f"of {len(P)} poses) vanishes in {', '.join(_pose_ref(a, runs, i, n) for i in gone)}: a "
                             f"generated frame dropping it. Draw it on every pose")
                     out.append(_PoseFault(line, a, (runs[i] for i in gone), row=place[0], column=place[1], px=size,
-                                          eye=eye, patch=(round(cen[0]), round(cen[1]))))
+                                          eye=eye, patch=(round(cen[0]), round(cen[1])), frame=runs[shown][0]))
     return out
 
 
 def _lost_marks(track, P, eye_codes, patch_rgb, rgbs, least):
     """The marks a tracked patch closes in, voted on by its poses: [(poses without it, (row, column) where it is
-    first, its px there, whether it is the eye)]. A mark is a piece of what the patch closes in (_enclosed_mask) of
-    least px or more, its commonest colour MARK_CONTRAST or more off the patch's in some channel (air counts: a hole;
-    a grain speck or a shading tone is a near tone), placed by its offset from the patch's centre; a pose has it
-    when one of its pieces lies within MARK_REACH of the patch's radius of that place. A mark kept by LOST_HAVE of
-    the poses and missing in the others is lost there. A patch closing in over MARK_MOST marks a pose (a texture) is
-    not read."""
+    first, its px there, whether it is the eye, the first pose showing it)]. A mark is a piece of what the patch
+    closes in (_enclosed_mask) of least px or more, its commonest colour MARK_CONTRAST or more off the patch's in
+    some channel (air counts: a hole; a grain speck or a shading tone is a near tone), placed by its offset from the
+    patch's centre; a pose has it when one of its pieces lies within MARK_REACH of the patch's radius of that place.
+    A mark kept by LOST_HAVE of the poses and missing in the others is lost there. A patch closing in over MARK_MOST
+    marks a pose (a texture) is not read."""
     holes = []
     for i, (ys, xs) in enumerate(track):
         y0, x0, m = _enclosed_mask(ys, xs)
@@ -1563,7 +1563,7 @@ def _lost_marks(track, P, eye_codes, patch_rgb, rgbs, least):
         gone = [i for i in range(len(P)) if i not in seen]
         if gone and len(seen) >= LOST_HAVE * len(P):
             first = seen[min(seen)]
-            out.append((gone, first[1], first[2], any(p[3] for p in seen.values())))
+            out.append((gone, first[1], first[2], any(p[3] for p in seen.values()), min(seen)))
     return out
 
 
@@ -1586,7 +1586,8 @@ def _contrast(p, q):
 
 def _pose_marks(p, ink, rgbs, eye_codes):
     """Every mark a patch of one colour closes in, in one pose (an int array): [{"box": (top, left, bottom, right),
-    "centre", "px", "code" (0: a hole), "eye"}], read as lostmark reads them (MARK_CONTRAST, MARK_SCALE, MARK_MOST)."""
+    "centre", "px", "code" (0: a hole), "eye", "pixels": [(row, column)]}], read as lostmark reads them
+    (MARK_CONTRAST, MARK_SCALE, MARK_MOST)."""
     rows = np.nonzero(p.any(1))[0]
     if not len(rows):
         return []
@@ -1609,7 +1610,7 @@ def _pose_marks(p, ink, rgbs, eye_codes):
                     continue
                 got.append({"box": (int(hy.min()), int(hx.min()), int(hy.max()), int(hx.max())),
                             "centre": (float(hy.mean()), float(hx.mean())), "px": len(hy), "code": int(commonest),
-                            "eye": bool(eye_codes & set(codes))})
+                            "eye": bool(eye_codes & set(codes)), "pixels": list(zip(hy.tolist(), hx.tolist()))})
             if len(got) <= MARK_MOST:                     # more is a texture
                 out += got
     return out
@@ -3669,9 +3670,10 @@ def report(loops, faults, warns=()):
     """The findings as data, for a repair step or another program: {"loops": {name: {"frames": n, "width": w,
     "height": h}}, "faults": [...], "warnings": [...]}, each finding {"rule", "loop" (None when it names no loop),
     "frames" (the 0-based frames it names, as the contact sheet frames them), "text"}, and for lostmark the mark's
-    top-left "row" and "column" and its "px" in the first pose showing it, "eye" and the "patch" centre, for spots
-    the "group" and its "marks" on the approved drawing. findings() runs the check and returns this; check()'s plain
-    strings lose those details."""
+    top-left "row" and "column" and its "px" in the first pose showing it ("frame"), "eye" and the "patch" centre;
+    for keep the "feature" id, its "name", "kind" and "box" on the approved drawing; for spots the "group" and its
+    "marks" on the approved drawing. findings() runs the check and returns this; check()'s plain strings lose those
+    details."""
     def item(line):
         text = str(line)
         body = text[len("warn: "):] if text.startswith("warn: ") else text

@@ -92,7 +92,7 @@ Every fault's meaning and its usual fix: [skills/pixel-anim-check/SKILL.md](skil
 | **What it is** | A written method, with a part cutter. Not a generator | A measuring script, and how to read what it prints |
 | **You give it** | One approved drawing of a side-view creature | Sprite strips, frame folders or GIFs, and the eye colour |
 | **You get** | An idle, a move and an action posed from the drawing's own pixels | Named faults, a contact sheet and a GIF to look at |
-| **Scripts** | `body_parts.py`, `shrink.py`, `creature_map.py` | `pixel_anim_check.py` |
+| **Scripts** | `body_parts.py`, `shrink.py`, `creature_map.py` | `pixel_anim_check.py`, `repair_sheet.py` |
 | **Ask the agent** | "animate this fox's idle and walk from fox.png" | "check walk.png before I put it in the game" |
 
 ## Try it
