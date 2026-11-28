@@ -20,7 +20,9 @@ For each lost mark and each frame without it:
    apart in every channel count as the same).
 3. The mark's pixels are drawn there in the donor's colours, over the frame's own pixels but never over air or an
    outline (ink), so it stays inside its patch.
-A frame with a like mark (half to twice its px, its colour) within 2.5 reaches of that place is not drawn on: the
+Of the shifts within 2 px of that place, the nearest where the drawn mark reads as a mark at its place is used (a
+shift a pixel off can spill it out of its patch). A frame with a like mark (half to twice its px, its colour) within
+2.5 reaches of that place is not drawn on: the
 mark moved there and was read as lost, and drawing it again would double it. Then the frames are checked again,
 and a drawing the check still reads as lost in its frame is undone (it did not take, and may have doubled a mark
 the check could not see).
@@ -54,6 +56,7 @@ import pixel_anim_check as pac  # noqa: E402
 MATCH = 40                                                # colours this close in every channel align as one
 AROUND = 0.1                                              # the alignment window's reach past a mark, of the height
 MOVED = 2.5                                               # a like mark this many reaches from the place: moved
+NUDGE = 2                                                 # px tried round the placement for one that reads as a mark
 REPAIRED = ("keep", "lostmark")
 
 
@@ -104,6 +107,25 @@ def _landmarks(mark, marks_d, marks_t, guess, reach, rgbs, near):
     if not shifts:
         return None, []
     return (round(sum(s[0] for s in shifts) / len(shifts)), round(sum(s[1] for s in shifts) / len(shifts))), used
+
+
+def _draw(frame, donor, pixels, dy, dx, spec):
+    """The donor's mark pixels drawn into frame moved by (dy, dx), over its own pixels only (never air or ink)."""
+    drawn = []
+    for y, x in pixels:
+        ty, tx = y + dy, x + dx
+        if 0 <= ty < len(frame) and 0 <= tx < len(frame[0]) and frame[ty][tx] is not None \
+                and not spec.is_ink(frame[ty][tx]):
+            frame[ty][tx] = donor[y][x]
+            drawn.append([ty, tx])
+    return drawn
+
+
+def _reads(frame, spec, keys, ink, rgbs, eye_codes, mark, want, reach):
+    """Whether frame now shows a mark like this one (half to twice its px) within reach of want."""
+    a = pac._arrays([frame], spec, keys)[0][0]
+    return any(math.dist(m["centre"], want) <= reach and mark["px"] / 2 <= m["px"] <= 2 * mark["px"]
+               for m in pac._pose_marks(a, ink, rgbs, eye_codes, None))
 
 
 def _key(fault):
@@ -175,7 +197,7 @@ def repair(frames, spec, name="idle", gaps=False):
                 reach = max(2.0, pac.KEEP_REACH * height)
                 da = pac._anchor(arrs[d])
                 want = (centre[0] + da[0] - anchor[0], centre[1] + da[1] - anchor[1])
-                marks = [m for m in pac._pose_marks(arrs[d], ink, rgbs, eye_codes)
+                marks = [m for m in pac._pose_marks(arrs[d], ink, rgbs, eye_codes, None)
                          if math.dist(m["centre"], want) <= reach and px / 3 <= m["px"] <= 3 * px]
                 if marks:
                     got = (d, min(marks, key=lambda m: math.dist(m["centre"], want)), reach, height)
@@ -186,8 +208,8 @@ def repair(frames, spec, name="idle", gaps=False):
             d, mark, reach, height = got
             ta, da = pac._anchor(arrs[t]), pac._anchor(arrs[d])
             guess = (round(ta[0] - da[0]), round(ta[1] - da[1]))
-            marks_d = pac._pose_marks(arrs[d], ink, rgbs, eye_codes)
-            marks_t = pac._pose_marks(pac._arrays([out[t]], spec, keys)[0][0], ink, rgbs, eye_codes)
+            marks_d = pac._pose_marks(arrs[d], ink, rgbs, eye_codes, None)
+            marks_t = pac._pose_marks(pac._arrays([out[t]], spec, keys)[0][0], ink, rgbs, eye_codes, None)
             by, used = _landmarks(mark, marks_d, marks_t, guess, reach, rgbs, round(AROUND * height) + 4)
             placed = "by the marks beside it"
             if by is not None:
@@ -206,13 +228,21 @@ def repair(frames, spec, name="idle", gaps=False):
                 skipped.append({"mark": label, "frames": [t], "why": f"drawn {math.dist(q['centre'], there):.0f} px "
                                 f"off its place at row {q['box'][0]}, column {q['box'][1]}, not lost"})
                 continue
-            drawn = []
-            for y, x in mark["pixels"]:
-                ty, tx = y + dy, x + dx
-                if 0 <= ty < len(out[t]) and 0 <= tx < len(out[t][0]) and out[t][ty][tx] is not None \
-                        and not spec.is_ink(out[t][ty][tx]):
-                    out[t][ty][tx] = frames[d][y][x]
-                    drawn.append([ty, tx])
+            want_t = (centre[0] + ta[0] - anchor[0], centre[1] + ta[1] - anchor[1])
+            best = None
+            for ny, nx in sorted(((dy + a, dx + b) for a in range(-NUDGE, NUDGE + 1) for b in range(-NUDGE, NUDGE + 1)),
+                                 key=lambda s: (abs(s[0] - dy) + abs(s[1] - dx), s)):
+                trial = [r[:] for r in out[t]]
+                drawn = _draw(trial, frames[d], mark["pixels"], ny, nx, spec)
+                if _reads(trial, spec, keys, ink, rgbs, eye_codes, mark, want_t, reach):
+                    best = (ny, nx, trial, drawn)
+                    break
+            if best is None:                              # no nudge reads as the mark: draw it where it was placed,
+                trial = [r[:] for r in out[t]]            # and the check after decides
+                best = (dy, dx, trial, _draw(trial, frames[d], mark["pixels"], dy, dx, spec))
+            elif (best[0], best[1]) != (dy, dx):
+                placed += f", nudged {best[0] - dy:+d}, {best[1] - dx:+d} to read as the mark"
+            dy, dx, out[t], drawn = best
             repairs.append({"mark": label, "rule": fault["rule"], "frame": t, "donor": d, "shift": [dy, dx],
                             "placed": placed, "match": None if share is None else round(share, 2), "pixels": drawn,
                             "_was": [frames[t][y][x] for y, x in drawn], "_key": _key(fault)})

@@ -198,6 +198,13 @@ All notable changes to this project are listed here. The format follows
 
 ### Added (pixel-anim-check)
 
+- **Measured on sheets an image model drew.** `tests/known_losses.py` erases a mark in chosen frames of a sheet's
+  real frames and measures the check and the repair against the known answer. On six Codex sheets of two
+  characters: `keep` 52 of 53 erased frames and no other, `lostmark` 34 of 53, the repair 51 of 53. What it showed
+  is fixed here: a mouth drawn against the outline is a mark (the outer outline helps close a patch; such a mark
+  needs 2 px), a shaded face's specks no longer hide its mouth from `keep` and the repair, and the repair nudges a
+  drawing up to 2 px until it reads as the mark.
+
 - **`repair_sheet.py --gaps`** (and `fix_sheet.py --gaps`) closes the outline's short gaps on every frame, as the
   check's `gaps` reads them, in the colour of the ink beside them. Asked for, not done by default: it touches every
   frame. On the generated wizard idle it closed 1431 px over 16 poses and the `gaps` fault went away.

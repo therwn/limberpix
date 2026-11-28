@@ -223,6 +223,9 @@ LOST_HAVE, LOST_RUNS = 0.6, 3                            # the figure, its reach
 GAP_LEN, GAP_RATE = 4, 5.0                               # marks on this share of the poses, gone this many times; gaps
 MARK_REACH, MARK_MOST = 0.25, 8                          # lostmark: a mark's place, of the patch's radius (1.5 px at
                                                          # least); a patch closing in more marks a pose is a texture;
+MARK_ON_PATCH, MARK_SIZE = 0.4, 0.25                     # a mark's rim on its patch (the rest may be the outline)
+                                                         # and its most px, of the patch's;
+LINE_MARK = 2                                            # the least px of a mark only the outline helps close in
 MARK_CONTRAST, MARK_SCALE = 40, 80                       # a mark's least channel difference from its patch (a grain
                                                          # speck is a near tone) and least px, 1 per this many rows
 SPOT_PX, SPOT_HUE, SPOT_SAT, SPOT_INK = 3, 1 / 8, 0.15, 45   # spots: a mark's most px; a patch tone's hue reach (of
@@ -1418,11 +1421,37 @@ def _enclosed(ys, xs, H, W):
     return int(_enclosed_mask(ys, xs)[2].sum())
 
 
-def _enclosed_mask(ys, xs):
-    """(y0, x0, mask): the pixels a patch closes in, as a mask over its box grown by one, whose top left is y0, x0."""
+def _outline(p, ink):
+    """The outline: the pose's ink pixels joined (through ink, 8 ways) to an ink pixel beside air. A dark stud or a
+    pupil inside a patch is ink-coloured but no part of it."""
+    if not ink:
+        return np.zeros(p.shape, bool)
+    inked = np.isin(p, list(ink))
+    pad = np.pad(p > 0, 1)
+    line = inked & ~(pad[:-2, 1:-1] & pad[2:, 1:-1] & pad[1:-1, :-2] & pad[1:-1, 2:])
+    while True:
+        grown = _dilate(line, 1) & inked
+        if (grown == line).all():
+            return line
+        line = grown
+
+
+def _enclosed_mask(ys, xs, pose=None, ink=()):
+    """(y0, x0, mask): the pixels a patch closes in, as a mask over its box grown by one, whose top left is y0, x0.
+    With the pose (an int array) and its ink codes, the outline's pixels (_outline) touching the patch close it in
+    too: a mouth a model draws against the jaw's line is closed in by the skin and the line together. ink may be
+    the outline's mask itself (a bool array the pose's size), read once a pose."""
     y0, x0 = ys.min() - 1, xs.min() - 1
     m = np.ones((ys.max() - y0 + 2, xs.max() - x0 + 2), bool)
     m[ys - y0, xs - x0] = False
+    if pose is not None and (ink.any() if isinstance(ink, np.ndarray) else ink):
+        H, W = pose.shape
+        ty0, tx0 = max(0, y0), max(0, x0)
+        ty1, tx1 = min(H, y0 + m.shape[0]), min(W, x0 + m.shape[1])
+        line = ink if isinstance(ink, np.ndarray) else _outline(pose, ink)
+        window = np.zeros(m.shape, bool)
+        window[ty0 - y0:ty1 - y0, tx0 - x0:tx1 - x0] = line[ty0:ty1, tx0:tx1]
+        m &= ~(_dilate(~m, 1) & window)
     reach = np.zeros_like(m)
     border = [(y, x) for y in range(m.shape[0]) for x in (0, m.shape[1] - 1)] + \
              [(y, x) for x in range(m.shape[1]) for y in (0, m.shape[0] - 1)]
@@ -1436,6 +1465,15 @@ def _enclosed_mask(ys, xs):
                 reach[ny, nx] = True
                 stack.append((ny, nx))
     return y0, x0, m & ~reach
+
+
+def _on_patch(hy, hx, ys, xs):
+    """The share of a piece's 4-neighbours (outside it) that are the patch's own pixels."""
+    own = set(zip(hy.tolist(), hx.tolist()))
+    patch = set(zip(ys.tolist(), xs.tolist()))
+    nb = [(y + dy, x + dx) for y, x in own for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1))
+          if (y + dy, x + dx) not in own]
+    return sum(q in patch for q in nb) / max(1, len(nb))
 
 
 def _pose_ref(a, runs, i, n):
@@ -1508,7 +1546,8 @@ def lostmark(loops, spec):
                 if not track:
                     continue
                 least_mark = max(1, round(height / MARK_SCALE))
-                for gone, place, size, eye, shown in _lost_marks(track, P, eye_codes, rgbs.get(c), rgbs, least_mark):
+                for gone, place, size, eye, shown in _lost_marks(track, P, eye_codes, rgbs.get(c), rgbs, least_mark,
+                                                                 ink):
                     times = sum(1 for i in gone if (i - 1) % len(P) not in gone)
                     if eye and times < LOST_RUNS:                 # an eye closing once or twice is a blink
                         continue
@@ -1521,25 +1560,32 @@ def lostmark(loops, spec):
     return out
 
 
-def _lost_marks(track, P, eye_codes, patch_rgb, rgbs, least):
+def _lost_marks(track, P, eye_codes, patch_rgb, rgbs, least, ink=()):
     """The marks a tracked patch closes in, voted on by its poses: [(poses without it, (row, column) where it is
     first, its px there, whether it is the eye, the first pose showing it)]. A mark is a piece of what the patch
     closes in (_enclosed_mask) of least px or more, its commonest colour MARK_CONTRAST or more off the patch's in
     some channel (air counts: a hole; a grain speck or a shading tone is a near tone), placed by its offset from the
     patch's centre; a pose has it when one of its pieces lies within MARK_REACH of the patch's radius of that place.
     A mark kept by LOST_HAVE of the poses and missing in the others is lost there. A patch closing in over MARK_MOST
-    marks a pose (a texture) is not read."""
+    marks a pose (a texture) is not read. The outline touching the patch closes in too, so a mark must have
+    MARK_ON_PATCH of its rim on the patch itself and be at most MARK_SIZE of the patch (not a lock of hair the line
+    walls off)."""
     holes = []
     for i, (ys, xs) in enumerate(track):
-        y0, x0, m = _enclosed_mask(ys, xs)
+        y0, x0, m = _enclosed_mask(ys, xs, P[i], _outline(P[i], ink))
+        plain = _enclosed_mask(ys, xs)[2]
         cy, cx = ys.mean(), xs.mean()
         pieces = []
         for hy, hx in _comps4(m):
+            if len(hy) < LINE_MARK and not plain[hy, hx].all():   # walled in by the outline: a lone edge
+                continue                                          # pixel is shading, not a mark
             hy, hx = hy + y0, hx + x0
             codes = P[i][hy, hx].tolist()
             commonest = max(set(codes), key=codes.count)
             if len(hy) < least or (commonest and patch_rgb is not None and max(
                     abs(u - v) for u, v in zip(rgbs[commonest], patch_rgb)) < MARK_CONTRAST):
+                continue
+            if len(hy) > MARK_SIZE * len(ys) or _on_patch(hy, hx, ys, xs) < MARK_ON_PATCH:
                 continue
             pieces.append(((hy.mean() - cy, hx.mean() - cx), (int(hy.min()), int(hx.min())), len(hy),
                            bool(eye_codes & set(codes))))
@@ -1584,15 +1630,18 @@ def _contrast(p, q):
     return max(abs(u - v) for u, v in zip(p, q))
 
 
-def _pose_marks(p, ink, rgbs, eye_codes):
+def _pose_marks(p, ink, rgbs, eye_codes, most=MARK_MOST):
     """Every mark a patch of one colour closes in, in one pose (an int array): [{"box": (top, left, bottom, right),
     "centre", "px", "code" (0: a hole), "eye", "pixels": [(row, column)]}], read as lostmark reads them
-    (MARK_CONTRAST, MARK_SCALE, MARK_MOST)."""
+    (MARK_CONTRAST, MARK_SCALE, MARK_ON_PATCH, MARK_SIZE). A patch closing in over most marks (a texture) gives
+    none; most=None reads them all (kept() looks for one feature at its place, so a shaded face's specks do not
+    hide its mouth)."""
     rows = np.nonzero(p.any(1))[0]
     if not len(rows):
         return []
     least_patch = max(PATCH_MIN, PATCH_FRAC * int((p > 0).sum()))
     least = max(1, round(int(rows.max() - rows.min() + 1) / MARK_SCALE))
+    line = _outline(p, ink)
     out = []
     for c in np.unique(p):
         if c == 0 or c in ink:
@@ -1600,18 +1649,23 @@ def _pose_marks(p, ink, rgbs, eye_codes):
         for ys, xs in _comps4(p == c):
             if len(ys) < least_patch:
                 continue
-            y0, x0, m = _enclosed_mask(ys, xs)
+            y0, x0, m = _enclosed_mask(ys, xs, p, line)
+            plain = _enclosed_mask(ys, xs)[2]
             got = []
             for hy, hx in _comps4(m):
+                if len(hy) < LINE_MARK and not plain[hy, hx].all():   # walled in by the outline: shading
+                    continue
                 hy, hx = hy + y0, hx + x0
                 codes = p[hy, hx].tolist()
                 commonest = max(set(codes), key=codes.count)
                 if len(hy) < least or (commonest and _contrast(rgbs[commonest], rgbs[c]) < MARK_CONTRAST):
                     continue
+                if len(hy) > MARK_SIZE * len(ys) or _on_patch(hy, hx, ys, xs) < MARK_ON_PATCH:
+                    continue
                 got.append({"box": (int(hy.min()), int(hx.min()), int(hy.max()), int(hx.max())),
                             "centre": (float(hy.mean()), float(hx.mean())), "px": len(hy), "code": int(commonest),
                             "eye": bool(eye_codes & set(codes)), "pixels": list(zip(hy.tolist(), hx.tolist()))})
-            if len(got) <= MARK_MOST:                     # more is a texture
+            if most is None or len(got) <= most:          # more is a texture
                 out += got
     return out
 
@@ -1722,7 +1776,7 @@ def kept(loops, spec):
             reach = max(2.0, KEEP_REACH * int(rows.max() - rows.min() + 1))
             pr, pc = _anchor(p)
             dy, dx = pr - ar, pc - ac
-            marks = _pose_marks(p, ink, rgbs, eye_codes)
+            marks = _pose_marks(p, ink, rgbs, eye_codes, None)
             pairs = []
             for fi, f in enumerate(feats):
                 top, left, bottom, right = f["box"]

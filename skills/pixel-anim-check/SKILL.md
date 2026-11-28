@@ -133,8 +133,10 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
   - `lostmark` lets the poses vote. Each mark a patch of one colour closes in (a mouth or an eye on a face, a stud
     on a coat) is followed by its place on the patch; one most poses keep (60 %) and some drop is lost there, even
     in a single frame: a mouth missing in frames 2 and 9 of a 10-frame idle is named in exactly those, with the eyes
-    on the same face kept. No approved drawing or placed marks are needed. A mark of the `--eye` colour lost once or
-    twice a loop is a blink and passes; three times or more it is named. A mark must differ from its patch by 40 or
+    on the same face kept. No approved drawing or placed marks are needed. The outer outline touching the patch
+    closes a mark in too (a model often draws a mouth against the jaw's line), but a mark walled in by it needs 2 px
+    or more, its rim mostly on the patch, and at most a quarter of the patch's size. A mark of the `--eye` colour
+    lost once or twice a loop is a blink and passes; three times or more it is named. A mark must differ from its patch by 40 or
     more in some colour channel (a grain speck or a shading tone does not) and have 1 px for every 80 rows of the
     figure; a patch closing in over 8 such marks a pose is a texture and is not read. On the generated wizard idle
     its reviewer judged it names the mouth in exactly the poses they named, and two of the robe's gold stars that
@@ -169,6 +171,9 @@ python -I ${CLAUDE_SKILL_DIR}/pixel_anim_check.py --loop idle=idle.png --loop mo
      not (it takes `lostmark`'s place), an eye-coloured one may blink once or twice, and a piece wholly inside a
      transient box is no `apart` fault. On the generated wizard idle, the mouth's frames are exactly the four its
      reviewer named, and the staff's sparkles, 16 `apart` faults without a list, give none.
+  - Measured on six idle sheets an image model drew (two characters, `tests/known_losses.py`: a mark erased in
+    chosen frames of the real frames): `keep` named 52 of 53 erased frames and no other; `lostmark` alone, 34 of 53
+    and one other; the repair put the mark back, as the keep check reads it, in 51 of 53.
   - Its limits: a feature is looked for near its place moved with the whole figure (4 % of the figure's height),
     so a part swinging on its own (a cape) is not followed; a painted drawing with no one-colour patches gives no
     marks (use a frame of the sheet); the list proposes shading and texture marks too, which is why the user

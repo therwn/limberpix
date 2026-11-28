@@ -1181,6 +1181,27 @@ def keep_list():
     lines, _ = run(sparked, dict(found, transient=[{"name": "spark", "box": [18, 1, 25, 6]}]))
     case("the same spark inside a transient box passes", not lines, lines)
 
+    def jaw(k, mouth=True, speck=False):                  # the mouth drawn at the face's edge, against its outline
+        f = face_frame(k, n, mouth=False)
+        y = [y for y, r in enumerate(face_frame(k, n)) if MOUTH in r][0] - 1
+        if mouth:
+            right = max(x for x, v in enumerate(f[y]) if v == SKIN)
+            for x in range(right - 2, right + 1):
+                f[y][x] = MOUTH
+        if speck:                                         # a lone shading pixel against the outline
+            y = next(y for y in range(len(f)) if SKIN in f[y])
+            x = f[y].index(SKIN)
+            f[y][x] = MOUTH
+        return f
+    low = pac.features(jaw(0), pac.Spec(**base))
+    marks = [f for f in low["features"] if f["kind"] == "mark" and not f["blink"]]
+    case("a mouth against the jaw's outline is read as a mark", len(marks) == 1 and marks[0]["px"] >= 2, marks)
+    lines, where = run([jaw(k, mouth=k not in (2, 9)) for k in range(n)], low)
+    case("and named where it is gone (frames 2 and 9)", where == {2, 9}, sorted(where))
+    lone = pac.features(jaw(0, speck=True), pac.Spec(**base))
+    case("a lone 1-px pixel against the outline is no mark", len(lone["features"]) == len(low["features"]),
+         [(f["box"], f["px"]) for f in lone["features"]])
+
     with tempfile.TemporaryDirectory() as d:
         strip = os.path.join(d, "idle.png")
         _strip([face_frame(k, n, mouth=k not in (2, 9)) for k in range(n)], strip)

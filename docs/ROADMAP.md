@@ -18,7 +18,7 @@ A rule is kept because it helps find or repair such a loss, not because it is al
 |---|---|---|
 | **Finding** | `pixel-anim-check --style redrawn`: `lostmark` (a mark inside a patch, such as a mouth, gone in some poses), `spots` (marks placed on the approved drawing), `gaps`, `apart`, `eye`, `palette`, `mark`, `vanish`. On a generated wizard idle it names the mouthless poses (9, 10, 13, 15) and the hat's lost specks exactly as the viewer did. Motion checks only warn in this style | Finding a loss without a reference or hand-placed marks; scale, colour and anchor drift as faults; a part changing sides; machine-readable output; a quieter report (one `outline` warning a frame today) |
 | **Repairing** | `repair_sheet.py`: a lost mark drawn back from the nearest frame that has it, every other frame left as it is, a log and a before-and-after picture. `prepare_sheet.py`: a generated sheet keyed out, split, scaled, anchored and brought onto the drawing's grid | Lost pieces, outline gaps and colour drift repaired |
-| **Measuring** | One labelled sample (the generated wizard idle, 32 per-frame judgements) | A set of sheets with known losses, run in CI |
+| **Measuring** | One labelled sample (the generated wizard idle, 32 per-frame judgements). `tests/known_losses.py`: marks erased in chosen frames of real generated frames; on six Codex sheets of two characters `keep` found 52 of 53 with no extra frame, `lostmark` 34 of 53, the repair 51 of 53 | Losses labelled by a person on real sheets; the sheets in CI |
 
 ## 1. Purpose and rules
 
@@ -89,5 +89,11 @@ pixel-identical.
 
 - [ ] Built cases in CI: sound sheets with features removed, recoloured, moved or scaled in chosen frames. Each
   must be found in exactly those frames and repaired.
+- [x] Known losses on real generated frames (`tests/known_losses.py`): a mark erased in chosen frames of a sheet an
+  image model drew, so the model's noise is real and the answer known. Six Codex sheets (a painted 160 px wizard,
+  a 48x64 fighter): `keep` 52 of 53 with no extra frame; `lostmark` 34 of 53 (0 of 12 on the wizard, whose face
+  patch splits from frame to frame); the repair 51 of 53, the drawing overlapping the erased mark by 23-85 %.
 - [ ] Real sheets from image models, each frame labelled by a person ("frame 9: no mouth"). Measured: losses missed,
   false alarms, and repairs the person accepts when the loop plays.
+- [ ] `lostmark` on a painted face: follow a face patch that splits between frames, and read candidates on a
+  shaded face (on one of the wizard sheets frame 0 gave none).
