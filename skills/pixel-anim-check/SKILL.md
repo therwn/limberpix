@@ -241,7 +241,12 @@ missing; 2: a usage error.
   patch's edge is not read as a mark there and may be drawn twice.
 - On the generated wizard idle it put the mouth back in the four frames its reviewer named, and undid its drawings
   of a robe star the check had read as lost where it had only moved.
-- Not repaired yet: a lost piece apart from the figure, an outline gap, colour, scale and anchor drift.
+- `--gaps` also closes the outline's gaps on every frame (a run of 1-4 coloured edge pixels with edge ink at both
+  ends takes the ink's colour), for a model that breaks the outline at random so it flickers. It touches every
+  frame, and a trim colour reaching the silhouette's edge between ink pixels turns to ink too: ask the user first,
+  and show the before-and-after picture. On the generated wizard idle it closed 1431 px over its 16 poses and the
+  check's `gaps` fault went away.
+- Not repaired yet: a lost piece apart from the figure, colour, scale and anchor drift.
 
 ## 2. What each fault means and the usual fix
 

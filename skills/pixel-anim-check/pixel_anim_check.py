@@ -1768,6 +1768,27 @@ def kept(loops, spec):
     return out
 
 
+def _gap_runs(p, ink):
+    """([(ys, xs, (iy, ix))], edge px): the outline's gaps in one pose (an int array), as gaps reads them: on the
+    figure's edge (a pixel beside air), a run of GAP_LEN or fewer coloured (not ink) pixels with edge ink beside it at
+    both ends; (iy, ix) is an ink pixel beside the run, whose colour closes it."""
+    drawn = p > 0
+    pad = np.zeros((drawn.shape[0] + 2, drawn.shape[1] + 2), bool)
+    pad[1:-1, 1:-1] = drawn
+    air = ~pad
+    edge = drawn & (air[:-2, 1:-1] | air[2:, 1:-1] | air[1:-1, :-2] | air[1:-1, 2:])
+    inked = edge & np.isin(p, list(ink))
+    out = []
+    for ys, xs in _blobs(edge & ~inked):
+        if len(ys) > GAP_LEN:
+            continue
+        y0, x0 = max(0, ys.min() - 1), max(0, xs.min() - 1)
+        ty, tx = np.nonzero(inked[y0:ys.max() + 2, x0:xs.max() + 2])
+        if len(ty) >= 2 and (np.ptp(ty) + np.ptp(tx)) >= len(ys) + 1:
+            out.append((ys, xs, (int(ty[0] + y0), int(tx[0] + x0))))
+    return out, int(edge.sum())
+
+
 def gaps(loops, spec):
     """The redrawn style: an outline broken in short stretches. On the figure's edge (a pixel beside air), a run of
     GAP_LEN or fewer coloured (not ink) pixels with edge ink beside it at both ends is a gap. Fault when a loop has
@@ -1786,22 +1807,10 @@ def gaps(loops, spec):
         total = edges = 0
         worst = []
         for i, p in enumerate(P):
-            drawn = p > 0
-            pad = np.zeros((drawn.shape[0] + 2, drawn.shape[1] + 2), bool)
-            pad[1:-1, 1:-1] = drawn
-            air = ~pad
-            edge = drawn & (air[:-2, 1:-1] | air[2:, 1:-1] | air[1:-1, :-2] | air[1:-1, 2:])
-            inked = edge & np.isin(p, list(ink))
-            g = 0
-            for ys, xs in _blobs(edge & ~inked):
-                if len(ys) > GAP_LEN:
-                    continue
-                near = inked[max(0, ys.min() - 1):ys.max() + 2, max(0, xs.min() - 1):xs.max() + 2]
-                ty, tx = np.nonzero(near)
-                if len(ty) >= 2 and (np.ptp(ty) + np.ptp(tx)) >= len(ys) + 1:
-                    g += 1
+            found, edge = _gap_runs(p, ink)
+            g = len(found)
             total += g
-            edges += int(edge.sum())
+            edges += edge
             worst.append((g, i))
         rate = 100 * total / max(1, edges)
         if rate > GAP_RATE:

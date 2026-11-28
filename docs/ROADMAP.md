@@ -68,8 +68,10 @@ reference.
   fringe, one scale, one anchor, one palette.
 - [ ] A pose drawn at another size takes its own scale from its height, so one that also crouches comes out a
   little off; read the scale from parts that do not move (the boots, the head).
-- [ ] Repair a lost piece apart from the figure, an outline gap, and a mark that moved onto its patch's edge (it is
-  not read as a mark there, so today it can be drawn twice).
+- [x] Close the outline's gaps (`--gaps`, on every frame, asked for).
+- [ ] Repair a lost piece apart from the figure, and a mark that moved onto its patch's edge (it is not read as a
+  mark there, so today it can be drawn twice).
+- [ ] Close only the gaps most frames do not have, so a trim colour the drawing puts on its edge stays.
 - [ ] Take a lost feature from the approved drawing when no frame has it.
 - [ ] A frame that cannot be repaired here is named, with a prompt to regenerate that frame alone.
 

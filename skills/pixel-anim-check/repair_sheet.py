@@ -2,8 +2,8 @@
 from the nearest frame that has it and drawn into each frame that lacks it. Frames that lose nothing are left as
 they are, pixel for pixel.
 
-    python repair_sheet.py STRIP --frame W [--keep LIST.json] [--eye "#rrggbb"] [--ink C,...] [--effects C,...]
-                           [--shadow C,...] [--key "#rrggbb"] [--fps N] [--out DIR] [--name NAME]
+    python repair_sheet.py STRIP --frame W [--keep LIST.json] [--gaps] [--eye "#rrggbb"] [--ink C,...]
+                           [--effects C,...] [--shadow C,...] [--key "#rrggbb"] [--fps N] [--out DIR] [--name NAME]
     python repair_sheet.py --selftest
     python repair_sheet.py --help
 
@@ -24,6 +24,11 @@ A frame with a like mark (half to twice its px, its colour) within 2.5 reaches o
 mark moved there and was read as lost, and drawing it again would double it. Then the frames are checked again,
 and a drawing the check still reads as lost in its frame is undone (it did not take, and may have doubled a mark
 the check could not see).
+
+--gaps also closes the outline's gaps on every frame, as the check's gaps reads them (a run of 1-4 coloured edge
+pixels with edge ink at both ends) in the colour of the ink beside them: a model that breaks the outline at random
+makes it flicker between poses. It touches every frame with a gap, so it is asked for, not done by default: a style
+that leaves its outline open on purpose has no gaps by that reading (a lit outline runs longer than 4 px).
 
 Out, in --out: <name>_repaired.png (the frames side by side), <name>_repair.json (each repair: the mark, the frame,
 its donor, the shift, the pixels drawn; each mark that found no donor; the faults before and after) and
@@ -122,9 +127,26 @@ def _place(fault, spec, arrs):
     return (fault["row"] + 0.5, fault["column"] + 0.5), fault["px"], pac._anchor(arrs[shown])
 
 
-def repair(frames, spec, name="idle"):
+def close_gaps(frame, spec, keys=None):
+    """Close the outline's gaps in one frame (rows of colours), as the check's gaps reads them: each run of 1-4
+    coloured edge pixels with edge ink at both ends takes the colour of the ink beside it. Returns the pixels
+    changed, [(row, column)]."""
+    keys = {} if keys is None else keys
+    (a,), ink = pac._arrays([frame], spec, keys)
+    ink |= {code for colour, code in keys.items() if spec.is_ink(colour)}
+    changed = []
+    for ys, xs, (iy, ix) in pac._gap_runs(a, ink)[0]:
+        colour = frame[iy][ix]
+        for y, x in zip(ys.tolist(), xs.tolist()):
+            frame[y][x] = colour
+            changed.append([y, x])
+    return changed
+
+
+def repair(frames, spec, name="idle", gaps=False):
     """(repaired frames, log): every lost mark keep or lostmark names in the loop drawn back from its nearest donor
-    frame; log holds "repairs", "skipped", "before" and "after" (the faults, as rule and frames)."""
+    frame, and with gaps every frame's outline gaps closed (close_gaps); log holds "repairs", "skipped", "gaps"
+    (pixels closed a frame), "before" and "after" (the faults, as rule and frames)."""
     loops = {name: frames}
     found = pac.findings(loops, spec)
     keys = {}
@@ -194,6 +216,12 @@ def repair(frames, spec, name="idle"):
             repairs.append({"mark": label, "rule": fault["rule"], "frame": t, "donor": d, "shift": [dy, dx],
                             "placed": placed, "match": None if share is None else round(share, 2), "pixels": drawn,
                             "_was": [frames[t][y][x] for y, x in drawn], "_key": _key(fault)})
+    closed = {}
+    if gaps:                                              # every frame: a broken outline flickers between poses
+        for t in range(n):
+            px = close_gaps(out[t], spec, keys)
+            if px:
+                closed[t] = len(px)
     after = pac.findings({name: out}, spec)
     undone = [r for r in repairs if any(_key(f) == r["_key"] or _near(f, r) for f in after["faults"]
                                         if f["rule"] == r["rule"] and r["frame"] in f["frames"])]
@@ -210,7 +238,7 @@ def repair(frames, spec, name="idle"):
 
     def brief(faults):
         return [{"rule": f["rule"], "frames": f["frames"], "text": f["text"]} for f in faults]
-    return out, {"repairs": repairs, "skipped": skipped, "before": brief(found["faults"]),
+    return out, {"repairs": repairs, "skipped": skipped, "gaps": closed, "before": brief(found["faults"]),
                  "after": brief(after["faults"])}
 
 
@@ -257,6 +285,9 @@ def main(argv):
                     raise ValueError(f"{argv[i]} needs a value")
                 got[argv[i]] = argv[i + 1]
                 i += 2
+            elif argv[i] == "--gaps":
+                got["--gaps"] = True
+                i += 1
             elif argv[i].startswith("--") or src is not None:
                 raise ValueError(f"unknown argument {argv[i]!r}")
             else:
@@ -297,7 +328,7 @@ def main(argv):
     except (ValueError, OSError, KeyError, json.JSONDecodeError) as e:
         print(f"error: {e}  (--help lists the options)", file=sys.stderr)
         return 2
-    out, log = repair(frames, spec)
+    out, log = repair(frames, spec, gaps="--gaps" in got)
     _strip_image(out, spec.rgb).save(targets[0])
     with open(targets[1], "w", encoding="utf-8", newline="\n") as fh:
         json.dump(log, fh, indent=1)
@@ -308,6 +339,8 @@ def main(argv):
         how = r["placed"] + ("" if r["match"] is None else f", {r['match']:.0%} of them matching")
         print(f"  {r['mark']}: frame {r['frame']} from frame {r['donor']}, shift {r['shift']}, "
               f"{len(r['pixels'])} px drawn, placed {how}")
+    if log["gaps"]:
+        print(f"  outline gaps closed: {sum(log['gaps'].values())} px over {len(log['gaps'])} frame(s)")
     for s in log["skipped"]:
         print(f"  skipped {s['mark']} in frames {s['frames']}: {s['why']}")
     left = [f for f in log["after"] if f["rule"] in REPAIRED]

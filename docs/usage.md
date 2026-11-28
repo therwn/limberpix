@@ -401,8 +401,8 @@ python skills/pixel-anim-check/fix_sheet.py sheet.png --ref drawing.png --keep o
 `--features` prepares the sheet and writes the keep list's candidates (off the drawing when it is pixel art with 64
 colours or fewer, else off the first frame), and stops. With `--keep` (or neither) it prepares the sheet
 (`<name>_strip.png`), repairs it (`<name>_fixed.png`, `<name>_repair.json`, `<name>_repair.png`) and runs the check
-on the fixed strip in `--style redrawn`, with its contact sheet and GIF. `--grid`, `--eye`, `--ink`, `--effects`,
-`--shadow` and `--fps` are passed on. The exit code is the check's.
+on the fixed strip in `--style redrawn`, with its contact sheet and GIF. `--grid`, `--gaps`, `--eye`, `--ink`,
+`--effects`, `--shadow` and `--fps` are passed on. The exit code is the check's.
 
 ### prepare_sheet.py
 
@@ -442,8 +442,11 @@ python skills/pixel-anim-check/repair_sheet.py idle.png --frame 64 [--keep LIST.
   drawing the check still reads as lost (it is undone).
 - **Out:** `<name>_repaired.png`, `<name>_repair.json` (repairs, skips, the faults before and after) and
   `<name>_repair.png` (before and after). Exit 0 nothing left to repair, 1 a mark still missing, 2 a usage error.
+- **`--gaps`** also closes the outline's gaps on every frame, as `gaps` reads them, in the colour of the ink beside
+  them. It is asked for, not done by default: it touches every frame, and a trim colour reaching the silhouette's
+  edge between ink pixels turns to ink as well.
 - **Limits:** a mark that moved onto its patch's edge may be drawn twice, so look at `<name>_repair.png`; a lost
-  piece apart from the figure, an outline gap and colour, scale or anchor drift are not repaired yet.
+  piece apart from the figure and colour, scale or anchor drift are not repaired yet.
 
 ## pixel-animate tools
 

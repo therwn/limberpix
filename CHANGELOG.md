@@ -198,6 +198,10 @@ All notable changes to this project are listed here. The format follows
 
 ### Added (pixel-anim-check)
 
+- **`repair_sheet.py --gaps`** (and `fix_sheet.py --gaps`) closes the outline's short gaps on every frame, as the
+  check's `gaps` reads them, in the colour of the ink beside them. Asked for, not done by default: it touches every
+  frame. On the generated wizard idle it closed 1431 px over 16 poses and the `gaps` fault went away.
+
 - **`fix_sheet.py`: one command for a generated sheet.** `--features` prepares the sheet and lists what must stay;
   with the confirmed `--keep` list it prepares, repairs and checks the sheet, with a contact sheet and a GIF. Its
   selftest takes a 6x sheet whose mouth is missing in poses 2 and 9 back to the game-size idle, pixel for pixel, and

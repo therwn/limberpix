@@ -59,6 +59,25 @@ def run():
     case("a mouth drawn 2 px low, still in the face, is not drawn twice", out == moved and any(
         "not lost" in s["why"] for s in log["skipped"]), log)
 
+    def broken_outline(f):                                # every 5th inked edge pixel turned to its inside colour
+        h, w = len(f), len(f[0])
+        edge = [(x, y) for y in range(h) for x in range(w) if f[y][x] == st.INK and any(
+            not (0 <= x + a < w and 0 <= y + b < h) or f[y + b][x + a] is None
+            for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))]
+        for x, y in edge[2::5]:
+            inside = [f[y + b][x + a] for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)) if 0 <= x + a < w
+                      and 0 <= y + b < h and f[y + b][x + a] not in (None, st.INK)]
+            if inside:
+                f[y][x] = inside[0]
+        return f
+    gapped = [broken_outline(st.face_frame(k, N)) for k in (range(N))]
+    found = [x for x in pac.check({"idle": gapped}, spec) if x.startswith("gaps:")]
+    out, log = rs.repair(gapped, spec, gaps=True)
+    case("--gaps closes a broken outline back to the drawn one", found and out == truth and len(log["gaps"]) == N,
+         (found, [k for k in range(N) if out[k] != truth[k]]))
+    out, log = rs.repair(gapped, spec)
+    case("without --gaps the outline is left as it is", out == gapped and not log["gaps"], log["gaps"])
+
     clean, log = rs.repair(truth, spec)
     case("a sound loop is left as it is", clean == truth and not log["repairs"], log["repairs"])
 

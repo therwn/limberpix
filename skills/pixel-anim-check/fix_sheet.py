@@ -2,7 +2,7 @@
 frames dropped, and check the result, with a contact sheet and a GIF to look at.
 
     python fix_sheet.py SHEET.png --ref DRAWING.png --features [--grid CxR] [--out DIR] [--name NAME]
-    python fix_sheet.py SHEET.png --ref DRAWING.png [--keep LIST.json] [--grid CxR] [--fps N] [--eye "#rrggbb"]
+    python fix_sheet.py SHEET.png --ref DRAWING.png [--keep LIST.json] [--gaps] [--grid CxR] [--fps N] [--eye "#rrggbb"]
                         [--ink C,...] [--effects C,...] [--shadow C,...] [--out DIR] [--name NAME]
     python fix_sheet.py --selftest
 
@@ -12,7 +12,8 @@ frames dropped, and check the result, with a contact sheet and a GIF to look at.
    pixel art (64 colours or fewer), else off the first frame -> <name>_features.png and .json. Nothing else runs:
    show the picture to the user, name what must stay, mark what comes and goes ("transient"), and run again with
    --keep.
-3. repair_sheet.py: each mark keep (with --keep) or lostmark finds missing drawn back from its nearest frame.
+3. repair_sheet.py: each mark keep (with --keep) or lostmark finds missing drawn back from its nearest frame, and
+   with --gaps the outline's short gaps closed on every frame.
    -> <name>_fixed.png, <name>_repair.json, <name>_repair.png
 4. pixel_anim_check.py on the fixed strip, --style redrawn: its faults and warnings, a contact sheet and a GIF.
 Exit code: the check's (0 no fault, 1 faults), 2 a usage error.
@@ -43,7 +44,7 @@ def main(argv):
                     raise ValueError(f"{argv[i]} needs a value")
                 got[argv[i]] = argv[i + 1]
                 i += 2
-            elif argv[i] == "--features":
+            elif argv[i] in ("--features", "--gaps"):
                 flags.add(argv[i])
                 i += 1
             elif argv[i].startswith("--") or src is not None:
@@ -86,6 +87,8 @@ def main(argv):
     rargs = [strip, "--frame", str(width), "--out", folder, "--name", name] + common
     if "--keep" in got:
         rargs += ["--keep", got["--keep"]]
+    if "--gaps" in flags:
+        rargs.append("--gaps")
     code = rs.main(rargs)
     if code == 2:
         return code
